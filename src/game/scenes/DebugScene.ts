@@ -36,9 +36,12 @@ export class DebugScene extends Phaser.Scene {
     // Dark background.
     this.add.rectangle(192, 108, 384, 216, 0x1a1a2e).setDepth(0);
 
+    // Resolution multiplier keeps text crisp on retina / HiDPI screens.
+    const dpr = window.devicePixelRatio ?? 1;
+
     // Label.
     this.add
-      .text(192, 20, 'INPUT DEBUG', { fontSize: '14px', color: '#ffff00' })
+      .text(192, 20, 'INPUT DEBUG', { fontSize: '14px', color: '#ffff00', resolution: dpr })
       .setOrigin(0.5, 0)
       .setDepth(1);
 
@@ -48,13 +51,14 @@ export class DebugScene extends Phaser.Scene {
       .text(192, 36, isTouch ? 'Touch: stick BL · Fire BR · Action above Fire' : 'WASD/Arrows · Space=fire · Shift=action · Esc=pause', {
         fontSize: '7px',
         color: '#aaaaaa',
+        resolution: dpr,
       })
       .setOrigin(0.5, 0)
       .setDepth(1);
 
     // Live-values text block.
     this.infoText = this.add
-      .text(10, 60, '', { fontSize: '10px', color: '#ffffff', lineSpacing: 4 })
+      .text(10, 60, '', { fontSize: '10px', color: '#ffffff', lineSpacing: 4, resolution: dpr })
       .setDepth(1);
 
     // Register keyboard keys via the Phaser keyboard plugin.

@@ -11,6 +11,9 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
     height: CANVAS_HEIGHT,
     backgroundColor: '#000000',
     banner: false,
+    // Pixel-art rendering: disables anti-aliasing and rounds sprite positions.
+    pixelArt: true,
+    roundPixels: true,
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
