@@ -37,13 +37,10 @@ export class MusicTrack {
 
   start(): void {
     if (this.playing) return;
-    const ctx = getAudioCtx();
-    if (!ctx) return;
-    this.master = ctx.createGain();
-    this.master.gain.value = 0.35;
-    this.master.connect(ctx.destination);
+    // Start the interval timer now. The context may still be suspended (ctx.resume()
+    // is async), so tick() handles master GainNode creation on the first running tick.
     this.step     = 0;
-    this.nextTime = ctx.currentTime + 0.05;
+    this.nextTime = 0; // tick() will set this once ctx.currentTime is available
     this.playing  = true;
     this.timer    = setInterval(() => this.tick(), INTERVAL);
   }
@@ -77,14 +74,15 @@ export class MusicTrack {
   }
 
   private tick(): void {
-    const ctx = getAudioCtx();
+    const ctx = getAudioCtx(); // returns null while suspended
     if (!ctx || !this.playing) return;
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-      return; // wait until running before scheduling
+    // Create master GainNode on the first tick where the context is running.
+    if (!this.master) {
+      this.master = ctx.createGain();
+      this.master.gain.value = 0.35;
+      this.master.connect(ctx.destination);
     }
-    // If context was suspended at start() time, nextTime is behind currentTime;
-    // catch up so we don't try to schedule notes in the past.
+    // Catch up if nextTime is in the past (context was suspended when start() ran).
     if (this.nextTime < ctx.currentTime) {
       this.nextTime = ctx.currentTime + 0.05;
     }
