@@ -12,6 +12,8 @@ import { hasSeenHowToPlay, markSeenHowToPlay } from '../../state/howToPlay';
 import { showStageIntro } from '../../state/stageIntros';
 import { ProximityBeep, BeepSource } from '../audio/ProximityBeep';
 import { EngineSound } from '../audio/EngineSound';
+import { MusicTrack } from '../audio/MusicTrack';
+import { VoiceCallout } from '../audio/VoiceCallout';
 
 const W = 1280;
 const H = 720;
@@ -156,6 +158,9 @@ export class AttackRunScene extends Phaser.Scene {
   // ── Audio ─────────────────────────────────────────────────────────────────
   private proximityBeep = new ProximityBeep();
   private engineSound   = new EngineSound();
+  private musicTrack    = new MusicTrack();
+  private voice         = new VoiceCallout();
+  private firstInterceptorVoiced = false;
 
   // ── Visuals ───────────────────────────────────────────────────────────────
   private bgFarGfx!:     Phaser.GameObjects.Graphics;
@@ -205,6 +210,8 @@ export class AttackRunScene extends Phaser.Scene {
     this.bombReloadTimer = 0;
     this.explosions    = [];
     this.engineSound.stop();
+    this.musicTrack.stop();
+    this.firstInterceptorVoiced = false;
     this.preRunActive  = true;
     this.preRunTimer   = 0;
     this.paused        = false;
@@ -365,6 +372,8 @@ export class AttackRunScene extends Phaser.Scene {
         this.preRunTitleText.setVisible(false);
         this.preRunBodyText.setVisible(false);
         this.preRunPromptText.setVisible(false);
+        this.musicTrack.start();
+        this.voice.say('Engage. Good luck.');
       } else {
         this.renderPreRun(time);
         debugInfo.fps = Math.round(this.game.loop.actualFps);
@@ -492,6 +501,42 @@ export class AttackRunScene extends Phaser.Scene {
     for (const bomb of this.bombs) {
       if (!bomb.alive) continue;
       bomb.t += dt / ATTACK_RUN.bombArcTime;
+
+      // Mid-flight proximity check for aerial targets.
+      const curWX    = bomb.worldXDrop + (bomb.landWorldX - bomb.worldXDrop) * bomb.t;
+      const bombSX   = curWX - this.cameraX;
+      const bombGroundY = this.groundYAtWorldX(curWX);
+      const bombSY   = bombGroundY - bomb.altAtDrop * (1 - bomb.t * bomb.t);
+      const airHitR  = 55;
+
+      for (const ic of this.interceptors) {
+        if (!ic.alive) continue;
+        const dist = Math.sqrt((bombSX - ic.x) ** 2 + (bombSY - ic.y) ** 2);
+        if (dist < airHitR) {
+          ic.alive = false; bomb.alive = false;
+          this.spawnExplosion(ic.x + this.cameraX, ic.y, 55);
+          missionState.addScore(SCORE.interceptor);
+          missionState.hudCue = `+${SCORE.interceptor}`;
+          break;
+        }
+      }
+
+      if (!bomb.alive) continue;
+
+      if (this.heatSeeker && this.heatSeeker.phase !== 'warning') {
+        const hs   = this.heatSeeker;
+        const dist = Math.sqrt((bombSX - hs.x) ** 2 + (bombSY - hs.lockedY) ** 2);
+        if (dist < airHitR) {
+          this.heatSeeker = null; bomb.alive = false;
+          this.spawnExplosion(hs.x + this.cameraX, hs.lockedY, 60);
+          missionState.addScore(SCORE.heatSeekerFromBehind);
+          missionState.hudCue = `HEAT-SEEKER DOWN! +${SCORE.heatSeekerFromBehind}`;
+          gameUi.callout = `+${SCORE.heatSeekerFromBehind}  NICE SHOT`;
+          gameUi.calloutExpiry = Date.now() + 1500;
+          continue;
+        }
+      }
+
       if (bomb.t >= 1) {
         bomb.t     = 1;
         bomb.alive = false;
@@ -631,6 +676,10 @@ export class AttackRunScene extends Phaser.Scene {
         alive: true, burstLeft: ATTACK_RUN.interceptorBurstShots,
         burstTimer: 0.5, whooshPlayed: false,
       });
+      if (!this.firstInterceptorVoiced) {
+        this.firstInterceptorVoiced = true;
+        this.voice.say('Hostile aircraft detected');
+      }
       this.nextInterceptorIdx++;
     }
 
@@ -692,6 +741,7 @@ export class AttackRunScene extends Phaser.Scene {
         lockedY: groundY2 - this.planeAlt,
         warnTimer: ATTACK_RUN.heatSeekerWarnTime,
       };
+      this.voice.say('Heat seeker incoming');
       this.nextHeatSeekerIdx++;
     }
 
@@ -753,6 +803,8 @@ export class AttackRunScene extends Phaser.Scene {
       gameUi.attackRunSecsLeft = 0;
       gameUi.contextualHint = null;
       // Show stage result card for 2s before transitioning.
+      this.musicTrack.fadeOut(1.5);
+      this.voice.say('Mission complete. Proceed to target.', true);
       gameUi.stageResult = {
         headline: 'ATTACK RUN COMPLETE',
         details: [],
@@ -1033,39 +1085,12 @@ export class AttackRunScene extends Phaser.Scene {
       t: 0,
       alive: true,
     });
+    this.voice.say('Bomb away');
   }
 
   private bombExplode(landWorldX: number): void {
     const groundY = this.groundYAtWorldX(landWorldX);
     this.spawnExplosion(landWorldX, groundY - 20, 80);
-    const landSX    = landWorldX - this.cameraX;
-    const airRadius = ATTACK_RUN.bombBlastRadius * 2; // bigger radius for aerial targets
-
-    // Bomb blast hits interceptors.
-    for (const ic of this.interceptors) {
-      if (!ic.alive) continue;
-      const dist = Math.sqrt((ic.x - landSX) ** 2 + (ic.y - groundY) ** 2);
-      if (dist < airRadius) {
-        ic.alive = false;
-        this.spawnExplosion(ic.x + this.cameraX, ic.y, 45);
-        missionState.addScore(SCORE.interceptor);
-        missionState.hudCue = `+${SCORE.interceptor}`;
-      }
-    }
-
-    // Bomb blast hits heat-seeker.
-    if (this.heatSeeker && this.heatSeeker.phase !== 'warning') {
-      const hs = this.heatSeeker;
-      const dist = Math.sqrt((hs.x - landSX) ** 2 + (hs.lockedY - groundY) ** 2);
-      if (dist < airRadius) {
-        this.spawnExplosion(hs.x + this.cameraX, hs.lockedY, 50);
-        this.heatSeeker = null;
-        missionState.addScore(SCORE.heatSeekerFromBehind);
-        missionState.hudCue = `HEAT-SEEKER DOWN! +${SCORE.heatSeekerFromBehind}`;
-        gameUi.callout = `+${SCORE.heatSeekerFromBehind}  NICE SHOT`;
-        gameUi.calloutExpiry = Date.now() + 1500;
-      }
-    }
 
     for (const enemy of this.activeEnemies) {
       if (!enemy.alive) continue;
@@ -1157,7 +1182,9 @@ export class AttackRunScene extends Phaser.Scene {
     this.planeState = 'crashed';
     this.proximityBeep.stop();
     this.engineSound.stop();
+    this.musicTrack.fadeOut(0.6);
     missionState.losePlane();
+    this.voice.say(missionState.planes > 0 ? 'Eject eject' : 'Mission failed', true);
     missionState.hudCue = `CRASHED: ${reason}`;
     gameUi.attackRunSecsLeft = 0;
 
@@ -1175,6 +1202,7 @@ export class AttackRunScene extends Phaser.Scene {
   private onImpactExpired(): void {
     this.proximityBeep.stop();
     this.engineSound.stop();
+    this.musicTrack.fadeOut(0.6);
     const CITIES = ['Harlan Bay', 'Port Cressa', 'New Allis', 'Veldor'];
     const cityName = CITIES[this.launchIndex % CITIES.length] ?? 'City';
     missionState.cityLost();
@@ -1429,6 +1457,8 @@ export class AttackRunScene extends Phaser.Scene {
     this.touchControls?.destroy();
     this.proximityBeep.dispose();
     this.engineSound.dispose();
+    this.musicTrack.dispose();
+    this.voice.stop();
     gameUi.attackRunSecsLeft = 0;
   }
 }

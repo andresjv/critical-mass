@@ -1,0 +1,182 @@
+// MusicTrack — retro synth action loop for the Attack Run.
+// 2-bar pattern, 128 BPM, A natural minor.
+// Tracks: square-wave bass, sawtooth lead arpeggio, kick + snare + hi-hat.
+// Uses the Web Audio "lookahead scheduler" pattern: a 50 ms interval checks
+// every 200 ms and schedules all notes that fall within that window, so
+// timing stays tight regardless of JS event-loop jitter.
+
+const BPM        = 128;
+const STEP       = (60 / BPM) / 4; // 16th-note duration ≈ 0.117 s
+const STEPS      = 32;              // 2 bars (32 × 16th notes)
+const LOOKAHEAD  = 0.20;            // schedule notes up to 200 ms ahead
+const INTERVAL   = 50;             // scheduler tick, ms
+
+// Bass: square wave, quarter-note hits (every 4 steps).
+// A2=110 E2=82 G2=98 D3=147 E3=165
+const BASS = [
+  110, 0, 0, 0,   110, 0, 0, 0,    82, 0, 0, 0,    98, 0, 0, 0,
+  110, 0, 0, 0,   147, 0, 0, 0,   165, 0, 0, 0,   110, 0, 0, 0,
+];
+
+// Lead: sawtooth arpeggio, 8th-note hits (every 2 steps).
+// A4=440 C5=523 E5=659 G5=784 A5=880
+const LEAD = [
+    0, 0, 440, 0,   523, 0, 659, 0,   784, 0, 659, 0,   523, 0, 440, 0,
+    0, 0, 440, 0,   659, 0, 880, 0,   784, 0, 659, 0,   523, 0, 440, 0,
+];
+
+export class MusicTrack {
+  private ctx: AudioContext | null = null;
+  private master: GainNode | null  = null;
+  private noiseBuffer: AudioBuffer | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private step = 0;
+  private nextTime = 0;
+  private playing = false;
+
+  start(): void {
+    if (this.playing) return;
+    const ctx = this.getCtx();
+    if (!ctx) return;
+    this.master = ctx.createGain();
+    this.master.gain.value = 0.35;
+    this.master.connect(ctx.destination);
+    this.step     = 0;
+    this.nextTime = ctx.currentTime + 0.05;
+    this.playing  = true;
+    this.timer    = setInterval(() => this.tick(), INTERVAL);
+  }
+
+  fadeOut(duration = 0.5): void {
+    if (!this.ctx || !this.master) return;
+    this.master.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration);
+    setTimeout(() => this.stopScheduler(), (duration + 0.1) * 1000);
+  }
+
+  stop(): void {
+    if (this.master && this.ctx) {
+      this.master.gain.setValueAtTime(0, this.ctx.currentTime);
+    }
+    this.stopScheduler();
+  }
+
+  dispose(): void {
+    this.stopScheduler();
+    this.ctx?.close().catch(() => { /* ignore */ });
+    this.ctx = null; this.master = null; this.noiseBuffer = null;
+  }
+
+  // ── Private ──────────────────────────────────────────────────────────────
+
+  private stopScheduler(): void {
+    if (this.timer !== null) { clearInterval(this.timer); this.timer = null; }
+    this.playing = false;
+  }
+
+  private tick(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.playing) return;
+    while (this.nextTime < ctx.currentTime + LOOKAHEAD) {
+      this.scheduleStep(this.step, this.nextTime);
+      this.step     = (this.step + 1) % STEPS;
+      this.nextTime += STEP;
+    }
+  }
+
+  private scheduleStep(s: number, t: number): void {
+    const ctx = this.ctx;
+    const out = this.master;
+    if (!ctx || !out) return;
+
+    const bass = BASS[s];
+    const lead = LEAD[s];
+    const beat = s % 16; // position within one bar
+
+    if (bass > 0)              this.noteBass(ctx, out, t, bass);
+    if (lead > 0)              this.noteLead(ctx, out, t, lead);
+    if (beat === 0 || beat === 8)  this.kick(ctx, out, t);
+    if (beat === 4 || beat === 12) this.snare(ctx, out, t);
+    if (s % 2 === 0)               this.hihat(ctx, out, t);
+  }
+
+  private noteBass(ctx: AudioContext, out: AudioNode, t: number, freq: number): void {
+    const osc  = ctx.createOscillator();
+    const filt = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    filt.type = 'lowpass'; filt.frequency.value = 350; filt.Q.value = 1;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.55, t + 0.008);
+    gain.gain.setValueAtTime(0.55, t + STEP * 3.4);
+    gain.gain.linearRampToValueAtTime(0, t + STEP * 4);
+    osc.connect(filt); filt.connect(gain); gain.connect(out);
+    osc.start(t); osc.stop(t + STEP * 4.1);
+  }
+
+  private noteLead(ctx: AudioContext, out: AudioNode, t: number, freq: number): void {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.16, t + 0.006);
+    gain.gain.setValueAtTime(0.16, t + STEP * 1.5);
+    gain.gain.linearRampToValueAtTime(0, t + STEP * 2);
+    osc.connect(gain); gain.connect(out);
+    osc.start(t); osc.stop(t + STEP * 2.1);
+  }
+
+  private kick(ctx: AudioContext, out: AudioNode, t: number): void {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.setValueAtTime(68, t);
+    osc.frequency.exponentialRampToValueAtTime(24, t + 0.06);
+    gain.gain.setValueAtTime(0.9, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    osc.connect(gain); gain.connect(out);
+    osc.start(t); osc.stop(t + 0.08);
+  }
+
+  private snare(ctx: AudioContext, out: AudioNode, t: number): void {
+    const src  = ctx.createBufferSource();
+    const filt = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    src.buffer = this.getNoise(ctx);
+    filt.type = 'bandpass'; filt.frequency.value = 240; filt.Q.value = 0.8;
+    gain.gain.setValueAtTime(0.55, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    src.connect(filt); filt.connect(gain); gain.connect(out);
+    src.start(t); src.stop(t + 0.10);
+  }
+
+  private hihat(ctx: AudioContext, out: AudioNode, t: number): void {
+    const src  = ctx.createBufferSource();
+    const filt = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    src.buffer = this.getNoise(ctx);
+    filt.type = 'highpass'; filt.frequency.value = 7000;
+    gain.gain.setValueAtTime(0.14, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+    src.connect(filt); filt.connect(gain); gain.connect(out);
+    src.start(t); src.stop(t + 0.05);
+  }
+
+  private getNoise(ctx: AudioContext): AudioBuffer {
+    if (!this.noiseBuffer) {
+      const len = Math.floor(ctx.sampleRate * 0.1);
+      this.noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = this.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    }
+    return this.noiseBuffer;
+  }
+
+  private getCtx(): AudioContext | null {
+    if (!this.ctx) {
+      try { this.ctx = new AudioContext(); } catch { return null; }
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => { /* ignore */ });
+    return this.ctx;
+  }
+}

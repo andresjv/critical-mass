@@ -14,8 +14,8 @@ export class EngineSound {
     const ctx = this.getCtx();
     if (!ctx) return;
     if (!this.started) this.startOscillators(ctx);
-    const t1 = thrusting ? 0.055 : 0.012;
-    const t2 = thrusting ? 0.022 : 0.004;
+    const t1 = thrusting ? 0.22 : 0.07;
+    const t2 = thrusting ? 0.09 : 0.03;
     const ramp = ctx.currentTime + 0.08;
     this.gain1?.gain.linearRampToValueAtTime(t1, ramp);
     this.gain2?.gain.linearRampToValueAtTime(t2, ramp);
@@ -26,17 +26,17 @@ export class EngineSound {
     if (!ctx) return;
     const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 650;
-    gain.gain.value = 0.14;
+    osc.type = 'sawtooth';
+    osc.frequency.value = 1200;
+    gain.gain.value = 0.30;
     osc.connect(gain);
     gain.connect(ctx.destination);
     const t0 = ctx.currentTime;
-    osc.frequency.exponentialRampToValueAtTime(70, t0 + 0.30);
-    gain.gain.setValueAtTime(0.14, t0);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.30);
+    osc.frequency.exponentialRampToValueAtTime(250, t0 + 0.35);
+    gain.gain.setValueAtTime(0.30, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.35);
     osc.start(t0);
-    osc.stop(t0 + 0.30);
+    osc.stop(t0 + 0.36);
   }
 
   stop(): void {
@@ -59,10 +59,10 @@ export class EngineSound {
     this.osc2 = ctx.createOscillator();
     this.gain1 = ctx.createGain();
     this.gain2 = ctx.createGain();
-    this.osc1.type = 'sawtooth'; this.osc1.frequency.value = 83;
-    this.osc2.type = 'sawtooth'; this.osc2.frequency.value = 167;
-    this.gain1.gain.value = 0.012;
-    this.gain2.gain.value = 0.004;
+    this.osc1.type = 'sawtooth'; this.osc1.frequency.value = 130;
+    this.osc2.type = 'sawtooth'; this.osc2.frequency.value = 260;
+    this.gain1.gain.value = 0.07;
+    this.gain2.gain.value = 0.03;
     this.osc1.connect(this.gain1); this.gain1.connect(ctx.destination);
     this.osc2.connect(this.gain2); this.gain2.connect(ctx.destination);
     this.osc1.start(); this.osc2.start();
