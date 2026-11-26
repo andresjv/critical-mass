@@ -82,6 +82,8 @@ export const SCORE = {
   centralSilo: 3_000,
   /** Bonus for destroying all 5 silos in one run. */
   allSilosBonus: 5_000,
+  /** SAM site destroyed by bomb (more than gun: 150). */
+  bombSam: 200,
   /** Points per second remaining on the impact clock. */
   impactClockSecond: 10,
   /** Sniper killed in Stage 5. */
@@ -183,6 +185,16 @@ export const ATTACK_RUN = {
   enemyDensity: [0.5, 0.73, 0.97, 1.2] as const,
   /** Interceptor spawn interval base, seconds. */
   interceptorInterval: 9,
+  /** Seconds bomb travels to ground. */
+  bombArcTime: 1.4,
+  /** Max simultaneous bombs in flight. */
+  bombMaxInAir: 2,
+  /** Seconds reload after a bomb drop. */
+  bombReloadTime: 1.2,
+  /** Blast radius in px; enemies within range are destroyed. */
+  bombBlastRadius: 80,
+  /** World-px ahead of drop point where bomb lands. */
+  bombHorizOffset: 600,
 } as const;
 
 // ─── Stage 4 — Silo Strike ───────────────────────────────────────────────────
