@@ -14,7 +14,6 @@ import { ProximityBeep, BeepSource } from '../audio/ProximityBeep';
 import { EngineSound } from '../audio/EngineSound';
 import { MusicTrack } from '../audio/MusicTrack';
 import { VoiceCallout } from '../audio/VoiceCallout';
-import { resumeCtx } from '../audio/audioCtx';
 
 const W = 1280;
 const H = 720;
@@ -377,7 +376,6 @@ export class AttackRunScene extends Phaser.Scene {
         this.preRunTitleText.setVisible(false);
         this.preRunBodyText.setVisible(false);
         this.preRunPromptText.setVisible(false);
-        resumeCtx(); // unlock shared AudioContext on the first user gesture
         this.musicTrack.start();
         this.voice.say('Engage', 'engage');
       } else {
