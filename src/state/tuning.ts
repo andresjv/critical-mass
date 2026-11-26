@@ -1,0 +1,204 @@
+// tuning.ts — every numeric constant from docs/DESIGN.md.
+// Stage code reads ONLY from this file; nothing is hard-coded elsewhere.
+
+export type Difficulty = 'cadet' | 'pilot' | 'suicidal';
+
+// ─── Per-difficulty settings ─────────────────────────────────────────────────
+
+export interface DifficultyTuning {
+  /** Impact countdown per launch, seconds. */
+  timeToImpact: number;
+  /** Planes at mission start. */
+  startingPlanes: number;
+  /** Ground contact in Attack Run causes a crash. */
+  groundContactCrash: boolean;
+  /** Multiplier applied to all enemy fire intervals (< 1 = slower fire). */
+  enemyFireRate: number;
+  /** Total sniper pool in Stage 5. */
+  sniperPool: number;
+  /** Number of reactor robots in Stage 6. */
+  robots: number;
+  /** ETCM meltdown timer, seconds. */
+  meltdownTimer: number;
+  /** Show dotted arc preview for mortar in Stage 5. */
+  mortarArcPreview: boolean;
+  /** Score multiplier applied to all points. */
+  scoreMultiplier: number;
+}
+
+export const TUNING: Record<Difficulty, DifficultyTuning> = {
+  cadet: {
+    timeToImpact: 180,
+    startingPlanes: 5,
+    groundContactCrash: false,
+    enemyFireRate: 0.7,
+    sniperPool: 8,
+    robots: 2,
+    meltdownTimer: 150,
+    mortarArcPreview: true,
+    scoreMultiplier: 1,
+  },
+  pilot: {
+    timeToImpact: 150,
+    startingPlanes: 4,
+    groundContactCrash: true,
+    enemyFireRate: 1.0,
+    sniperPool: 12,
+    robots: 4,
+    meltdownTimer: 120,
+    mortarArcPreview: false,
+    scoreMultiplier: 1.5,
+  },
+  suicidal: {
+    timeToImpact: 120,
+    startingPlanes: 3,
+    groundContactCrash: true,
+    enemyFireRate: 1.3,
+    sniperPool: 16,
+    robots: 5,
+    meltdownTimer: 90,
+    mortarArcPreview: false,
+    scoreMultiplier: 2,
+  },
+};
+
+// ─── Scoring ─────────────────────────────────────────────────────────────────
+
+export const SCORE = {
+  /** Tank or SAM site destroyed in Attack Run. */
+  tank: 150,
+  samSite: 150,
+  /** Interceptor shot down. */
+  interceptor: 250,
+  /** Heat-seeker shot from behind after it passes. */
+  heatSeekerFromBehind: 500,
+  /** Side silo destroyed (also grants +1 plane). */
+  sideSilo: 2_000,
+  /** Central silo destroyed (ends the stage). */
+  centralSilo: 3_000,
+  /** Bonus for destroying all 5 silos in one run. */
+  allSilosBonus: 5_000,
+  /** Points per second remaining on the impact clock. */
+  impactClockSecond: 10,
+  /** Sniper killed in Stage 5. */
+  sniper: 100,
+  /** Tank destroyed in Stage 5. */
+  assaultTank: 300,
+  /** Tower destroyed in Stage 5 (bonus). */
+  tower: 1_000,
+  /** Reactor door opened. */
+  reactorDoor: 1_500,
+  /** Single hit on a reactor robot. */
+  robotHit: 200,
+  /** Robot fully destroyed. */
+  robotDestroyed: 2_500,
+  /** Points per ETCM second remaining on escape. */
+  etcmSecond: 100,
+  /** Points per surviving commando at mission end. */
+  survivingMan: 5_000,
+} as const;
+
+// ─── Shared gameplay constants ────────────────────────────────────────────────
+
+export const LIMITS = {
+  planeCap: 9,
+  startingDiscs: 5,
+  launchSiteCount: 4,
+  /** Cities lost to end the game. */
+  gameOverCitiesLost: 2,
+  /** Seconds before the map auto-scrambles if the player does nothing. */
+  autoScrambleDelay: 5,
+} as const;
+
+// ─── Stage 2 — Hangar ────────────────────────────────────────────────────────
+
+export const HANGAR = {
+  /** Rotation speed, degrees/s. */
+  rotateSpeed: 210,
+  /** Thrust acceleration, px/s². */
+  thrustAccel: 70,
+  /** Maximum speed, px/s. */
+  maxSpeed: 95,
+  /** Drag fraction per second (0.5 %). */
+  drag: 0.005,
+  /** Below this speed (px/s), a wall hit bounces instead of crashing. */
+  bounceThreshold: 30,
+  /** Restitution on a soft wall bounce. */
+  bounceRestitution: 0.5,
+  /** How long the bay doors stay open, seconds. */
+  doorOpenDuration: 3.0,
+  /** Cooldown after doors close before they can reopen, seconds. */
+  doorCooldown: 2.0,
+  /** Window after exit during which a spare plane can be launched, seconds. */
+  spareWindow: 6.0,
+  /** Maximum spare planes in flight simultaneously. */
+  spareMaxInFlight: 3,
+} as const;
+
+// ─── Stage 3 — Attack Run ────────────────────────────────────────────────────
+
+export const ATTACK_RUN = {
+  /** Auto-scroll speed, px/s. */
+  scrollSpeed: 80,
+  /** Stage duration, seconds. */
+  duration: 45,
+  /** Minimum altitude, px. */
+  altitudeMin: 8,
+  /** Maximum altitude, px. */
+  altitudeMax: 150,
+  /** Warning lead time before heat-seeker arrives, seconds. */
+  heatSeekerWarnTime: 1.5,
+  /** Altitude at or below which a heat-seeker overshoots. */
+  heatSeekerOvershootAlt: 20,
+  /** Tank flak interval (Pilot ×1.0 baseline), seconds. */
+  tankFireInterval: 2.5,
+  /** SAM homing-missile turn rate, degrees/s. */
+  samTurnRate: 60,
+  /** Interceptor burst count. */
+  interceptorBurstShots: 2,
+} as const;
+
+// ─── Stage 4 — Silo Strike ───────────────────────────────────────────────────
+
+export const SILO = {
+  /** Reticle snaps to "locked" within this many px of a window centre. */
+  lockRadius: 4,
+  /** Rocket travel time, seconds. */
+  rocketTravelTime: 0.8,
+  /** Silo-gun fire interval (Pilot ×1.0 baseline), seconds. */
+  siloGunInterval: 1.8,
+  /** Interceptor spawn interval, seconds. */
+  interceptorInterval: 6,
+} as const;
+
+// ─── Stage 5 — Vostgrad Assault ──────────────────────────────────────────────
+
+export const ASSAULT = {
+  /** Seconds before a killed sniper respawns. */
+  sniperRespawnTime: 4.0,
+  /** Tanks per wave. */
+  tanksPerWave: 3,
+  /** Hits required to open a door. */
+  doorHitsRequired: 2,
+  /** Seconds tower debris blocks the trench. */
+  towerDebrisTime: 1.5,
+  /** Number of doors on the fortress facade. */
+  doorCount: 5,
+} as const;
+
+// ─── Stage 6 — Reactor ───────────────────────────────────────────────────────
+
+export const REACTOR = {
+  /** Discs the commando starts with. */
+  discsStart: 5,
+  /** Robot base speed, px/s. */
+  robotSpeed: 40,
+  /** Speed added per hit received, px/s. */
+  robotSpeedPerHit: 15,
+  /** Robot fire interval base, seconds. */
+  robotFireInterval: 2.0,
+  /** Fire interval reduction per hit, seconds. */
+  robotFireIntervalPerHit: 0.3,
+  /** Rear hits needed to destroy one robot. */
+  hitsToDestroy: 4,
+} as const;
