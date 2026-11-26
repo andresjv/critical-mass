@@ -96,6 +96,12 @@ export class ProximityBeep {
     }
   }
 
+  /** Stop all audio immediately (call on crash / stage end). Context stays open for reuse. */
+  stop(): void {
+    this.stopSolid();
+    this.isActive = false;
+  }
+
   dispose(): void {
     this.stopSolid();
     if (this.ctx) {

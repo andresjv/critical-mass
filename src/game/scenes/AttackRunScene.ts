@@ -1001,6 +1001,7 @@ export class AttackRunScene extends Phaser.Scene {
   private crashPlane(reason: string): void {
     if (this.planeState !== 'flying') return;
     this.planeState = 'crashed';
+    this.proximityBeep.stop();
     missionState.losePlane();
     missionState.hudCue = `CRASHED: ${reason}`;
     gameUi.attackRunSecsLeft = 0;
@@ -1017,6 +1018,7 @@ export class AttackRunScene extends Phaser.Scene {
   }
 
   private onImpactExpired(): void {
+    this.proximityBeep.stop();
     const CITIES = ['Harlan Bay', 'Port Cressa', 'New Allis', 'Veldor'];
     const cityName = CITIES[this.launchIndex % CITIES.length] ?? 'City';
     missionState.cityLost();
