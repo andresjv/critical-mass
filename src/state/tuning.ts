@@ -264,5 +264,6 @@ export const AUDIO_MIX = {
   sfx:    0.9,
   radio:  0.7,
   musicDuckOnExplosion: 0.4, // music level multiplier during a blast
+  musicWhenPaused: 0.3,      // music level multiplier while the game is paused
   duckRecoverSecs: 0.6,
 };

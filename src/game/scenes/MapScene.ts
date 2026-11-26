@@ -150,7 +150,7 @@ export class MapScene extends Phaser.Scene {
     });
 
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.touchControls = new TouchControls(this);
+    this.touchControls = new TouchControls(this, { move: 'MOVE', fire: 'GO', action: '' });
 
     this.visibilityHandler = () => {
       if (document.hidden) this.scene.pause(); else this.scene.resume();

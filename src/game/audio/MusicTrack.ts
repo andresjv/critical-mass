@@ -34,8 +34,10 @@ export class MusicTrack {
   private step = 0;
   private nextTime = 0;
   private playing = false;
+  private fadeTimer: ReturnType<typeof setTimeout> | null = null;
 
   start(): void {
+    if (this.fadeTimer !== null) { clearTimeout(this.fadeTimer); this.fadeTimer = null; this.stopScheduler(); }
     if (this.playing) return;
     // Start the interval timer now. The context may still be suspended (ctx.resume()
     // is async), so tick() handles master GainNode creation on the first running tick.
@@ -49,7 +51,7 @@ export class MusicTrack {
     const ctx = getAudioCtx();
     if (!ctx || !this.master) return;
     this.master.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
-    setTimeout(() => this.stopScheduler(), (duration + 0.1) * 1000);
+    this.fadeTimer = setTimeout(() => this.stopScheduler(), (duration + 0.1) * 1000);
   }
 
   stop(): void {

@@ -47,6 +47,8 @@ export function getBus(name: Bus): GainNode | null {
   return getAudioCtx() && _buses ? _buses[name] : null;
 }
 
+let _musicLevel: number = AUDIO_MIX.music;
+
 /** Briefly lowers the music channel so a big effect cuts through. */
 export function duckMusic(): void {
   const ctx = getAudioCtx();
@@ -54,8 +56,26 @@ export function duckMusic(): void {
   const g = _buses.music.gain;
   const t = ctx.currentTime;
   g.cancelScheduledValues(t);
-  g.setValueAtTime(AUDIO_MIX.music * AUDIO_MIX.musicDuckOnExplosion, t);
-  g.linearRampToValueAtTime(AUDIO_MIX.music, t + AUDIO_MIX.duckRecoverSecs);
+  g.setValueAtTime(_musicLevel * AUDIO_MIX.musicDuckOnExplosion, t);
+  g.linearRampToValueAtTime(_musicLevel, t + AUDIO_MIX.duckRecoverSecs);
+}
+
+/** Music keeps playing while paused, just quieter. */
+export function setMusicPaused(paused: boolean): void {
+  _musicLevel = AUDIO_MIX.music * (paused ? AUDIO_MIX.musicWhenPaused : 1);
+  if (!_ctx || !_buses) return;
+  const g = _buses.music.gain;
+  const t = _ctx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(_musicLevel, t + 0.25);
+}
+
+/** Silence everything while the tab/app is in the background. */
+export function setPageHidden(hidden: boolean): void {
+  if (!_ctx) return;
+  if (hidden) _ctx.suspend().catch(() => {});
+  else _ctx.resume().catch(() => {});
 }
 
 /** Creates (if needed) and resumes the context. Call directly in a gesture handler. */

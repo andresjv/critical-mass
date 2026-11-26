@@ -189,7 +189,7 @@ export class HangarScene extends Phaser.Scene {
     this.drawPlane(0x44aaff, false);
 
     // ── Touch controls ───────────────────────────────────────────────────────
-    this.touchControls = new TouchControls(this);
+    this.touchControls = new TouchControls(this, { move: 'FLY', fire: 'SKIP', action: 'OPEN / LAUNCH' });
 
     // ── Pause on visibility ──────────────────────────────────────────────────
     this.visibilityHandler = () => {

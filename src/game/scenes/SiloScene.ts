@@ -135,7 +135,7 @@ export class SiloScene extends Phaser.Scene {
     this.effectGfx = this.add.graphics();
 
     // ── Touch controls ────────────────────────────────────────────────────
-    this.touchControls = new TouchControls(this);
+    this.touchControls = new TouchControls(this, { move: 'MOVE', fire: 'FIRE', action: 'FIRE' });
 
     // ── HUD setup ─────────────────────────────────────────────────────────
     gameUi.mapActive = false;

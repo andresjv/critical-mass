@@ -38,6 +38,8 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
     },
     input: {
       gamepad: true,
+      // Phaser tracks one touch by default; steer + fire + action needs three.
+      activePointers: 4,
     },
     scene: [
       // BootScene auto-starts first; it generates placeholder textures then

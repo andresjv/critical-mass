@@ -15,6 +15,7 @@ import { EngineSound } from '../audio/EngineSound';
 import { MusicTrack } from '../audio/MusicTrack';
 import { VoiceCallout } from '../audio/VoiceCallout';
 import { playExplosion } from '../audio/ExplosionSound';
+import { setMusicPaused } from '../audio/audioCtx';
 
 const W = 1280;
 const H = 720;
@@ -344,11 +345,13 @@ export class AttackRunScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(23).setVisible(false);
 
     // ── Touch / pause ────────────────────────────────────────────────────────
-    this.touchControls = new TouchControls(this);
+    this.touchControls = new TouchControls(this, { move: 'FLY', fire: 'SHOOT', action: 'BOMB' });
     this.visibilityHandler = () => {
       if (document.hidden) this.scene.pause(); else this.scene.resume();
     };
     document.addEventListener('visibilitychange', this.visibilityHandler);
+    // Phaser doesn't call shutdown() by name; without this, engine/music kept running in the hangar.
+    this.events.once('shutdown', this.shutdown, this);
 
     // ── How-to-play (first visit) ────────────────────────────────────────────
     if (!hasSeenHowToPlay('attack_run')) {
@@ -389,6 +392,8 @@ export class AttackRunScene extends Phaser.Scene {
     // ── Pause toggle ──────────────────────────────────────────────────────────
     if (pauseJust) {
       this.paused = !this.paused;
+      setMusicPaused(this.paused);
+      if (this.paused) this.engineSound.stop();
       if (this.paused) {
         // Draw semi-transparent overlay once when entering pause.
         this.pauseGfx.clear();
@@ -809,6 +814,8 @@ export class AttackRunScene extends Phaser.Scene {
       gameUi.contextualHint = null;
       // Show stage result card for 2s before transitioning.
       this.musicTrack.fadeOut(1.5);
+      this.engineSound.stop();
+      this.proximityBeep.stop();
       this.voice.say('Mission complete', 'complete', true);
       gameUi.stageResult = {
         headline: 'ATTACK RUN COMPLETE',
@@ -1469,6 +1476,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.proximityBeep.dispose();
     this.engineSound.dispose();
     this.musicTrack.dispose();
+    setMusicPaused(false);
     this.voice.stop();
     gameUi.attackRunSecsLeft = 0;
   }
