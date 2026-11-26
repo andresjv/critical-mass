@@ -3,7 +3,7 @@
 // synthesise a short "radio blip" instead and expose the text via callback.
 // Sounds: static crackle → rising tone → message tone at freq for ~0.4s.
 
-import { getAudioCtx } from './audioCtx';
+import { getAudioCtx, getBus } from './audioCtx';
 
 const COOLDOWN_MS = 2800;
 
@@ -59,7 +59,7 @@ export class VoiceCallout {
     const noiseGain = ctx.createGain();
     noiseGain.gain.setValueAtTime(0.25, t0);
     noiseGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.06);
-    noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(ctx.destination);
+    noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(getBus('radio') ?? ctx.destination);
     noise.start(t0); noise.stop(t0 + 0.07);
 
     // Message tone: square wave at freq, 0.28s, with brief volume envelope.
@@ -71,7 +71,7 @@ export class VoiceCallout {
     gain.gain.linearRampToValueAtTime(0.18, t0 + 0.08);
     gain.gain.setValueAtTime(0.18, t0 + 0.30);
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.38);
-    osc.connect(gain); gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(getBus('radio') ?? ctx.destination);
     osc.start(t0 + 0.05); osc.stop(t0 + 0.40);
   }
 

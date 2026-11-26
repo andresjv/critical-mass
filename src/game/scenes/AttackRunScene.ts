@@ -14,6 +14,7 @@ import { ProximityBeep, BeepSource } from '../audio/ProximityBeep';
 import { EngineSound } from '../audio/EngineSound';
 import { MusicTrack } from '../audio/MusicTrack';
 import { VoiceCallout } from '../audio/VoiceCallout';
+import { playExplosion } from '../audio/ExplosionSound';
 
 const W = 1280;
 const H = 720;
@@ -1186,6 +1187,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.planeState = 'crashed';
     this.proximityBeep.stop();
     this.engineSound.stop();
+    playExplosion(80);
     this.musicTrack.fadeOut(0.6);
     missionState.losePlane();
     if (missionState.planes > 0) {
@@ -1399,6 +1401,7 @@ export class AttackRunScene extends Phaser.Scene {
 
   private spawnExplosion(worldX: number, screenY: number, size: number): void {
     this.explosions.push({ worldX, screenY, t: 0, size });
+    playExplosion(size);
   }
 
   private renderExplosions(): void {

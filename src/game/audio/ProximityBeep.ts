@@ -1,5 +1,5 @@
 // ProximityBeep.ts — Web Audio proximity warning for missiles and heat-seekers.
-import { getAudioCtx } from './audioCtx';
+import { getAudioCtx, getBus } from './audioCtx';
 // Nearest-2 sources; interval/volume/pitch all lerp with distance.
 // Also drives a pulsing ring radius for sound-off players (ringPhase, isActive).
 
@@ -124,7 +124,7 @@ export class ProximityBeep {
 
     osc.connect(gain);
     gain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(getBus('sfx') ?? ctx.destination);
 
     const t0 = ctx.currentTime;
     gain.gain.setValueAtTime(volume * 0.15, t0);
@@ -149,7 +149,7 @@ export class ProximityBeep {
 
     osc.connect(gain);
     gain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(getBus('sfx') ?? ctx.destination);
     osc.start();
 
     this.solidOsc = osc;

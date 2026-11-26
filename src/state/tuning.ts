@@ -256,3 +256,13 @@ export const REACTOR = {
   /** Rear hits needed to destroy one robot. */
   hitsToDestroy: 4,
 } as const;
+
+// Audio mix: channel levels into the master limiter (0–1).
+export const AUDIO_MIX = {
+  master: 0.9,
+  music:  0.45,
+  sfx:    0.9,
+  radio:  0.7,
+  musicDuckOnExplosion: 0.4, // music level multiplier during a blast
+  duckRecoverSecs: 0.6,
+};

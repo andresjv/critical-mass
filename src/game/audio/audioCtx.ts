@@ -1,38 +1,72 @@
-// Shared AudioContext singleton. All audio classes use this one context so we
-// never exceed the browser's concurrent-context limit (Chrome mobile: 2–4).
-//
-// IMPORTANT: getAudioCtx() returns null until resumeCtx() is called from a
-// real user-gesture handler (tap, key, click). This is the only way to satisfy
-// the browser's autoplay policy — never create an AudioContext at module load
-// time or in an animation frame.
+// Shared AudioContext singleton plus a small mixer:
+//   music ┐
+//   sfx   ├─► limiter ─► master ─► speakers
+//   radio ┘
+// getAudioCtx()/getBus() return null until resumeCtx() runs inside a real
+// user-gesture handler (browser autoplay policy).
+
+import { AUDIO_MIX } from '../../state/tuning';
+
+export type Bus = 'music' | 'sfx' | 'radio';
 
 let _ctx: AudioContext | null = null;
+let _buses: Record<Bus, GainNode> | null = null;
 
-/**
- * Returns the shared context, or null if resumeCtx() has not been called yet.
- * Also returns null while the context is still suspended (safe for callers that
- * schedule timed audio — ctx.currentTime is frozen while suspended).
- */
+function buildMixer(ctx: AudioContext): Record<Bus, GainNode> {
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -10;
+  limiter.knee.value      = 6;
+  limiter.ratio.value     = 12;
+  limiter.attack.value    = 0.003;
+  limiter.release.value   = 0.25;
+  const master = ctx.createGain();
+  master.gain.value = AUDIO_MIX.master;
+  limiter.connect(master);
+  master.connect(ctx.destination);
+
+  const bus = (level: number): GainNode => {
+    const g = ctx.createGain();
+    g.gain.value = level;
+    g.connect(limiter);
+    return g;
+  };
+  return { music: bus(AUDIO_MIX.music), sfx: bus(AUDIO_MIX.sfx), radio: bus(AUDIO_MIX.radio) };
+}
+
+/** Returns the running context, or null if not yet unlocked / still suspended. */
 export function getAudioCtx(): AudioContext | null {
-  if (!_ctx) return null; // not yet unlocked by a user gesture
+  if (!_ctx) return null;
   if (_ctx.state === 'suspended') {
     _ctx.resume().catch(() => {});
-    return null; // don't schedule timed audio until running
+    return null;
   }
   return _ctx;
 }
 
-/**
- * Creates (if needed) and resumes the shared AudioContext.
- * Must be called directly inside a user-gesture event handler.
- */
+export function getBus(name: Bus): GainNode | null {
+  return getAudioCtx() && _buses ? _buses[name] : null;
+}
+
+/** Briefly lowers the music channel so a big effect cuts through. */
+export function duckMusic(): void {
+  const ctx = getAudioCtx();
+  if (!ctx || !_buses) return;
+  const g = _buses.music.gain;
+  const t = ctx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(AUDIO_MIX.music * AUDIO_MIX.musicDuckOnExplosion, t);
+  g.linearRampToValueAtTime(AUDIO_MIX.music, t + AUDIO_MIX.duckRecoverSecs);
+}
+
+/** Creates (if needed) and resumes the context. Call directly in a gesture handler. */
 export function resumeCtx(): void {
   if (!_ctx) {
     try { _ctx = new AudioContext(); } catch { return; }
+    _buses = buildMixer(_ctx);
   }
   if (_ctx.state === 'suspended') _ctx.resume().catch(() => {});
 }
 
 export function closeCtx(): void {
-  if (_ctx) { _ctx.close().catch(() => {}); _ctx = null; }
+  if (_ctx) { _ctx.close().catch(() => {}); _ctx = null; _buses = null; }
 }

@@ -5,7 +5,7 @@
 // every 200 ms and schedules all notes that fall within that window, so
 // timing stays tight regardless of JS event-loop jitter.
 
-import { getAudioCtx } from './audioCtx';
+import { getAudioCtx, getBus } from './audioCtx';
 
 const BPM        = 128;
 const STEP       = (60 / BPM) / 4; // 16th-note duration ≈ 0.117 s
@@ -82,8 +82,8 @@ export class MusicTrack {
     // Create master GainNode on the first tick where the context is running.
     if (!this.master) {
       this.master = ctx.createGain();
-      this.master.gain.value = 0.7;
-      this.master.connect(ctx.destination);
+      this.master.gain.value = 1;
+      this.master.connect(getBus('music') ?? ctx.destination);
     }
     // Catch up if nextTime is in the past (context was suspended when start() ran).
     if (this.nextTime < ctx.currentTime) {
