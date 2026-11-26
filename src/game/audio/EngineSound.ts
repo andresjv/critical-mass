@@ -2,8 +2,9 @@
 // Engine: two layered sawtooth oscillators (83 Hz + 167 Hz) whose gain ramps
 // between idle and thrust level. Whoosh: pitch-swept sine burst (650→70 Hz).
 
+import { getAudioCtx } from './audioCtx';
+
 export class EngineSound {
-  private ctx: AudioContext | null = null;
   private osc1: OscillatorNode | null = null;
   private osc2: OscillatorNode | null = null;
   private gain1: GainNode | null = null;
@@ -11,7 +12,7 @@ export class EngineSound {
   private started = false;
 
   update(thrusting: boolean): void {
-    const ctx = this.getCtx();
+    const ctx = getAudioCtx();
     if (!ctx) return;
     if (!this.started) this.startOscillators(ctx);
     const t1 = thrusting ? 0.22 : 0.07;
@@ -22,7 +23,7 @@ export class EngineSound {
   }
 
   playWhoosh(): void {
-    const ctx = this.getCtx();
+    const ctx = getAudioCtx();
     if (!ctx) return;
     const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -40,8 +41,9 @@ export class EngineSound {
   }
 
   stop(): void {
-    if (!this.ctx || !this.gain1 || !this.gain2) return;
-    const ramp = this.ctx.currentTime + 0.15;
+    const ctx = getAudioCtx();
+    if (!ctx || !this.gain1 || !this.gain2) return;
+    const ramp = ctx.currentTime + 0.15;
     this.gain1.gain.linearRampToValueAtTime(0, ramp);
     this.gain2.gain.linearRampToValueAtTime(0, ramp);
   }
@@ -49,8 +51,8 @@ export class EngineSound {
   dispose(): void {
     try { this.osc1?.stop(); } catch { /* already stopped */ }
     try { this.osc2?.stop(); } catch { /* already stopped */ }
-    this.ctx?.close().catch(() => { /* ignore */ });
-    this.ctx   = null; this.osc1  = null; this.osc2  = null;
+    // Don't close the shared context — other audio classes still use it.
+    this.osc1 = null; this.osc2 = null;
     this.gain1 = null; this.gain2 = null; this.started = false;
   }
 
@@ -69,11 +71,4 @@ export class EngineSound {
     this.started = true;
   }
 
-  private getCtx(): AudioContext | null {
-    if (!this.ctx) {
-      try { this.ctx = new AudioContext(); } catch { return null; }
-    }
-    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => { /* ignore */ });
-    return this.ctx;
-  }
 }

@@ -5,6 +5,8 @@
 // every 200 ms and schedules all notes that fall within that window, so
 // timing stays tight regardless of JS event-loop jitter.
 
+import { getAudioCtx } from './audioCtx';
+
 const BPM        = 128;
 const STEP       = (60 / BPM) / 4; // 16th-note duration ≈ 0.117 s
 const STEPS      = 32;              // 2 bars (32 × 16th notes)
@@ -26,7 +28,6 @@ const LEAD = [
 ];
 
 export class MusicTrack {
-  private ctx: AudioContext | null = null;
   private master: GainNode | null  = null;
   private noiseBuffer: AudioBuffer | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -36,7 +37,7 @@ export class MusicTrack {
 
   start(): void {
     if (this.playing) return;
-    const ctx = this.getCtx();
+    const ctx = getAudioCtx();
     if (!ctx) return;
     this.master = ctx.createGain();
     this.master.gain.value = 0.35;
@@ -48,22 +49,24 @@ export class MusicTrack {
   }
 
   fadeOut(duration = 0.5): void {
-    if (!this.ctx || !this.master) return;
-    this.master.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration);
+    const ctx = getAudioCtx();
+    if (!ctx || !this.master) return;
+    this.master.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
     setTimeout(() => this.stopScheduler(), (duration + 0.1) * 1000);
   }
 
   stop(): void {
-    if (this.master && this.ctx) {
-      this.master.gain.setValueAtTime(0, this.ctx.currentTime);
+    const ctx = getAudioCtx();
+    if (this.master && ctx) {
+      this.master.gain.setValueAtTime(0, ctx.currentTime);
     }
     this.stopScheduler();
   }
 
   dispose(): void {
     this.stopScheduler();
-    this.ctx?.close().catch(() => { /* ignore */ });
-    this.ctx = null; this.master = null; this.noiseBuffer = null;
+    // Don't close the shared context — other audio classes still use it.
+    this.master = null; this.noiseBuffer = null;
   }
 
   // ── Private ──────────────────────────────────────────────────────────────
@@ -74,7 +77,7 @@ export class MusicTrack {
   }
 
   private tick(): void {
-    const ctx = this.ctx;
+    const ctx = getAudioCtx();
     if (!ctx || !this.playing) return;
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
@@ -93,7 +96,7 @@ export class MusicTrack {
   }
 
   private scheduleStep(s: number, t: number): void {
-    const ctx = this.ctx;
+    const ctx = getAudioCtx();
     const out = this.master;
     if (!ctx || !out) return;
 
@@ -179,13 +182,5 @@ export class MusicTrack {
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     }
     return this.noiseBuffer;
-  }
-
-  private getCtx(): AudioContext | null {
-    if (!this.ctx) {
-      try { this.ctx = new AudioContext(); } catch { return null; }
-    }
-    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => { /* ignore */ });
-    return this.ctx;
   }
 }

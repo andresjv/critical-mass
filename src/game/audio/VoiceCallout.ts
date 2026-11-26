@@ -3,6 +3,8 @@
 // synthesise a short "radio blip" instead and expose the text via callback.
 // Sounds: static crackle → rising tone → message tone at freq for ~0.4s.
 
+import { getAudioCtx } from './audioCtx';
+
 const COOLDOWN_MS = 2800;
 
 // Different tones for different message types so the player can learn them.
@@ -17,7 +19,6 @@ const TONES: Record<string, number> = {
 };
 
 export class VoiceCallout {
-  private ctx: AudioContext | null = null;
   private lastAt = 0;
   private onText: ((text: string) => void) | null = null;
 
@@ -42,7 +43,7 @@ export class VoiceCallout {
   // ── Private ──────────────────────────────────────────────────────────────
 
   private playRadioBlip(freq: number): void {
-    const ctx = this.getCtx();
+    const ctx = getAudioCtx();
     if (!ctx) return;
     const t0 = ctx.currentTime;
 
@@ -74,11 +75,4 @@ export class VoiceCallout {
     osc.start(t0 + 0.05); osc.stop(t0 + 0.40);
   }
 
-  private getCtx(): AudioContext | null {
-    if (!this.ctx) {
-      try { this.ctx = new AudioContext(); } catch { return null; }
-    }
-    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-    return this.ctx.state === 'running' ? this.ctx : null;
-  }
 }
