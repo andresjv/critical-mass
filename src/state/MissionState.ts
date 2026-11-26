@@ -32,6 +32,14 @@ export class MissionState {
   // ── Score ─────────────────────────────────────────────────────────────────
   score: number = 0;
 
+  // ── Impact clock ─────────────────────────────────────────────────────────
+  /** Seconds remaining before missile impact. 0 when not running. */
+  impactClock: number = 0;
+
+  // ── HUD ──────────────────────────────────────────────────────────────────
+  /** Stage-specific cue string shown at the bottom of the HUD. */
+  hudCue: string = '';
+
   // ── Computed ──────────────────────────────────────────────────────────────
 
   /** Stage 5 becomes available after all 4 launch sites are destroyed. */
@@ -56,6 +64,8 @@ export class MissionState {
     this.sitesDestroyed = 0;
     this.citiesLost = 0;
     this.score = 0;
+    this.impactClock = 0;
+    this.hudCue = '';
   }
 
   // ── Planes ───────────────────────────────────────────────────────────────
@@ -78,6 +88,23 @@ export class MissionState {
     this.citiesLost += 1;
   }
 
+  // ── Impact clock ─────────────────────────────────────────────────────────
+
+  /** Set the clock to the given seconds (called when hangar starts). */
+  startImpactClock(seconds: number): void {
+    this.impactClock = seconds;
+  }
+
+  /**
+   * Decrement the clock by dt seconds.
+   * Returns true the moment the clock first reaches zero.
+   */
+  tickImpactClock(dt: number): boolean {
+    if (this.impactClock <= 0) return false;
+    this.impactClock = Math.max(0, this.impactClock - dt);
+    return this.impactClock === 0;
+  }
+
   // ── Scoring ───────────────────────────────────────────────────────────────
 
   addScore(points: number): void {
@@ -85,3 +112,7 @@ export class MissionState {
     this.score += Math.round(points * mult);
   }
 }
+
+// ── Singleton ────────────────────────────────────────────────────────────────
+// Import `missionState` from this file everywhere. Never construct MissionState directly in game code.
+export const missionState = new MissionState();
