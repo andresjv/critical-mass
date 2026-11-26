@@ -90,6 +90,34 @@ export function GameHud({ s }: Props) {
         </div>
       )}
 
+      {/* ── Attack run timer ────────────────────────────────────────────── */}
+      {s.attackRunSecsLeft > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: 56,
+          right: 24,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 26,
+          color: '#aaaaaa',
+        }}>
+          {Math.ceil(s.attackRunSecsLeft)}s
+        </div>
+      )}
+
+      {/* ── Silo status ──────────────────────────────────────────────────── */}
+      {s.silosDestroyed > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: 56,
+          right: 24,
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontSize: 22,
+          color: '#88ff88',
+        }}>
+          {'◆'.repeat(s.silosDestroyed)}
+        </div>
+      )}
+
       {/* ── Map info panel ──────────────────────────────────────────────── */}
       {s.mapActive && s.launchSite && (
         <div style={{

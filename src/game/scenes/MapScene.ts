@@ -5,6 +5,7 @@ import { gameUi } from '../../state/gameUi';
 import { TUNING, LIMITS, SCORE } from '../../state/tuning';
 import { InputRouter } from '../../input/InputRouter';
 import { TouchControls } from '../../input/TouchControls';
+import { parseChallengeFromURL, getPlayerName } from '../../state/challengeLink';
 
 const W = 1280;
 const H = 720;
@@ -53,7 +54,19 @@ export class MapScene extends Phaser.Scene {
 
   create(): void {
     if (missionState.planes === 0) {
-      missionState.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: Date.now() });
+      // On first load, check for a challenge URL and apply it.
+      const challenge = parseChallengeFromURL();
+      if (challenge) {
+        gameUi.challengerData = challenge;
+        gameUi.playerName = getPlayerName();
+        missionState.startMission({
+          theme:      challenge.theme,
+          difficulty: challenge.difficulty,
+          seed:       challenge.seed,
+        });
+      } else {
+        missionState.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: Date.now() });
+      }
     }
 
     // Write to gameUi so the React overlay can render the map panel.

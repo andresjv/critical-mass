@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { missionState } from '../state/MissionState';
 import { debugInfo } from '../state/debugInfo';
-import { gameUi } from '../state/gameUi';
+import { gameUi, type ChallengerData, type HowToPlayStage } from '../state/gameUi';
 
 export interface HudState {
   score: number;
@@ -21,6 +21,18 @@ export interface HudState {
   targetCity: string;
   timeToImpactSecs: number;
   autoScrambleRemaining: number;
+  // How-to-play
+  howToPlayStage: HowToPlayStage | null;
+  // Results
+  showResults: boolean;
+  finalScore: number;
+  challengerData: ChallengerData | null;
+  playerName: string;
+  // Attack run
+  attackRunSecsLeft: number;
+  // Silo
+  silosDestroyed: number;
+  centralSiloDown: boolean;
 }
 
 function snapshot(): HudState {
@@ -41,6 +53,14 @@ function snapshot(): HudState {
     targetCity:   gameUi.targetCity,
     timeToImpactSecs:        gameUi.timeToImpactSecs,
     autoScrambleRemaining:   gameUi.autoScrambleRemaining,
+    howToPlayStage: gameUi.howToPlayStage,
+    showResults:  gameUi.showResults,
+    finalScore:   gameUi.finalScore,
+    challengerData: gameUi.challengerData,
+    playerName:   gameUi.playerName,
+    attackRunSecsLeft: gameUi.attackRunSecsLeft,
+    silosDestroyed: gameUi.silosDestroyed,
+    centralSiloDown: gameUi.centralSiloDown,
   };
 }
 

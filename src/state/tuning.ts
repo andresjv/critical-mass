@@ -158,14 +158,37 @@ export const ATTACK_RUN = {
   tankFireInterval: 2.5,
   /** SAM homing-missile turn rate, degrees/s. */
   samTurnRate: 60,
-  /** Interceptor burst count. */
+  /** Interceptor burst count per pass. */
   interceptorBurstShots: 2,
+  // ── Added for T6 ──────────────────────────────────────────────────────────
+  /** Leftmost screen X the plane can occupy, px. */
+  planeXMin: 100,
+  /** Rightmost screen X (at canvas centre), px. */
+  planeXMax: 580,
+  /** Horizontal movement speed, px/s. */
+  planeXSpeed: 450,
+  /** Altitude change speed, px/s (100 × WORLD_SCALE). */
+  planeAltSpeed: 333,
+  /** Player bullet speed, px/s (200 × WORLD_SCALE). */
+  bulletSpeed: 667,
+  /** Upward flak projectile speed, px/s (80 × WORLD_SCALE). */
+  flakSpeed: 267,
+  /** SAM homing missile speed, px/s (80 × WORLD_SCALE). */
+  samMissileSpeed: 267,
+  /** Interceptor lateral speed, px/s (130 × WORLD_SCALE). */
+  interceptorSpeed: 433,
+  /** Heat-seeker speed, px/s (130 × WORLD_SCALE). */
+  heatSeekerSpeed: 433,
+  /** Enemy density per launchIndex (0–3): 0.5 → 0.73 → 0.97 → 1.2. */
+  enemyDensity: [0.5, 0.73, 0.97, 1.2] as const,
+  /** Interceptor spawn interval base, seconds. */
+  interceptorInterval: 9,
 } as const;
 
 // ─── Stage 4 — Silo Strike ───────────────────────────────────────────────────
 
 export const SILO = {
-  /** Reticle snaps to "locked" within this many px of a window centre (4 × WORLD_SCALE). */
+  /** Reticle snaps to "locked" within this many screen-px of a window centre (4 × WORLD_SCALE). */
   lockRadius: 13,
   /** Rocket travel time, seconds. */
   rocketTravelTime: 0.8,
@@ -173,6 +196,21 @@ export const SILO = {
   siloGunInterval: 1.8,
   /** Interceptor spawn interval, seconds. */
   interceptorInterval: 6,
+  // ── Added for T7 ──────────────────────────────────────────────────────────
+  /** Player reticle world-X movement speed (world units/s). */
+  worldXSpeed: 500,
+  /** Player reticle world-Y (altitude) movement speed (world units/s). */
+  worldYSpeed: 350,
+  /** Max world-X extent the player can reach (±range). */
+  worldXRange: 800,
+  /** Minimum player altitude in world units. */
+  worldYMin: 80,
+  /** Maximum player altitude in world units. */
+  worldYMax: 500,
+  /** Silo-gun bullet travel time, seconds. */
+  siloGunBulletTime: 1.4,
+  /** Interceptor lateral speed, px/s. */
+  interceptorSpeed: 350,
 } as const;
 
 // ─── Stage 5 — Vostgrad Assault ──────────────────────────────────────────────

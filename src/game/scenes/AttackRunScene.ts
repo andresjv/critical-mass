@@ -1,0 +1,846 @@
+// Stage 3 — Attack Run.
+// Side-scrolling terrain, side-view plane, enemies (tanks, SAMs, interceptors, heat-seeker).
+import Phaser from 'phaser';
+import { InputRouter } from '../../input/InputRouter';
+import { TouchControls } from '../../input/TouchControls';
+import { missionState } from '../../state/MissionState';
+import { debugInfo } from '../../state/debugInfo';
+import { gameUi } from '../../state/gameUi';
+import { ATTACK_RUN, TUNING, SCORE } from '../../state/tuning';
+import { createRng } from '../../state/rng';
+import { hasSeenHowToPlay, markSeenHowToPlay } from '../../state/howToPlay';
+
+const W = 1280;
+const H = 720;
+const FIXED_DT = 1 / 60;
+
+// Terrain
+const SEGMENT_W = 160;
+const GROUND_BASE_Y = H - 90;   // canvas Y of default ground surface
+const GROUND_VARIATION = 40;    // ±px random height variation
+
+// Plane visual (side-view, pointing right, local origin at centre)
+const PLANE_SIDE_POLY: [number, number][] = [
+  [-28,  -6], [-10, -10], [15,  -4], [30,  0],
+  [ 15,   4], [-10,  10], [-28,  6],
+];
+// Wing (swept-back triangle below fuselage)
+const WING_POLY: [number, number][] = [
+  [12, 4], [-5, 4], [-2, 28],
+];
+
+const PLANE_HIT_W = 28;  // half-width of hitbox
+const PLANE_HIT_H = 18;  // half-height
+
+// Enemy & projectile sizes (px)
+const TANK_W = 60;   const TANK_H = 28;
+const SAM_W  = 40;   const SAM_H  = 55;
+const INTERC_W = 55; const INTERC_H = 22;
+const BULLET_W = 18; const BULLET_H = 7;
+const FLAK_SIZE = 10;
+const MISSILE_W = 24; const MISSILE_H = 8;
+const HEATSEEK_W = 28; const HEATSEEK_H = 10;
+const BLDG_W = 90;   const BLDG_H = 140;
+
+interface SceneData {
+  launchIndex: number;
+  sparesLaunched?: number;
+}
+
+type PlaneState = 'flying' | 'crashed' | 'gameover';
+type HeatSeekerPhase = 'warning' | 'active' | 'passed';
+
+interface GroundEnemy {
+  worldX: number;
+  type: 'tank' | 'sam';
+  alive: boolean;
+  fireTimer: number;
+  // SAM only:
+  missile: { x: number; y: number; vx: number; vy: number } | null;
+}
+
+interface Obstacle {
+  worldX: number;
+  type: 'building' | 'pylon';
+}
+
+interface Projectile {
+  x: number; y: number;
+  vx: number; vy: number;
+  alive: boolean;
+  fromEnemy: boolean;
+}
+
+interface Interceptor {
+  x: number; y: number;
+  vx: number;
+  alive: boolean;
+  burstLeft: number;
+  burstTimer: number;
+}
+
+interface HeatSeeker {
+  phase: HeatSeekerPhase;
+  x: number;
+  lockedY: number;    // canvas Y locked at warning time
+  warnTimer: number;  // counts down before entering
+}
+
+export class AttackRunScene extends Phaser.Scene {
+  private launchIndex   = 0;
+
+  // ── Terrain data ─────────────────────────────────────────────────────────
+  private groundHeights: number[] = [];
+  private obstacles: Obstacle[] = [];
+  private groundEnemies: GroundEnemy[] = [];
+  private totalSegments = 0;
+
+  // ── Scheduled spawns ──────────────────────────────────────────────────────
+  private interceptorSchedule: number[] = [];   // times (seconds from start) to spawn
+  private heatSeekerSchedule: number[] = [];    // warning trigger times
+  private nextInterceptorIdx = 0;
+  private nextHeatSeekerIdx  = 0;
+
+  // ── World / physics state ─────────────────────────────────────────────────
+  private cameraX   = 0;    // world X of screen left edge
+  private planeX    = ATTACK_RUN.planeXMin + 100; // screen X
+  private planeAlt  = ATTACK_RUN.altitudeMax * 0.4;
+  private planeState: PlaneState = 'flying';
+  private stageTimer = ATTACK_RUN.duration;
+  private thrusting  = false;
+
+  // ── Active enemies / projectiles ─────────────────────────────────────────
+  private projectiles: Projectile[] = [];
+  private interceptors: Interceptor[] = [];
+  private heatSeeker: HeatSeeker | null = null;
+  private activeEnemies = new Set<GroundEnemy>();
+
+  // ── Input ─────────────────────────────────────────────────────────────────
+  private prevFire = false;
+  private accumulator = 0;
+
+  // ── Visuals ───────────────────────────────────────────────────────────────
+  private terrainGfx!: Phaser.GameObjects.Graphics;
+  private enemyGfx!:   Phaser.GameObjects.Graphics;
+  private projGfx!:    Phaser.GameObjects.Graphics;
+  private planeGfx!:   Phaser.GameObjects.Graphics;
+  private shadowGfx!:  Phaser.GameObjects.Graphics;
+  private touchControls!: TouchControls;
+  private visibilityHandler!: () => void;
+
+  constructor() { super({ key: 'AttackRunScene' }); }
+
+  init(data: Partial<SceneData>): void {
+    this.launchIndex = data.launchIndex ?? 0;
+    this.cameraX     = 0;
+    this.planeX      = ATTACK_RUN.planeXMin + 100;
+    this.planeAlt    = ATTACK_RUN.altitudeMax * 0.4;
+    this.planeState  = 'flying';
+    this.stageTimer  = ATTACK_RUN.duration;
+    this.thrusting   = false;
+    this.projectiles = [];
+    this.interceptors = [];
+    this.heatSeeker  = null;
+    this.activeEnemies.clear();
+    this.groundHeights = [];
+    this.obstacles   = [];
+    this.groundEnemies = [];
+    this.interceptorSchedule = [];
+    this.heatSeekerSchedule  = [];
+    this.nextInterceptorIdx  = 0;
+    this.nextHeatSeekerIdx   = 0;
+    this.accumulator = 0;
+    this.prevFire    = false;
+  }
+
+  create(): void {
+    this.scene.bringToTop('HudScene');
+    gameUi.mapActive   = false;
+    gameUi.attackRunSecsLeft = this.stageTimer;
+    missionState.hudCue = 'ATTACK RUN';
+    debugInfo.doorState = '—';
+    debugInfo.speed     = 0;
+
+    // ── Generate terrain ────────────────────────────────────────────────────
+    this.totalSegments = Math.ceil(
+      ATTACK_RUN.scrollSpeed * ATTACK_RUN.duration / SEGMENT_W,
+    ) + 15;
+
+    const density = ATTACK_RUN.enemyDensity[
+      Math.min(this.launchIndex, ATTACK_RUN.enemyDensity.length - 1)
+    ];
+    const fireRateMult = TUNING[missionState.difficulty].enemyFireRate;
+    const rng = createRng(missionState.seed + this.launchIndex * 1000 + 300);
+
+    for (let i = 0; i < this.totalSegments; i++) {
+      const variation = rng.next() * GROUND_VARIATION * 2 - GROUND_VARIATION;
+      this.groundHeights[i] = Phaser.Math.Clamp(
+        GROUND_BASE_Y + variation, H - 180, H - 50,
+      );
+
+      if (i < 5) continue; // safe start zone
+
+      const wx = i * SEGMENT_W + rng.next() * SEGMENT_W * 0.6;
+      const gy = this.groundHeights[i];
+
+      if (rng.next() < 0.12 * density) {
+        this.groundEnemies.push({
+          worldX: wx, type: 'tank', alive: true,
+          fireTimer: (ATTACK_RUN.tankFireInterval / fireRateMult) * (0.8 + rng.next() * 0.4),
+          missile: null,
+        });
+      } else if (rng.next() < 0.08 * density) {
+        this.groundEnemies.push({
+          worldX: wx, type: 'sam', alive: true,
+          fireTimer: (3.0 / fireRateMult) * (0.8 + rng.next() * 0.4),
+          missile: null,
+        });
+      }
+
+      if (rng.next() < 0.055 * density && gy < H - 100) {
+        this.obstacles.push({ worldX: wx + 40, type: 'building' });
+      } else if (rng.next() < 0.04 * density) {
+        this.obstacles.push({ worldX: wx + 70, type: 'pylon' });
+      }
+    }
+
+    // ── Scheduled spawns ─────────────────────────────────────────────────────
+    let t = 6 + rng.next() * 4;
+    while (t < ATTACK_RUN.duration - 6) {
+      this.interceptorSchedule.push(ATTACK_RUN.duration - t); // convert to countdown
+      t += ATTACK_RUN.interceptorInterval + rng.next() * 4 - 2;
+    }
+    this.heatSeekerSchedule.push(ATTACK_RUN.duration - (12 + rng.next() * 4));
+    if (this.launchIndex >= 1) {
+      this.heatSeekerSchedule.push(ATTACK_RUN.duration - (28 + rng.next() * 4));
+    }
+    this.interceptorSchedule.sort((a, b) => b - a);
+    this.heatSeekerSchedule.sort((a, b) => b - a);
+
+    // ── Background ──────────────────────────────────────────────────────────
+    // Sky gradient — simple rectangles.
+    const sky = this.add.graphics();
+    sky.fillStyle(0x0a1828, 1); sky.fillRect(0, 0, W, H * 0.5);
+    sky.fillStyle(0x102030, 1); sky.fillRect(0, H * 0.5, W, H * 0.5);
+
+    // ── Graphics layers ──────────────────────────────────────────────────────
+    this.terrainGfx = this.add.graphics().setDepth(1);
+    this.shadowGfx  = this.add.graphics().setDepth(2);
+    this.enemyGfx   = this.add.graphics().setDepth(3);
+    this.projGfx    = this.add.graphics().setDepth(4);
+    this.planeGfx   = this.add.graphics().setDepth(5);
+
+    // ── Touch / pause ────────────────────────────────────────────────────────
+    this.touchControls = new TouchControls(this);
+    this.visibilityHandler = () => {
+      if (document.hidden) this.scene.pause(); else this.scene.resume();
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+
+    // ── How-to-play (first visit) ────────────────────────────────────────────
+    if (!hasSeenHowToPlay('attack_run')) {
+      markSeenHowToPlay('attack_run');
+      gameUi.howToPlayStage = 'attack_run';
+      this.time.delayedCall(5500, () => { gameUi.howToPlayStage = null; });
+    }
+  }
+
+  update(time: number, delta: number): void {
+    this.touchControls.update();
+    const input = InputRouter.read();
+    const fireJust = input.fire && !this.prevFire;
+    this.prevFire   = input.fire;
+
+    this.accumulator += delta * 0.001;
+    while (this.accumulator >= FIXED_DT) {
+      this.fixedStep(FIXED_DT, input.moveX, input.moveY, fireJust);
+      this.accumulator -= FIXED_DT;
+    }
+
+    this.renderFrame(time);
+    debugInfo.fps = Math.round(this.game.loop.actualFps);
+  }
+
+  // ── Fixed step ────────────────────────────────────────────────────────────
+
+  private fixedStep(dt: number, mx: number, my: number, fireJust: boolean): void {
+    if (this.planeState !== 'flying') return;
+
+    // Scroll camera.
+    this.cameraX += ATTACK_RUN.scrollSpeed * dt;
+
+    // Move plane.
+    this.planeX = Phaser.Math.Clamp(
+      this.planeX + mx * ATTACK_RUN.planeXSpeed * dt,
+      ATTACK_RUN.planeXMin,
+      ATTACK_RUN.planeXMax,
+    );
+    this.planeAlt = Phaser.Math.Clamp(
+      this.planeAlt - my * ATTACK_RUN.planeAltSpeed * dt,
+      ATTACK_RUN.altitudeMin,
+      ATTACK_RUN.altitudeMax,
+    );
+    this.thrusting = Math.abs(mx) > 0.05 || Math.abs(my) > 0.05;
+
+    // Ground collision.
+    const groundY = this.groundYAtWorldX(this.cameraX + this.planeX);
+    const planeScreenY = groundY - this.planeAlt;
+    if (this.planeAlt <= ATTACK_RUN.altitudeMin + 2) {
+      if (TUNING[missionState.difficulty].groundContactCrash) {
+        this.crashPlane('GROUND HIT');
+        return;
+      }
+    }
+
+    // Obstacle collision.
+    for (const obs of this.obstacles) {
+      const sx = obs.worldX - this.cameraX;
+      if (sx < -BLDG_W || sx > W + BLDG_W) continue;
+      const obsTopY = obs.type === 'building'
+        ? this.groundYAtWorldX(obs.worldX) - BLDG_H
+        : this.groundYAtWorldX(obs.worldX) - 180; // pylon taller
+      const obsW = obs.type === 'building' ? BLDG_W : 20;
+      if (
+        Math.abs(sx - this.planeX) < (PLANE_HIT_W + obsW / 2) &&
+        planeScreenY + PLANE_HIT_H > obsTopY
+      ) {
+        this.crashPlane('OBSTACLE');
+        return;
+      }
+    }
+
+    // Player fire.
+    if (fireJust && this.projectiles.filter(p => !p.fromEnemy && p.alive).length < 4) {
+      this.projectiles.push({
+        x: this.planeX + PLANE_HIT_W,
+        y: planeScreenY,
+        vx: ATTACK_RUN.bulletSpeed, vy: 0,
+        alive: true, fromEnemy: false,
+      });
+    }
+
+    // Update projectiles.
+    for (const proj of this.projectiles) {
+      if (!proj.alive) continue;
+      proj.x += proj.vx * dt;
+      proj.y += proj.vy * dt;
+      if (proj.x > W + 50 || proj.x < -50 || proj.y < 0 || proj.y > H) {
+        proj.alive = false;
+      }
+    }
+
+    // Activate ground enemies entering viewport.
+    for (const enemy of this.groundEnemies) {
+      if (!enemy.alive) continue;
+      const sx = enemy.worldX - this.cameraX;
+      if (sx > -100 && sx < W + 100) this.activeEnemies.add(enemy);
+      else if (sx < -200) this.activeEnemies.delete(enemy);
+    }
+
+    // Step active ground enemies.
+    for (const enemy of this.activeEnemies) {
+      if (!enemy.alive) continue;
+      enemy.fireTimer -= dt;
+
+      if (enemy.fireTimer <= 0) {
+        const sx = enemy.worldX - this.cameraX;
+        const gy = this.groundYAtWorldX(enemy.worldX);
+
+        if (enemy.type === 'tank') {
+          enemy.fireTimer = ATTACK_RUN.tankFireInterval / TUNING[missionState.difficulty].enemyFireRate;
+          this.projectiles.push({
+            x: sx, y: gy - TANK_H,
+            vx: 0, vy: -ATTACK_RUN.flakSpeed,
+            alive: true, fromEnemy: true,
+          });
+        } else { // sam
+          enemy.fireTimer = 3.0 / TUNING[missionState.difficulty].enemyFireRate;
+          if (!enemy.missile) {
+            const gy2 = gy - SAM_H;
+            const ang = Phaser.Math.Angle.Between(sx, gy2, this.planeX, planeScreenY);
+            enemy.missile = {
+              x: sx, y: gy2,
+              vx: Math.cos(ang) * ATTACK_RUN.samMissileSpeed,
+              vy: Math.sin(ang) * ATTACK_RUN.samMissileSpeed,
+            };
+          }
+        }
+      }
+
+      // SAM missile homing.
+      if (enemy.missile) {
+        const m   = enemy.missile;
+        const ang = Phaser.Math.Angle.Between(m.x, m.y, this.planeX, planeScreenY);
+        const curAng = Math.atan2(m.vy, m.vx);
+        const maxTurn = Phaser.Math.DegToRad(ATTACK_RUN.samTurnRate) * dt;
+        const diff = Phaser.Math.Angle.Wrap(ang - curAng);
+        const turn = Phaser.Math.Clamp(diff, -maxTurn, maxTurn);
+        const newAng = curAng + turn;
+        const spd = Math.sqrt(m.vx * m.vx + m.vy * m.vy);
+        m.vx = Math.cos(newAng) * spd;
+        m.vy = Math.sin(newAng) * spd;
+        m.x += m.vx * dt;
+        m.y += m.vy * dt;
+
+        if (m.x < -50 || m.x > W + 50 || m.y < -50 || m.y > H + 50) {
+          enemy.missile = null;
+        }
+        // Missile hits player?
+        if (Math.abs(m.x - this.planeX) < PLANE_HIT_W && Math.abs(m.y - planeScreenY) < PLANE_HIT_H) {
+          enemy.missile = null;
+          this.crashPlane('SAM HIT');
+          return;
+        }
+      }
+    }
+
+    // Check player bullets hitting enemies.
+    for (const proj of this.projectiles) {
+      if (!proj.alive || proj.fromEnemy) continue;
+      for (const enemy of this.activeEnemies) {
+        if (!enemy.alive) continue;
+        const esx = enemy.worldX - this.cameraX;
+        const egy = this.groundYAtWorldX(enemy.worldX);
+        const eh  = enemy.type === 'tank' ? TANK_H : SAM_H;
+        const ew  = enemy.type === 'tank' ? TANK_W : SAM_W;
+        if (
+          Math.abs(proj.x - esx) < ew / 2 &&
+          Math.abs(proj.y - (egy - eh / 2)) < eh / 2
+        ) {
+          proj.alive   = false;
+          enemy.alive  = false;
+          this.activeEnemies.delete(enemy);
+          missionState.addScore(SCORE.tank);
+          missionState.hudCue = `+${SCORE.tank}`;
+        }
+      }
+    }
+
+    // Enemy flak/missiles hitting player.
+    for (const proj of this.projectiles) {
+      if (!proj.alive || !proj.fromEnemy) continue;
+      if (Math.abs(proj.x - this.planeX) < PLANE_HIT_W && Math.abs(proj.y - planeScreenY) < PLANE_HIT_H) {
+        proj.alive = false;
+        this.crashPlane('ENEMY FIRE');
+        return;
+      }
+    }
+
+    // ── Interceptors ──────────────────────────────────────────────────────────
+    const density = ATTACK_RUN.enemyDensity[
+      Math.min(this.launchIndex, ATTACK_RUN.enemyDensity.length - 1)
+    ];
+
+    // Spawn from schedule.
+    while (
+      this.nextInterceptorIdx < this.interceptorSchedule.length &&
+      this.stageTimer <= this.interceptorSchedule[this.nextInterceptorIdx]
+    ) {
+      const spawnY = GROUND_BASE_Y - ATTACK_RUN.altitudeMax * 0.5 -
+                     (Math.random() * ATTACK_RUN.altitudeMax * 0.3);
+      this.interceptors.push({
+        x: W + 60, y: spawnY,
+        vx: -ATTACK_RUN.interceptorSpeed * density,
+        alive: true, burstLeft: ATTACK_RUN.interceptorBurstShots,
+        burstTimer: 0.5,
+      });
+      this.nextInterceptorIdx++;
+    }
+
+    for (const ic of this.interceptors) {
+      if (!ic.alive) continue;
+      ic.x += ic.vx * dt;
+
+      // Burst fire.
+      ic.burstTimer -= dt;
+      if (ic.burstTimer <= 0 && ic.burstLeft > 0) {
+        ic.burstLeft--;
+        ic.burstTimer = 0.35;
+        const ang = Phaser.Math.Angle.Between(ic.x, ic.y, this.planeX, planeScreenY);
+        this.projectiles.push({
+          x: ic.x, y: ic.y,
+          vx: Math.cos(ang) * 300,
+          vy: Math.sin(ang) * 300,
+          alive: true, fromEnemy: true,
+        });
+      }
+
+      if (ic.x < -80) ic.alive = false;
+
+      // Player bullet kills interceptor.
+      for (const proj of this.projectiles) {
+        if (!proj.alive || proj.fromEnemy) continue;
+        if (Math.abs(proj.x - ic.x) < INTERC_W / 2 && Math.abs(proj.y - ic.y) < INTERC_H) {
+          proj.alive = false; ic.alive = false;
+          missionState.addScore(SCORE.interceptor);
+          missionState.hudCue = `+${SCORE.interceptor}`;
+          break;
+        }
+      }
+
+      // Interceptor collides with player.
+      if (Math.abs(ic.x - this.planeX) < PLANE_HIT_W + INTERC_W / 2 &&
+          Math.abs(ic.y - planeScreenY) < PLANE_HIT_H + INTERC_H) {
+        ic.alive = false;
+        this.crashPlane('INTERCEPTOR COLLISION');
+        return;
+      }
+    }
+
+    // ── Heat-seeker ───────────────────────────────────────────────────────────
+    while (
+      this.nextHeatSeekerIdx < this.heatSeekerSchedule.length &&
+      this.stageTimer <= this.heatSeekerSchedule[this.nextHeatSeekerIdx] &&
+      !this.heatSeeker
+    ) {
+      const groundY2 = this.groundYAtWorldX(this.cameraX + this.planeX);
+      this.heatSeeker = {
+        phase: 'warning',
+        x: -60,
+        lockedY: groundY2 - this.planeAlt,
+        warnTimer: ATTACK_RUN.heatSeekerWarnTime,
+      };
+      this.nextHeatSeekerIdx++;
+    }
+
+    if (this.heatSeeker) {
+      const hs = this.heatSeeker;
+      if (hs.phase === 'warning') {
+        hs.warnTimer -= dt;
+        missionState.hudCue = '⚠ HEAT-SEEKER INCOMING';
+        if (hs.warnTimer <= 0) hs.phase = 'active';
+      } else if (hs.phase === 'active') {
+        hs.x += ATTACK_RUN.heatSeekerSpeed * dt;
+        // Overshoot check: if player is very low, the heat-seeker flies over.
+        const isLow = this.planeAlt <= ATTACK_RUN.heatSeekerOvershootAlt;
+        if (!isLow) {
+          // Check hit.
+          if (Math.abs(hs.x - this.planeX) < PLANE_HIT_W + HEATSEEK_W / 2 &&
+              Math.abs(hs.lockedY - planeScreenY) < PLANE_HIT_H + HEATSEEK_H) {
+            this.heatSeeker = null;
+            this.crashPlane('HEAT-SEEKER HIT');
+            return;
+          }
+        }
+        if (hs.x > this.planeX + PLANE_HIT_W + 20) hs.phase = 'passed';
+      } else { // passed
+        hs.x += ATTACK_RUN.heatSeekerSpeed * dt;
+        missionState.hudCue = 'SHOOT IT!';
+
+        // Player bullet hits heat-seeker.
+        for (const proj of this.projectiles) {
+          if (!proj.alive || proj.fromEnemy) continue;
+          if (Math.abs(proj.x - hs.x) < HEATSEEK_W && Math.abs(proj.y - hs.lockedY) < HEATSEEK_H + 10) {
+            proj.alive = false;
+            this.heatSeeker = null;
+            missionState.addScore(SCORE.heatSeekerFromBehind);
+            missionState.hudCue = `HEAT-SEEKER DOWN! +${SCORE.heatSeekerFromBehind}`;
+            break;
+          }
+        }
+
+        if (this.heatSeeker && hs.x > W + 60) this.heatSeeker = null;
+      }
+    }
+
+    // ── Stage timer & impact clock ────────────────────────────────────────────
+    this.stageTimer -= dt;
+    gameUi.attackRunSecsLeft = Math.max(0, this.stageTimer);
+
+    if (missionState.tickImpactClock(dt)) {
+      this.onImpactExpired();
+      return;
+    }
+
+    if (this.stageTimer <= 0) {
+      gameUi.attackRunSecsLeft = 0;
+      this.time.delayedCall(300, () => {
+        this.scene.start('SiloScene', { launchIndex: this.launchIndex });
+      });
+      this.planeState = 'gameover'; // freeze updates
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  private renderFrame(time: number): void {
+    const groundY = this.groundYAtWorldX(this.cameraX + this.planeX);
+    const planeScreenY = groundY - this.planeAlt;
+
+    // ── Terrain ──────────────────────────────────────────────────────────────
+    this.terrainGfx.clear();
+    // Draw ground segments.
+    this.terrainGfx.fillStyle(0x1a3020, 1);
+    const startSeg = Math.max(0, Math.floor(this.cameraX / SEGMENT_W) - 1);
+    const endSeg   = Math.min(this.totalSegments - 1, Math.ceil((this.cameraX + W) / SEGMENT_W) + 1);
+    for (let i = startSeg; i <= endSeg; i++) {
+      const sx = i * SEGMENT_W - this.cameraX;
+      const gy = this.groundHeights[i] ?? GROUND_BASE_Y;
+      this.terrainGfx.fillRect(sx, gy, SEGMENT_W + 1, H - gy);
+    }
+    // Ground surface highlight.
+    this.terrainGfx.lineStyle(2, 0x2a5030, 0.8);
+    this.terrainGfx.beginPath();
+    for (let i = startSeg; i <= endSeg; i++) {
+      const sx = i * SEGMENT_W - this.cameraX;
+      const gy = this.groundHeights[i] ?? GROUND_BASE_Y;
+      if (i === startSeg) this.terrainGfx.moveTo(sx, gy);
+      else this.terrainGfx.lineTo(sx, gy);
+    }
+    this.terrainGfx.strokePath();
+
+    // Obstacles.
+    for (const obs of this.obstacles) {
+      const sx = obs.worldX - this.cameraX;
+      if (sx < -BLDG_W || sx > W + BLDG_W) continue;
+      const gy = this.groundYAtWorldX(obs.worldX);
+      if (obs.type === 'building') {
+        this.terrainGfx.fillStyle(0x334455, 1);
+        this.terrainGfx.fillRect(sx - BLDG_W / 2, gy - BLDG_H, BLDG_W, BLDG_H);
+        this.terrainGfx.lineStyle(1, 0x446688, 0.8);
+        this.terrainGfx.strokeRect(sx - BLDG_W / 2, gy - BLDG_H, BLDG_W, BLDG_H);
+        // Windows.
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+          this.terrainGfx.fillStyle(0x88aacc, 0.5);
+          this.terrainGfx.fillRect(sx - 30 + c * 24, gy - BLDG_H + 20 + r * 38, 14, 20);
+        }
+      } else { // pylon
+        this.terrainGfx.fillStyle(0x445566, 1);
+        this.terrainGfx.fillRect(sx - 10, gy - 180, 20, 180);
+        this.terrainGfx.fillStyle(0xffaa00, 0.9);
+        this.terrainGfx.fillRect(sx - 8, gy - 180, 16, 10); // top beacon
+      }
+    }
+
+    // ── Enemies ───────────────────────────────────────────────────────────────
+    this.enemyGfx.clear();
+    for (const enemy of this.activeEnemies) {
+      if (!enemy.alive) continue;
+      const sx = enemy.worldX - this.cameraX;
+      const gy = this.groundYAtWorldX(enemy.worldX);
+
+      if (enemy.type === 'tank') {
+        // Body.
+        this.enemyGfx.fillStyle(0x445533, 1);
+        this.enemyGfx.fillRect(sx - TANK_W / 2, gy - TANK_H, TANK_W, TANK_H);
+        // Turret.
+        this.enemyGfx.fillStyle(0x556644, 1);
+        this.enemyGfx.fillRect(sx - 15, gy - TANK_H - 12, 30, 12);
+        // Barrel (angled up).
+        this.enemyGfx.lineStyle(4, 0x667755, 1);
+        this.enemyGfx.lineBetween(sx + 10, gy - TANK_H - 6, sx + 36, gy - TANK_H - 24);
+        // Treads.
+        this.enemyGfx.fillStyle(0x334422, 1);
+        this.enemyGfx.fillRect(sx - TANK_W / 2, gy - 10, TANK_W, 10);
+      } else { // sam
+        this.enemyGfx.fillStyle(0x443322, 1);
+        this.enemyGfx.fillRect(sx - SAM_W / 2, gy - SAM_H, SAM_W, SAM_H);
+        // Launch rail.
+        this.enemyGfx.lineStyle(5, 0x556644, 1);
+        this.enemyGfx.lineBetween(sx, gy - SAM_H, sx + 30, gy - SAM_H - 40);
+        // Missile on rail.
+        this.enemyGfx.fillStyle(0xcc4422, 1);
+        this.enemyGfx.fillRect(sx + 5, gy - SAM_H - 42, 20, 8);
+      }
+
+      // SAM missile in flight.
+      if (enemy.missile) {
+        const m = enemy.missile;
+        this.enemyGfx.fillStyle(0xff6633, 1);
+        this.enemyGfx.fillRect(m.x - MISSILE_W / 2, m.y - MISSILE_H / 2, MISSILE_W, MISSILE_H);
+        // Flame.
+        this.enemyGfx.fillStyle(0xff9900, 0.7);
+        this.enemyGfx.fillRect(m.x + MISSILE_W / 2 - 4, m.y - 4, 10, 8);
+      }
+    }
+
+    // Interceptors.
+    for (const ic of this.interceptors) {
+      if (!ic.alive) continue;
+      this.enemyGfx.fillStyle(0x556677, 1);
+      this.enemyGfx.fillRect(ic.x - INTERC_W / 2, ic.y - INTERC_H / 2, INTERC_W, INTERC_H);
+      // Nose pointing left.
+      this.enemyGfx.fillStyle(0x778899, 1);
+      this.enemyGfx.fillTriangle(
+        ic.x - INTERC_W / 2 - 15, ic.y,
+        ic.x - INTERC_W / 2, ic.y - 10,
+        ic.x - INTERC_W / 2, ic.y + 10,
+      );
+      // Wing.
+      this.enemyGfx.fillStyle(0x445566, 1);
+      this.enemyGfx.fillTriangle(
+        ic.x, ic.y + 5, ic.x - 20, ic.y + 5, ic.x - 5, ic.y + 30,
+      );
+    }
+
+    // Heat-seeker.
+    if (this.heatSeeker && this.heatSeeker.phase !== 'warning') {
+      const hs = this.heatSeeker;
+      const flicker = Math.sin(time * 0.025) > 0 ? 1 : 0.6;
+      this.enemyGfx.fillStyle(0xff3300, flicker);
+      this.enemyGfx.fillRect(hs.x - HEATSEEK_W / 2, hs.lockedY - HEATSEEK_H / 2, HEATSEEK_W, HEATSEEK_H);
+      // Flame trail.
+      this.enemyGfx.fillStyle(0xff8800, 0.5 * flicker);
+      this.enemyGfx.fillRect(hs.x - HEATSEEK_W / 2 - 20, hs.lockedY - 4, 20, 8);
+    }
+
+    // Heat-seeker warning arrow.
+    if (this.heatSeeker?.phase === 'warning') {
+      const hs    = this.heatSeeker;
+      const flash = Math.sin(time * 0.02) > 0;
+      if (flash) {
+        const ay = hs.lockedY;
+        this.enemyGfx.fillStyle(0xff3300, 0.9);
+        this.enemyGfx.fillTriangle(0, ay - 20, 0, ay + 20, 50, ay);
+        // Pulsing ring.
+        this.enemyGfx.lineStyle(3, 0xff3300, 0.6);
+        this.enemyGfx.strokeCircle(30, ay, 25 + Math.sin(time * 0.03) * 5);
+      }
+    }
+
+    // ── Projectiles ────────────────────────────────────────────────────────────
+    this.projGfx.clear();
+    for (const proj of this.projectiles) {
+      if (!proj.alive) continue;
+      if (proj.fromEnemy) {
+        this.projGfx.fillStyle(0xff6622, 0.9);
+        this.projGfx.fillRect(proj.x - FLAK_SIZE / 2, proj.y - FLAK_SIZE / 2, FLAK_SIZE, FLAK_SIZE);
+      } else {
+        this.projGfx.fillStyle(0xffee44, 1);
+        this.projGfx.fillRect(proj.x, proj.y - BULLET_H / 2, BULLET_W, BULLET_H);
+      }
+    }
+
+    // ── Shadow ─────────────────────────────────────────────────────────────────
+    this.shadowGfx.clear();
+    if (this.planeState === 'flying') {
+      const altFrac = (this.planeAlt - ATTACK_RUN.altitudeMin) / (ATTACK_RUN.altitudeMax - ATTACK_RUN.altitudeMin);
+      const shadowW = Phaser.Math.Linear(60, 20, altFrac);
+      const shadowAlpha = Phaser.Math.Linear(0.5, 0.1, altFrac);
+      this.shadowGfx.fillStyle(0x000000, shadowAlpha);
+      this.shadowGfx.fillEllipse(this.planeX, groundY - 4, shadowW, 12);
+    }
+
+    // ── Plane (side view) ─────────────────────────────────────────────────────
+    this.planeGfx.clear();
+    if (this.planeState === 'flying') {
+      this.drawSidePlane(planeScreenY, time);
+    }
+  }
+
+  private drawSidePlane(sy: number, time: number): void {
+    const px = this.planeX;
+
+    // Thrust flame (at tail, left side).
+    if (this.thrusting) {
+      const fl = 0.7 + 0.3 * Math.sin(time * 0.02);
+      this.planeGfx.fillStyle(0xff6600, 0.75 * fl);
+      this.planeGfx.fillTriangle(px - 28, sy - 6, px - 28, sy + 6, px - 28 - 36 * fl, sy);
+      this.planeGfx.fillStyle(0xffee88, 0.9 * fl);
+      this.planeGfx.fillTriangle(px - 28, sy - 3, px - 28, sy + 3, px - 28 - 22 * fl, sy);
+    }
+
+    // Body.
+    this.planeGfx.fillStyle(0x44aaff, 1);
+    this.planeGfx.beginPath();
+    this.planeGfx.moveTo(px + PLANE_SIDE_POLY[0][0], sy + PLANE_SIDE_POLY[0][1]);
+    for (let i = 1; i < PLANE_SIDE_POLY.length; i++) {
+      this.planeGfx.lineTo(px + PLANE_SIDE_POLY[i][0], sy + PLANE_SIDE_POLY[i][1]);
+    }
+    this.planeGfx.closePath();
+    this.planeGfx.fillPath();
+
+    // Wing.
+    this.planeGfx.fillStyle(0x2288cc, 1);
+    this.planeGfx.fillTriangle(
+      px + WING_POLY[0][0], sy + WING_POLY[0][1],
+      px + WING_POLY[1][0], sy + WING_POLY[1][1],
+      px + WING_POLY[2][0], sy + WING_POLY[2][1],
+    );
+
+    // Cockpit highlight.
+    this.planeGfx.fillStyle(0xcceeFF, 0.6);
+    this.planeGfx.fillEllipse(px + 10, sy - 7, 14, 7);
+
+    // Outline.
+    this.planeGfx.lineStyle(1, 0xaaddff, 0.7);
+    this.planeGfx.beginPath();
+    this.planeGfx.moveTo(px + PLANE_SIDE_POLY[0][0], sy + PLANE_SIDE_POLY[0][1]);
+    for (let i = 1; i < PLANE_SIDE_POLY.length; i++) {
+      this.planeGfx.lineTo(px + PLANE_SIDE_POLY[i][0], sy + PLANE_SIDE_POLY[i][1]);
+    }
+    this.planeGfx.closePath();
+    this.planeGfx.strokePath();
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  private groundYAtWorldX(worldX: number): number {
+    const idx = Math.floor(worldX / SEGMENT_W);
+    if (idx < 0 || idx >= this.groundHeights.length) return GROUND_BASE_Y;
+    const t   = (worldX % SEGMENT_W) / SEGMENT_W;
+    const h0  = this.groundHeights[idx];
+    const h1  = this.groundHeights[Math.min(idx + 1, this.groundHeights.length - 1)];
+    return Phaser.Math.Linear(h0, h1, t);
+  }
+
+  // ── Events ────────────────────────────────────────────────────────────────
+
+  private crashPlane(reason: string): void {
+    if (this.planeState !== 'flying') return;
+    this.planeState = 'crashed';
+    missionState.losePlane();
+    missionState.hudCue = `CRASHED: ${reason}`;
+    gameUi.attackRunSecsLeft = 0;
+
+    this.cameras.main.shake(300, 0.01);
+    this.time.delayedCall(1200, () => {
+      if (missionState.planes <= 0) {
+        this.showGameOver();
+      } else {
+        // Spare takes over: restart attack run.
+        this.scene.restart({ launchIndex: this.launchIndex });
+      }
+    });
+  }
+
+  private onImpactExpired(): void {
+    missionState.cityLost();
+    missionState.hudCue = 'CITY LOST';
+    gameUi.attackRunSecsLeft = 0;
+    this.planeState = 'gameover';
+
+    this.time.delayedCall(1500, () => {
+      if (missionState.isGameOver) {
+        this.showGameOver();
+      } else {
+        this.scene.start('MapScene', { launchIndex: this.launchIndex });
+      }
+    });
+  }
+
+  private showGameOver(): void {
+    missionState.hudCue = 'GAME OVER';
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
+    this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.82).setDepth(20);
+    this.add.text(W / 2, H / 2 - 48, 'GAME OVER', {
+      fontSize: '80px', color: '#ff4444',
+      fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
+    }).setOrigin(0.5).setDepth(21);
+    this.add.text(W / 2, H / 2 + 36, `SCORE: ${missionState.score}`, {
+      fontSize: '40px', color: '#ffffff',
+      fontFamily: "'JetBrains Mono', monospace", resolution: dpr,
+    }).setOrigin(0.5).setDepth(21);
+
+    this.time.delayedCall(4000, () => {
+      missionState.startMission({ theme: 'coldfront', difficulty: missionState.difficulty, seed: Date.now() });
+      this.scene.start('MapScene', { launchIndex: 0 });
+    });
+  }
+
+  shutdown(): void {
+    document.removeEventListener('visibilitychange', this.visibilityHandler);
+    this.touchControls?.destroy();
+    gameUi.attackRunSecsLeft = 0;
+  }
+}

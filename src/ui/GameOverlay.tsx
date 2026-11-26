@@ -2,6 +2,8 @@ import { useCanvasScale } from './useCanvasScale';
 import { useHudState } from './useHudState';
 import { GameHud } from './GameHud';
 import { DebugOverlay } from './DebugOverlay';
+import { HowToPlayCard } from './HowToPlayCard';
+import { ResultsScreen } from './ResultsScreen';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../game/config';
 
 export function GameOverlay() {
@@ -16,7 +18,9 @@ export function GameOverlay() {
       top: offsetY,
       width: CANVAS_WIDTH * scale,
       height: CANVAS_HEIGHT * scale,
-      pointerEvents: 'none',
+      // ResultsScreen needs pointer-events, so we can't disable globally here.
+      // Individual non-interactive children set pointerEvents:'none'.
+      pointerEvents: s.showResults ? 'auto' : 'none',
       overflow: 'hidden',
     }}>
       {/*
@@ -33,8 +37,12 @@ export function GameOverlay() {
         transformOrigin: 'top left',
         transform: `scale(${scale})`,
       }}>
-        <GameHud s={s} />
-        <DebugOverlay s={s} />
+        <div style={{ pointerEvents: 'none' }}>
+          <GameHud s={s} />
+          <DebugOverlay s={s} />
+          <HowToPlayCard stage={s.howToPlayStage} />
+        </div>
+        <ResultsScreen s={s} />
       </div>
     </div>
   );

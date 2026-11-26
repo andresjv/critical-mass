@@ -464,7 +464,7 @@ export class HangarScene extends Phaser.Scene {
   }
 
   private transitionToAttackRun(): void {
-    this.scene.start('PlaceholderAttackRunScene', {
+    this.scene.start('AttackRunScene', {
       launchIndex:    this.launchIndex,
       sparesLaunched: this.sparesLaunched,
     });

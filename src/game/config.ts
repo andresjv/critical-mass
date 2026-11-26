@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { DebugScene } from './scenes/DebugScene';
 import { MapScene } from './scenes/MapScene';
 import { HangarScene } from './scenes/HangarScene';
+import { AttackRunScene } from './scenes/AttackRunScene';
+import { SiloScene } from './scenes/SiloScene';
 import { PlaceholderAttackRunScene } from './scenes/PlaceholderAttackRunScene';
 import { PlaceholderSiloScene } from './scenes/PlaceholderSiloScene';
 import { PlaceholderAssaultScene } from './scenes/PlaceholderAssaultScene';
@@ -46,6 +48,8 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
         ? [DebugScene, MapScene]
         : [MapScene, DebugScene],
       HangarScene,
+      AttackRunScene,
+      SiloScene,
       PlaceholderAttackRunScene,
       PlaceholderSiloScene,
       PlaceholderAssaultScene,
