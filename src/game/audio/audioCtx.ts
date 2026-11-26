@@ -36,8 +36,8 @@ function buildMixer(ctx: AudioContext): Record<Bus, GainNode> {
 /** Returns the running context, or null if not yet unlocked / still suspended. */
 export function getAudioCtx(): AudioContext | null {
   if (!_ctx) return null;
-  if (_ctx.state === 'suspended') {
-    _ctx.resume().catch(() => {});
+  if (_ctx.state !== 'running') {
+    if (!document.hidden) _ctx.resume().catch(() => {}); // stay silent while backgrounded
     return null;
   }
   return _ctx;
@@ -84,7 +84,7 @@ export function resumeCtx(): void {
     try { _ctx = new AudioContext(); } catch { return; }
     _buses = buildMixer(_ctx);
   }
-  if (_ctx.state === 'suspended') _ctx.resume().catch(() => {});
+  if (_ctx.state !== 'running') _ctx.resume().catch(() => {});
 }
 
 export function closeCtx(): void {
