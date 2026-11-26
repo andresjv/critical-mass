@@ -6,10 +6,11 @@ import { PlaceholderAttackRunScene } from './scenes/PlaceholderAttackRunScene';
 import { PlaceholderSiloScene } from './scenes/PlaceholderSiloScene';
 import { PlaceholderAssaultScene } from './scenes/PlaceholderAssaultScene';
 import { HudScene } from './scenes/HudScene';
+import { InputScene } from './scenes/InputScene';
 import { DebugOverlayScene } from './scenes/DebugOverlayScene';
 
-export const CANVAS_WIDTH = 384;
-export const CANVAS_HEIGHT = 216;
+export const CANVAS_WIDTH = 1280;
+export const CANVAS_HEIGHT = 720;
 
 /** Returns the key of the scene to auto-start. Use ?debug=1 for the input debug screen. */
 function startScene(): string {
@@ -28,9 +29,10 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
     height: CANVAS_HEIGHT,
     backgroundColor: '#000000',
     banner: false,
-    // Pixel-art rendering: disables anti-aliasing and rounds sprite positions.
-    pixelArt: true,
-    roundPixels: true,
+    // Vector / smooth rendering: antialias on, pixel-art mode off.
+    pixelArt: false,
+    roundPixels: false,
+    antialias: true,
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -47,7 +49,9 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
       PlaceholderAttackRunScene,
       PlaceholderSiloScene,
       PlaceholderAssaultScene,
+      // Persistent parallel scenes (launched once, never stopped by scene.start).
       HudScene,
+      InputScene,
       DebugOverlayScene,
     ].flat(),
   };

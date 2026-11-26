@@ -1,15 +1,16 @@
 import Phaser from 'phaser';
 import { InputRouter } from './InputRouter';
+import { gameUi } from '../state/gameUi';
 
-// Canvas-coordinate positions (384 × 216 internal canvas).
-const FIRE_CENTER = { x: 350, y: 190 } as const;
-const ACTION_CENTER = { x: 318, y: 158 } as const;
-const FIRE_TOUCH_RADIUS = 36;    // px — touch hit zone
-const ACTION_TOUCH_RADIUS = 28;  // px
-const JOYSTICK_VISUAL_RADIUS = 36; // px — base ring radius
-const THUMB_VISUAL_RADIUS = 18;    // px
-const JOYSTICK_MAX_DELTA = 32;     // px — max thumb travel
-const JOYSTICK_ZONE_X = 192;       // joystick zone is left half of canvas
+// Canvas-coordinate positions (1280 × 720 internal canvas).
+const FIRE_CENTER = { x: 1167, y: 633 } as const;
+const ACTION_CENTER = { x: 1060, y: 527 } as const;
+const FIRE_TOUCH_RADIUS = 120;   // px — touch hit zone
+const ACTION_TOUCH_RADIUS = 93;  // px
+const JOYSTICK_VISUAL_RADIUS = 120; // px — base ring radius
+const THUMB_VISUAL_RADIUS = 60;     // px
+const JOYSTICK_MAX_DELTA = 107;     // px — max thumb travel (32 × WORLD_SCALE)
+const JOYSTICK_ZONE_X = 640;        // joystick zone is left half of canvas
 const FADE_DELAY_MS = 3000;
 const ACTIVE_ALPHA = 1.0;
 const IDLE_ALPHA = 0.35;
@@ -60,12 +61,12 @@ export class TouchControls {
       .setDepth(11);
 
     this.fireArc = scene.add
-      .arc(FIRE_CENTER.x, FIRE_CENTER.y, 24, 0, 360, false, 0xcc4444, 0.7)
+      .arc(FIRE_CENTER.x, FIRE_CENTER.y, 80, 0, 360, false, 0xcc4444, 0.7)
       .setVisible(this.isTouchDevice)
       .setDepth(10);
 
     this.actionArc = scene.add
-      .arc(ACTION_CENTER.x, ACTION_CENTER.y, 20, 0, 360, false, 0x44cc88, 0.7)
+      .arc(ACTION_CENTER.x, ACTION_CENTER.y, 67, 0, 360, false, 0x44cc88, 0.7)
       .setVisible(this.isTouchDevice)
       .setDepth(10);
 
@@ -148,11 +149,17 @@ export class TouchControls {
     const moveY =
       this.joystickPointerId !== -1 ? this.joystickDelta.y / JOYSTICK_MAX_DELTA : 0;
 
+    const touchFire   = this.firePointerId !== -1;
+    const touchAction = this.actionPointerId !== -1;
+    const touchMove   = this.joystickPointerId !== -1;
+
+    if (touchFire || touchAction || touchMove) gameUi.device = 'touch';
+
     InputRouter.setTouch({
       moveX,
       moveY,
-      fire: this.firePointerId !== -1,
-      action: this.actionPointerId !== -1,
+      fire: touchFire,
+      action: touchAction,
       pause: false,
     });
 

@@ -1,6 +1,10 @@
 // tuning.ts — every numeric constant from docs/DESIGN.md.
 // Stage code reads ONLY from this file; nothing is hard-coded elsewhere.
 
+// Canvas scale factor: internal canvas is 1280×720 (was 384×216 at launch).
+// All px-based values (speeds, sizes, distances, accelerations) are pre-multiplied by 10/3.
+export const WORLD_SCALE = 10 / 3;
+
 export type Difficulty = 'cadet' | 'pilot' | 'suicidal';
 
 // ─── Per-difficulty settings ─────────────────────────────────────────────────
@@ -115,14 +119,14 @@ export const LIMITS = {
 export const HANGAR = {
   /** Rotation speed, degrees/s. */
   rotateSpeed: 210,
-  /** Thrust acceleration, px/s². */
-  thrustAccel: 70,
-  /** Maximum speed, px/s. */
-  maxSpeed: 95,
+  /** Thrust acceleration, px/s² (70 × WORLD_SCALE). */
+  thrustAccel: 233,
+  /** Maximum speed, px/s (95 × WORLD_SCALE). */
+  maxSpeed: 317,
   /** Drag fraction per second (0.5 %). */
   drag: 0.005,
-  /** Below this speed (px/s), a wall hit bounces instead of crashing. */
-  bounceThreshold: 30,
+  /** Below this speed (px/s), a wall hit bounces instead of crashing (30 × WORLD_SCALE). */
+  bounceThreshold: 100,
   /** Restitution on a soft wall bounce. */
   bounceRestitution: 0.5,
   /** How long the bay doors stay open, seconds. */
@@ -138,18 +142,18 @@ export const HANGAR = {
 // ─── Stage 3 — Attack Run ────────────────────────────────────────────────────
 
 export const ATTACK_RUN = {
-  /** Auto-scroll speed, px/s. */
-  scrollSpeed: 80,
+  /** Auto-scroll speed, px/s (80 × WORLD_SCALE). */
+  scrollSpeed: 267,
   /** Stage duration, seconds. */
   duration: 45,
-  /** Minimum altitude, px. */
-  altitudeMin: 8,
-  /** Maximum altitude, px. */
-  altitudeMax: 150,
+  /** Minimum altitude, px (8 × WORLD_SCALE). */
+  altitudeMin: 27,
+  /** Maximum altitude, px (150 × WORLD_SCALE). */
+  altitudeMax: 500,
   /** Warning lead time before heat-seeker arrives, seconds. */
   heatSeekerWarnTime: 1.5,
-  /** Altitude at or below which a heat-seeker overshoots. */
-  heatSeekerOvershootAlt: 20,
+  /** Altitude at or below which a heat-seeker overshoots (20 × WORLD_SCALE). */
+  heatSeekerOvershootAlt: 67,
   /** Tank flak interval (Pilot ×1.0 baseline), seconds. */
   tankFireInterval: 2.5,
   /** SAM homing-missile turn rate, degrees/s. */
@@ -161,8 +165,8 @@ export const ATTACK_RUN = {
 // ─── Stage 4 — Silo Strike ───────────────────────────────────────────────────
 
 export const SILO = {
-  /** Reticle snaps to "locked" within this many px of a window centre. */
-  lockRadius: 4,
+  /** Reticle snaps to "locked" within this many px of a window centre (4 × WORLD_SCALE). */
+  lockRadius: 13,
   /** Rocket travel time, seconds. */
   rocketTravelTime: 0.8,
   /** Silo-gun fire interval (Pilot ×1.0 baseline), seconds. */
@@ -191,10 +195,10 @@ export const ASSAULT = {
 export const REACTOR = {
   /** Discs the commando starts with. */
   discsStart: 5,
-  /** Robot base speed, px/s. */
-  robotSpeed: 40,
-  /** Speed added per hit received, px/s. */
-  robotSpeedPerHit: 15,
+  /** Robot base speed, px/s (40 × WORLD_SCALE). */
+  robotSpeed: 133,
+  /** Speed added per hit received, px/s (15 × WORLD_SCALE). */
+  robotSpeedPerHit: 50,
   /** Robot fire interval base, seconds. */
   robotFireInterval: 2.0,
   /** Fire interval reduction per hit, seconds. */

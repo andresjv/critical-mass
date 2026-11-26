@@ -163,7 +163,7 @@ v1 ships all six stages plus the ending. P0 blocks launch; P1 ships in v1 if tim
 | --- | --- |
 | Performance | 60 fps target; fixed 60 Hz simulation step, decoupled from render; ≤ 150 draw calls per frame |
 | Load size | Initial JS ≤ 250 KB gzipped; total assets ≤ 8 MB; stage assets lazy-loaded |
-| Resolution | Internal 384 × 216 pixel-art canvas, scaled by whole numbers where possible, letterboxed to any aspect ratio |
+| Resolution | Internal 1280 × 720 canvas, rendered at `devicePixelRatio`, letterboxed to any aspect ratio via Phaser Scale FIT (`pixelArt: false`, `antialias: true`). Text rendered in React HTML overlay. |
 | Touch | Hit targets ≥ 48 × 48 CSS px; no double-tap zoom; no scroll or pull-to-refresh during play; safe-area insets respected |
 | Audio | Web Audio unlocked on first tap; music and SFX on separate buses; mute respected |
 | Accessibility | Reduced-flashing mode (no full-screen flashes above 3 per second); colour-blind-safe "lined up" cues (shape + colour); remappable keys; captions for spoken warnings |

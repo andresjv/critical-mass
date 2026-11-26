@@ -167,16 +167,16 @@ A full Pilot run takes 12–18 minutes: about 2.5 minutes per launch run × 4, t
 
 ### Visual direction
 
-8-bit-era pixel art drawn fresh at modern resolution: crisp pixels, a limited palette, smooth 60 fps motion and screen shake the original couldn't do.
+Smooth vector/anti-aliased art: clean shapes, a focused palette, smooth 60 fps motion and screen shake. Text lives in a React HTML overlay so fonts scale cleanly to any screen.
 
 | Spec | Value |
 | --- | --- |
-| Internal resolution | 384 × 216 (16:9), nearest-neighbour scaling |
-| Palette | 24 colours: 16 base + 8 accents for UI states |
-| Sprite sizes | Plane 24 × 16, tank 24 × 12, robot 32 × 32, commando 16 × 24 |
+| Internal resolution | 1280 × 720 (16:9), Phaser Scale FIT, letterboxed, `pixelArt: false`, `antialias: true`, rendered at `devicePixelRatio` |
+| All px constants | Pre-multiplied by `WORLD_SCALE = 10/3` in `tuning.ts` relative to the original 384 × 216 values |
 | Faction colours | Union = cyan and white; Directorate = rust red and olive |
-| Effects | Particle explosions, 2–4 px screen shake (off in reduced-motion), CRT scanline filter as an optional setting |
-| Fonts | One pixel font for HUD (8 px grid), one for titles; both with open licences |
+| Effects | Particle explosions, screen shake (off in reduced-motion) |
+| Fonts | **Space Grotesk** (UI labels, cues), **JetBrains Mono** (numbers/score/clock) — self-hosted via `@fontsource` npm packages; min 14 CSS px rendered on phones |
+| In-canvas text | Forbidden in stage code. Write to `missionState.hudCue` or `gameUi`; React `<GameOverlay />` displays everything. Exception: full-screen transient overlays (game over). |
 
 ### HUD
 

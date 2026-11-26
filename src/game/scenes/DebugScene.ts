@@ -3,7 +3,7 @@ import { InputRouter } from '../../input/InputRouter';
 import { TouchControls } from '../../input/TouchControls';
 
 // Keyboard key codes used for movement and actions.
-const { LEFT, RIGHT, UP, DOWN, W, A, S, D, SPACE, J, SHIFT, K, ESC, P } =
+const { LEFT, RIGHT, UP, DOWN, W, A, S, D, SPACE, J, SHIFT, K, X, ESC, P } =
   Phaser.Input.Keyboard.KeyCodes;
 
 export class DebugScene extends Phaser.Scene {
@@ -23,6 +23,7 @@ export class DebugScene extends Phaser.Scene {
   private keyJ!: Phaser.Input.Keyboard.Key;
   private keyShift!: Phaser.Input.Keyboard.Key;
   private keyK!: Phaser.Input.Keyboard.Key;
+  private keyX!: Phaser.Input.Keyboard.Key;
   private keyEsc!: Phaser.Input.Keyboard.Key;
   private keyP!: Phaser.Input.Keyboard.Key;
 
@@ -34,22 +35,22 @@ export class DebugScene extends Phaser.Scene {
 
   create(): void {
     // Dark background.
-    this.add.rectangle(192, 108, 384, 216, 0x1a1a2e).setDepth(0);
+    this.add.rectangle(640, 360, 1280, 720, 0x1a1a2e).setDepth(0);
 
     // Resolution multiplier keeps text crisp on retina / HiDPI screens.
     const dpr = window.devicePixelRatio ?? 1;
 
     // Label.
     this.add
-      .text(192, 20, 'INPUT DEBUG', { fontSize: '14px', color: '#ffff00', resolution: dpr })
+      .text(640, 60, 'INPUT DEBUG', { fontSize: '48px', color: '#ffff00', resolution: dpr })
       .setOrigin(0.5, 0)
       .setDepth(1);
 
     // Instruction.
     const isTouch = navigator.maxTouchPoints > 0;
     this.add
-      .text(192, 36, isTouch ? 'Touch: stick BL · Fire BR · Action above Fire' : 'WASD/Arrows · Space=fire · Shift=action · Esc=pause', {
-        fontSize: '7px',
+      .text(640, 120, isTouch ? 'Touch: stick BL · Fire BR · Action above Fire' : 'WASD/Arrows · Space=fire · Shift/K/X=action · Esc=pause', {
+        fontSize: '24px',
         color: '#aaaaaa',
         resolution: dpr,
       })
@@ -58,7 +59,7 @@ export class DebugScene extends Phaser.Scene {
 
     // Live-values text block.
     this.infoText = this.add
-      .text(10, 60, '', { fontSize: '10px', color: '#ffffff', lineSpacing: 4, resolution: dpr })
+      .text(32, 200, '', { fontSize: '32px', color: '#ffffff', lineSpacing: 12, resolution: dpr })
       .setDepth(1);
 
     // Register keyboard keys via the Phaser keyboard plugin.
@@ -75,6 +76,7 @@ export class DebugScene extends Phaser.Scene {
     this.keyJ     = kb.addKey(J);
     this.keyShift = kb.addKey(SHIFT);
     this.keyK     = kb.addKey(K);
+    this.keyX     = kb.addKey(X);
     this.keyEsc   = kb.addKey(ESC);
     this.keyP     = kb.addKey(P);
 
@@ -105,7 +107,7 @@ export class DebugScene extends Phaser.Scene {
       moveX,
       moveY,
       fire: this.keySpace.isDown || this.keyJ.isDown,
-      action: this.keyShift.isDown || this.keyK.isDown,
+      action: this.keyShift.isDown || this.keyK.isDown || this.keyX.isDown,
       pause: Phaser.Input.Keyboard.JustDown(this.keyEsc) ||
              Phaser.Input.Keyboard.JustDown(this.keyP),
     });

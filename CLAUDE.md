@@ -15,13 +15,16 @@ Browser arcade game, one codebase for phone, tablet and desktop. Modern remake o
 - Deploy: Vercel via GitHub integration. Push to a branch = preview URL; merge to `main` = production. Never ask for or store Vercel tokens.
 
 ## Architecture rules
-- Internal canvas 384 x 216, Phaser scale mode FIT, letterboxed.
+- Internal canvas **1280 × 720**, Phaser scale mode FIT, letterboxed. `pixelArt: false`, `antialias: true`. Rendered at `devicePixelRatio` via Phaser's default DPI handling.
+- All px-based constants (speeds, sizes, distances) are pre-multiplied by `WORLD_SCALE = 10/3` from `tuning.ts`. Never hard-code raw pixel values.
+- All text in-game lives in the **React `<GameOverlay />`** component (Space Grotesk for labels, JetBrains Mono for numbers). Never call `scene.add.text()` in stage code; write to `missionState.hudCue` or `gameUi` and let React display it. Exception: temporary full-screen overlays (game over, loading) may use canvas text.
 - Game logic steps at a fixed 60 Hz; rendering is decoupled.
-- Stage code reads only `InputRouter` output `{moveX, moveY, fire, action, pause}`; never raw keys, pointers or gamepads.
-- `MissionState` is plain TypeScript (no Phaser imports) and is unit-tested.
+- Stage code reads only `InputRouter` output `{moveX, moveY, fire, action, pause}`; never raw keys, pointers or gamepads. `InputScene` (persistent parallel scene) owns keyboard + gamepad → InputRouter.
+- `MissionState` and `gameUi` are plain TypeScript (no Phaser imports). `MissionState` is unit-tested.
 - Never call `Math.random` in game code; use `src/state/rng.ts` (seeded). Same seed must give the same mission.
 - No theme names, colours or asset paths in stage code; read them from the active `ThemePack`.
-- React never touches Phaser objects; it talks to the game only through `GameBridge`.
+- React never touches Phaser objects; it reads `missionState`, `debugInfo`, and `gameUi` (all plain TS) via `useHudState` (rAF polling).
+- Action key: Shift, K, or X on keyboard; B on gamepad; ◉ on touch. `gameUi.device` tracks last active device for label rendering.
 - Placeholder art = coloured rectangles until the art pass (T12).
 
 ## Definition of done for every ticket

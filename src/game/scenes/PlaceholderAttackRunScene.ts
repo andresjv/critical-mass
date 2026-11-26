@@ -3,12 +3,12 @@
 import Phaser from 'phaser';
 import { missionState } from '../../state/MissionState';
 import { debugInfo } from '../../state/debugInfo';
+import { gameUi } from '../../state/gameUi';
 
-const DPR = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
-const W = 384;
-const H = 216;
+const W = 1280;
+const H = 720;
 const FIXED_DT = 1 / 60;
-const DISPLAY_DURATION = 2.5; // seconds before auto-advancing
+const DISPLAY_DURATION = 2.5;
 
 interface AttackRunData {
   launchIndex: number;
@@ -16,9 +16,9 @@ interface AttackRunData {
 }
 
 export class PlaceholderAttackRunScene extends Phaser.Scene {
-  private launchIndex = 0;
-  private timer = 0;
-  private accumulator = 0;
+  private launchIndex    = 0;
+  private timer          = 0;
+  private accumulator    = 0;
 
   constructor() {
     super({ key: 'PlaceholderAttackRunScene' });
@@ -26,23 +26,22 @@ export class PlaceholderAttackRunScene extends Phaser.Scene {
 
   init(data: Partial<AttackRunData>): void {
     this.launchIndex = data.launchIndex ?? 0;
-    this.timer = 0;
+    this.timer       = 0;
     this.accumulator = 0;
   }
 
   create(): void {
     this.scene.bringToTop('HudScene');
+    gameUi.mapActive   = false;
     missionState.hudCue = 'ATTACK RUN';
-    debugInfo.doorState = '—';
-    debugInfo.speed = 0;
+    debugInfo.doorState  = '—';
+    debugInfo.speed      = 0;
 
+    // Placeholder background — no text in canvas.
     this.add.rectangle(W / 2, H / 2, W, H, 0x0a1a08);
-    this.add.text(W / 2, H / 2 - 20, 'ATTACK RUN', {
-      fontSize: '16px', color: '#44ff44', resolution: DPR,
-    }).setOrigin(0.5);
-    this.add.text(W / 2, H / 2 + 8, '[ Stage 3 — coming in T6 ]', {
-      fontSize: '8px', color: '#668866', resolution: DPR,
-    }).setOrigin(0.5);
+
+    // Simple visual indicator: coloured bar across top.
+    this.add.rectangle(W / 2, 6, W, 12, 0x44ff44, 0.5);
   }
 
   update(_time: number, delta: number): void {
