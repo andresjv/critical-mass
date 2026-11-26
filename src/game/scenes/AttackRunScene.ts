@@ -223,6 +223,10 @@ export class AttackRunScene extends Phaser.Scene {
     gameUi.mapActive   = false;
     gameUi.attackRunSecsLeft = this.stageTimer;
     missionState.hudCue = 'ATTACK RUN';
+    this.voice.setTextCallback((text) => {
+      gameUi.callout       = text;
+      gameUi.calloutExpiry = Date.now() + 2200;
+    });
     debugInfo.doorState = '—';
     debugInfo.speed     = 0;
 
@@ -373,7 +377,7 @@ export class AttackRunScene extends Phaser.Scene {
         this.preRunBodyText.setVisible(false);
         this.preRunPromptText.setVisible(false);
         this.musicTrack.start();
-        this.voice.say('Engage. Good luck.');
+        this.voice.say('Engage', 'engage');
       } else {
         this.renderPreRun(time);
         debugInfo.fps = Math.round(this.game.loop.actualFps);
@@ -678,7 +682,7 @@ export class AttackRunScene extends Phaser.Scene {
       });
       if (!this.firstInterceptorVoiced) {
         this.firstInterceptorVoiced = true;
-        this.voice.say('Hostile aircraft detected');
+        this.voice.say('Hostile aircraft', 'hostile');
       }
       this.nextInterceptorIdx++;
     }
@@ -741,7 +745,7 @@ export class AttackRunScene extends Phaser.Scene {
         lockedY: groundY2 - this.planeAlt,
         warnTimer: ATTACK_RUN.heatSeekerWarnTime,
       };
-      this.voice.say('Heat seeker incoming');
+      this.voice.say('Heat seeker incoming', 'heat');
       this.nextHeatSeekerIdx++;
     }
 
@@ -804,7 +808,7 @@ export class AttackRunScene extends Phaser.Scene {
       gameUi.contextualHint = null;
       // Show stage result card for 2s before transitioning.
       this.musicTrack.fadeOut(1.5);
-      this.voice.say('Mission complete. Proceed to target.', true);
+      this.voice.say('Mission complete', 'complete', true);
       gameUi.stageResult = {
         headline: 'ATTACK RUN COMPLETE',
         details: [],
@@ -1085,7 +1089,7 @@ export class AttackRunScene extends Phaser.Scene {
       t: 0,
       alive: true,
     });
-    this.voice.say('Bomb away');
+    this.voice.say('Bomb away', 'bomb');
   }
 
   private bombExplode(landWorldX: number): void {
@@ -1184,7 +1188,11 @@ export class AttackRunScene extends Phaser.Scene {
     this.engineSound.stop();
     this.musicTrack.fadeOut(0.6);
     missionState.losePlane();
-    this.voice.say(missionState.planes > 0 ? 'Eject eject' : 'Mission failed', true);
+    if (missionState.planes > 0) {
+      this.voice.say('Eject eject', 'eject', true);
+    } else {
+      this.voice.say('Mission failed', 'failed', true);
+    }
     missionState.hudCue = `CRASHED: ${reason}`;
     gameUi.attackRunSecsLeft = 0;
 

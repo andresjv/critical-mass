@@ -76,6 +76,15 @@ export class MusicTrack {
   private tick(): void {
     const ctx = this.ctx;
     if (!ctx || !this.playing) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+      return; // wait until running before scheduling
+    }
+    // If context was suspended at start() time, nextTime is behind currentTime;
+    // catch up so we don't try to schedule notes in the past.
+    if (this.nextTime < ctx.currentTime) {
+      this.nextTime = ctx.currentTime + 0.05;
+    }
     while (this.nextTime < ctx.currentTime + LOOKAHEAD) {
       this.scheduleStep(this.step, this.nextTime);
       this.step     = (this.step + 1) % STEPS;
