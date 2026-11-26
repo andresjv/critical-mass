@@ -71,6 +71,9 @@ export class MusicTrack {
   private stopScheduler(): void {
     if (this.timer !== null) { clearInterval(this.timer); this.timer = null; }
     this.playing = false;
+    // Drop the (possibly faded-to-zero) master so the next start() builds a fresh one.
+    this.master?.disconnect();
+    this.master = null;
   }
 
   private tick(): void {
@@ -79,7 +82,7 @@ export class MusicTrack {
     // Create master GainNode on the first tick where the context is running.
     if (!this.master) {
       this.master = ctx.createGain();
-      this.master.gain.value = 0.35;
+      this.master.gain.value = 0.7;
       this.master.connect(ctx.destination);
     }
     // Catch up if nextTime is in the past (context was suspended when start() ran).
@@ -114,8 +117,8 @@ export class MusicTrack {
     const filt = ctx.createBiquadFilter();
     const gain = ctx.createGain();
     osc.type = 'square';
-    osc.frequency.value = freq;
-    filt.type = 'lowpass'; filt.frequency.value = 350; filt.Q.value = 1;
+    osc.frequency.value = freq * 2; // up an octave so phone/laptop speakers reproduce it
+    filt.type = 'lowpass'; filt.frequency.value = 1200; filt.Q.value = 1;
     gain.gain.setValueAtTime(0, t);
     gain.gain.linearRampToValueAtTime(0.55, t + 0.008);
     gain.gain.setValueAtTime(0.55, t + STEP * 3.4);
@@ -130,8 +133,8 @@ export class MusicTrack {
     osc.type = 'sawtooth';
     osc.frequency.value = freq;
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.16, t + 0.006);
-    gain.gain.setValueAtTime(0.16, t + STEP * 1.5);
+    gain.gain.linearRampToValueAtTime(0.28, t + 0.006);
+    gain.gain.setValueAtTime(0.28, t + STEP * 1.5);
     gain.gain.linearRampToValueAtTime(0, t + STEP * 2);
     osc.connect(gain); gain.connect(out);
     osc.start(t); osc.stop(t + STEP * 2.1);
@@ -140,8 +143,8 @@ export class MusicTrack {
   private kick(ctx: AudioContext, out: AudioNode, t: number): void {
     const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.frequency.setValueAtTime(68, t);
-    osc.frequency.exponentialRampToValueAtTime(24, t + 0.06);
+    osc.frequency.setValueAtTime(160, t);
+    osc.frequency.exponentialRampToValueAtTime(50, t + 0.08);
     gain.gain.setValueAtTime(0.9, t);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
     osc.connect(gain); gain.connect(out);

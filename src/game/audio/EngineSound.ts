@@ -15,8 +15,8 @@ export class EngineSound {
     const ctx = getAudioCtx();
     if (!ctx) return;
     if (!this.started) this.startOscillators(ctx);
-    const t1 = thrusting ? 0.22 : 0.07;
-    const t2 = thrusting ? 0.09 : 0.03;
+    const t1 = thrusting ? 0.10 : 0.035;
+    const t2 = thrusting ? 0.04 : 0.015;
     const ramp = ctx.currentTime + 0.08;
     this.gain1?.gain.linearRampToValueAtTime(t1, ramp);
     this.gain2?.gain.linearRampToValueAtTime(t2, ramp);
@@ -63,8 +63,8 @@ export class EngineSound {
     this.gain2 = ctx.createGain();
     this.osc1.type = 'sawtooth'; this.osc1.frequency.value = 130;
     this.osc2.type = 'sawtooth'; this.osc2.frequency.value = 260;
-    this.gain1.gain.value = 0.07;
-    this.gain2.gain.value = 0.03;
+    this.gain1.gain.value = 0.035;
+    this.gain2.gain.value = 0.015;
     this.osc1.connect(this.gain1); this.gain1.connect(ctx.destination);
     this.osc2.connect(this.gain2); this.gain2.connect(ctx.destination);
     this.osc1.start(); this.osc2.start();
