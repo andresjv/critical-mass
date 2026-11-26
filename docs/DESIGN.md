@@ -310,6 +310,37 @@ His friend opens it on any phone or laptop, sees "Beat Andrés: 48,210", plays t
 
 A challenge link's score can be edited by hand. That is acceptable for friends; leaderboard scores are checked by the server, and in v2 can be verified by replaying the stored input log against the seed.
 
+## Player guidance
+
+New players often do not know what each stage requires. Seven layers of always-on and just-in-time orientation live in the React overlay.
+
+### 1. Mission briefing
+Full-screen card at game start: three context lines, mission goal, "START MISSION" button. Shows once per page load.
+
+### 2. Progress breadcrumb
+Row below the top HUD: `MAP > HANGAR > ATTACK RUN > SILOS`, current step highlighted amber. Below that: "Launch N of 4 — <site name>".
+
+### 3. Stage intro card
+On first visit per session: stage name, one-line goal, control diagram (keyboard vs touch). Dismissed by tap, Space, or Fire; auto-closes after 6 s.
+
+### 4. Objective line
+Single imperative below the progress bar ("Destroy the central silo"). Max 6 words. Scenes write to `gameUi.objective`.
+
+### 5. Labelled HUD numbers
+Every number has a small label: SCORE, MISSILE IMPACT (m:ss format), PLANES.
+
+### 6. Contextual hints
+If no relevant input for 5 s, a hint appears centre-screen ("Hold ↑ to thrust"). Cleared on input.
+
+### 7. Event callouts
+1.5 s centred banners for notable events: "+1 PLANE", "LAUNCH STOPPED", "CITY LOST: Harlan Bay".
+
+### 8. Stage result card
+2 s card at each stage transition: headline, 1–3 detail lines, "Next:" hint.
+
+### 9. Placeholder "coming soon"
+Stages not yet implemented show "COMING SOON — Press SPACE to skip" in the React overlay.
+
 ## Build plan for Claude Code
 
 One ticket per Claude Code session. Each ends with a deploy preview you test on your phone before the next starts. Art starts as coloured rectangles; the art pass swaps sprites in week 5.

@@ -6,6 +6,10 @@ import { TUNING, LIMITS, SCORE } from '../../state/tuning';
 import { InputRouter } from '../../input/InputRouter';
 import { TouchControls } from '../../input/TouchControls';
 import { parseChallengeFromURL, getPlayerName } from '../../state/challengeLink';
+import { showStageIntro } from '../../state/stageIntros';
+
+// Module-level flag: show briefing only on first visit per page load.
+let briefingShown = false;
 
 const W = 1280;
 const H = 720;
@@ -32,6 +36,9 @@ export class MapScene extends Phaser.Scene {
   private readonly AUTO_SCRAMBLE = LIMITS.autoScrambleDelay;
   private scrambled = false;
 
+  // Contextual hint timer (seconds of no input).
+  private hintTimer = 0;
+
   private touchControls!: TouchControls;
   private siteDots: Phaser.GameObjects.Arc[] = [];
   private arcGfx!:     Phaser.GameObjects.Graphics;
@@ -50,6 +57,7 @@ export class MapScene extends Phaser.Scene {
     this.autoTimer   = 0;
     this.scrambled   = false;
     this.prevFire    = false;
+    this.hintTimer   = 0;
   }
 
   create(): void {
@@ -67,6 +75,12 @@ export class MapScene extends Phaser.Scene {
       } else {
         missionState.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: Date.now() });
       }
+
+      // Show mission briefing on very first load.
+      if (!briefingShown) {
+        briefingShown = true;
+        gameUi.showBriefing = true;
+      }
     }
 
     // Write to gameUi so the React overlay can render the map panel.
@@ -76,7 +90,16 @@ export class MapScene extends Phaser.Scene {
     gameUi.targetCity         = CITIES[this.launchIndex % CITIES.length] ?? '';
     gameUi.timeToImpactSecs   = TUNING[missionState.difficulty].timeToImpact;
 
+    // Progress breadcrumb.
+    gameUi.progressStep  = 'map';
+    gameUi.launchNumber  = this.launchIndex + 1;
+    gameUi.objective     = 'Scramble to intercept the launch';
+    gameUi.contextualHint = null;
+
     missionState.hudCue = 'PRESS FIRE TO SCRAMBLE';
+
+    // Stage intro card (first visit this session).
+    showStageIntro('map');
     debugInfo.speed      = 0;
     debugInfo.angle      = 0;
     debugInfo.doorTimer  = 0;
@@ -180,12 +203,25 @@ export class MapScene extends Phaser.Scene {
     gameUi.autoScrambleRemaining = remaining;
     missionState.hudCue = `AUTO-SCRAMBLE IN ${remaining}s`;
 
+    // Contextual hint after 5s without input.
+    const hasInput = input.fire;
+    if (hasInput) {
+      this.hintTimer = 0;
+      gameUi.contextualHint = null;
+    } else {
+      this.hintTimer += delta / 1000;
+      if (this.hintTimer >= 5) {
+        gameUi.contextualHint = 'Press FIRE or tap to scramble';
+      }
+    }
+
     debugInfo.fps = Math.round(this.game.loop.actualFps);
   }
 
   private scramble(): void {
     this.scrambled    = true;
     gameUi.mapActive  = false;
+    gameUi.contextualHint = null;
     this.siteTween?.stop();
 
     missionState.startImpactClock(TUNING[missionState.difficulty].timeToImpact);
