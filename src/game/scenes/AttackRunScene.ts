@@ -10,6 +10,7 @@ import { ATTACK_RUN, TUNING, SCORE } from '../../state/tuning';
 import { createRng } from '../../state/rng';
 import { hasSeenHowToPlay, markSeenHowToPlay } from '../../state/howToPlay';
 import { showStageIntro } from '../../state/stageIntros';
+import { ProximityBeep, BeepSource } from '../audio/ProximityBeep';
 
 const W = 1280;
 const H = 720;
@@ -87,6 +88,14 @@ interface HeatSeeker {
   warnTimer: number;  // counts down before entering
 }
 
+interface Bomb {
+  worldXDrop: number;
+  altAtDrop:  number;
+  landWorldX: number;
+  t:          number;   // 0 → 1 progress through parabolic arc
+  alive:      boolean;
+}
+
 export class AttackRunScene extends Phaser.Scene {
   private launchIndex   = 0;
 
@@ -119,14 +128,25 @@ export class AttackRunScene extends Phaser.Scene {
   private heatSeeker: HeatSeeker | null = null;
   private activeEnemies = new Set<GroundEnemy>();
 
+  // ── Bombs ──────────────────────────────────────────────────────────────────
+  private bombs: Bomb[] = [];
+  private bombReloadTimer = 0;
+
   // ── Input ─────────────────────────────────────────────────────────────────
-  private prevFire = false;
+  private prevFire   = false;
+  private prevAction = false;
   private accumulator = 0;
 
+  // ── Audio ─────────────────────────────────────────────────────────────────
+  private proximityBeep = new ProximityBeep();
+
   // ── Visuals ───────────────────────────────────────────────────────────────
+  private bgFarGfx!:  Phaser.GameObjects.Graphics;
+  private bgMidGfx!:  Phaser.GameObjects.Graphics;
   private terrainGfx!: Phaser.GameObjects.Graphics;
   private enemyGfx!:   Phaser.GameObjects.Graphics;
   private projGfx!:    Phaser.GameObjects.Graphics;
+  private bombGfx!:    Phaser.GameObjects.Graphics;
   private planeGfx!:   Phaser.GameObjects.Graphics;
   private shadowGfx!:  Phaser.GameObjects.Graphics;
   private touchControls!: TouchControls;
@@ -153,9 +173,12 @@ export class AttackRunScene extends Phaser.Scene {
     this.heatSeekerSchedule  = [];
     this.nextInterceptorIdx  = 0;
     this.nextHeatSeekerIdx   = 0;
-    this.accumulator = 0;
-    this.prevFire    = false;
-    this.hintTimer   = 0;
+    this.accumulator   = 0;
+    this.prevFire      = false;
+    this.prevAction    = false;
+    this.bombs         = [];
+    this.bombReloadTimer = 0;
+    this.hintTimer     = 0;
   }
 
   create(): void {
@@ -232,16 +255,21 @@ export class AttackRunScene extends Phaser.Scene {
     this.heatSeekerSchedule.sort((a, b) => b - a);
 
     // ── Background ──────────────────────────────────────────────────────────
-    // Sky gradient — simple rectangles.
-    const sky = this.add.graphics();
+    // Static sky base (depth 0); parallax layers redraw every frame on top.
+    const sky = this.add.graphics().setDepth(0);
     sky.fillStyle(0x0a1828, 1); sky.fillRect(0, 0, W, H * 0.5);
     sky.fillStyle(0x102030, 1); sky.fillRect(0, H * 0.5, W, H * 0.5);
+
+    // Parallax layers — redrawn each frame in drawParallaxBg().
+    this.bgFarGfx = this.add.graphics().setDepth(0.1); // far mountains
+    this.bgMidGfx = this.add.graphics().setDepth(0.5); // mid hills
 
     // ── Graphics layers ──────────────────────────────────────────────────────
     this.terrainGfx = this.add.graphics().setDepth(1);
     this.shadowGfx  = this.add.graphics().setDepth(2);
     this.enemyGfx   = this.add.graphics().setDepth(3);
     this.projGfx    = this.add.graphics().setDepth(4);
+    this.bombGfx    = this.add.graphics().setDepth(4.5);
     this.planeGfx   = this.add.graphics().setDepth(5);
 
     // ── Touch / pause ────────────────────────────────────────────────────────
@@ -262,12 +290,14 @@ export class AttackRunScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     this.touchControls.update();
     const input = InputRouter.read();
-    const fireJust = input.fire && !this.prevFire;
+    const fireJust   = input.fire   && !this.prevFire;
+    const actionJust = input.action && !this.prevAction;
     this.prevFire   = input.fire;
+    this.prevAction = input.action;
 
     this.accumulator += delta * 0.001;
     while (this.accumulator >= FIXED_DT) {
-      this.fixedStep(FIXED_DT, input.moveX, input.moveY, fireJust);
+      this.fixedStep(FIXED_DT, input.moveX, input.moveY, fireJust, actionJust);
       this.accumulator -= FIXED_DT;
     }
 
@@ -277,7 +307,7 @@ export class AttackRunScene extends Phaser.Scene {
 
   // ── Fixed step ────────────────────────────────────────────────────────────
 
-  private fixedStep(dt: number, mx: number, my: number, fireJust: boolean): void {
+  private fixedStep(dt: number, mx: number, my: number, fireJust: boolean, actionJust: boolean): void {
     if (this.planeState !== 'flying') return;
 
     // Scroll camera.
@@ -342,6 +372,28 @@ export class AttackRunScene extends Phaser.Scene {
         vx: ATTACK_RUN.bulletSpeed, vy: 0,
         alive: true, fromEnemy: false,
       });
+    }
+
+    // Bomb drop.
+    this.bombReloadTimer -= dt;
+    if (
+      actionJust &&
+      this.bombReloadTimer <= 0 &&
+      this.bombs.filter(b => b.alive).length < ATTACK_RUN.bombMaxInAir
+    ) {
+      this.dropBomb();
+      this.bombReloadTimer = ATTACK_RUN.bombReloadTime;
+    }
+
+    // Update bombs.
+    for (const bomb of this.bombs) {
+      if (!bomb.alive) continue;
+      bomb.t += dt / ATTACK_RUN.bombArcTime;
+      if (bomb.t >= 1) {
+        bomb.t     = 1;
+        bomb.alive = false;
+        this.bombExplode(bomb.landWorldX);
+      }
     }
 
     // Update projectiles.
@@ -602,6 +654,9 @@ export class AttackRunScene extends Phaser.Scene {
     const groundY = this.groundYAtWorldX(this.cameraX + this.planeX);
     const planeScreenY = groundY - this.planeAlt;
 
+    // ── Parallax background ──────────────────────────────────────────────────
+    this.drawParallaxBg();
+
     // ── Terrain ──────────────────────────────────────────────────────────────
     this.terrainGfx.clear();
     // Draw ground segments.
@@ -746,6 +801,34 @@ export class AttackRunScene extends Phaser.Scene {
       }
     }
 
+    // ── Bombs ─────────────────────────────────────────────────────────────────
+    this.bombGfx.clear();
+    for (const bomb of this.bombs) {
+      if (!bomb.alive) continue;
+      const landSX  = bomb.landWorldX - this.cameraX;
+      const frac    = bomb.t;
+      const curWX   = bomb.worldXDrop + (bomb.landWorldX - bomb.worldXDrop) * frac;
+      const bombSX  = curWX - this.cameraX;
+      const alt     = bomb.altAtDrop * (1 - frac); // linear descent (parabolic look is enough)
+      const bombGroundY = this.groundYAtWorldX(curWX);
+      const bombSY  = bombGroundY - alt;
+
+      // Ground crosshair at landing point.
+      const crossY  = this.groundYAtWorldX(bomb.landWorldX);
+      const alpha   = 0.5 + 0.5 * Math.sin(time * 0.02); // subtle pulse
+      this.bombGfx.lineStyle(2, 0xffcc44, alpha);
+      this.bombGfx.strokeCircle(landSX, crossY, 18);
+      this.bombGfx.lineBetween(landSX - 24, crossY, landSX + 24, crossY);
+      this.bombGfx.lineBetween(landSX, crossY - 24, landSX, crossY + 24);
+
+      // Bomb body.
+      this.bombGfx.fillStyle(0xffcc44, 1);
+      this.bombGfx.fillRect(bombSX - 10, bombSY - 10, 20, 20);
+      // Fin detail.
+      this.bombGfx.fillStyle(0xcc9900, 1);
+      this.bombGfx.fillRect(bombSX - 10, bombSY - 10, 4, 20);
+    }
+
     // ── Shadow ─────────────────────────────────────────────────────────────────
     this.shadowGfx.clear();
     if (this.planeState === 'flying') {
@@ -760,6 +843,16 @@ export class AttackRunScene extends Phaser.Scene {
     this.planeGfx.clear();
     if (this.planeState === 'flying') {
       this.drawSidePlane(planeScreenY, time);
+
+      // ── Proximity beep + pulsing ring ──────────────────────────────────────
+      const beepSources = this.collectBeepSources(planeScreenY);
+      this.proximityBeep.update(beepSources, this.planeX, planeScreenY, missionState.impactClock);
+      if (this.proximityBeep.isActive) {
+        const ringRadius = 25 + this.proximityBeep.ringPhase * 50;
+        const ringAlpha  = (1 - this.proximityBeep.ringPhase) * 0.6;
+        this.planeGfx.lineStyle(2, 0xff4444, ringAlpha);
+        this.planeGfx.strokeCircle(this.planeX, planeScreenY, ringRadius);
+      }
     }
   }
 
@@ -809,6 +902,90 @@ export class AttackRunScene extends Phaser.Scene {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+
+  private dropBomb(): void {
+    const worldXDrop = this.cameraX + this.planeX;
+    this.bombs.push({
+      worldXDrop,
+      altAtDrop:  this.planeAlt,
+      landWorldX: worldXDrop + ATTACK_RUN.bombHorizOffset,
+      t: 0,
+      alive: true,
+    });
+  }
+
+  private bombExplode(landWorldX: number): void {
+    for (const enemy of this.activeEnemies) {
+      if (!enemy.alive) continue;
+      if (Math.abs(enemy.worldX - landWorldX) <= ATTACK_RUN.bombBlastRadius) {
+        enemy.alive = false;
+        this.activeEnemies.delete(enemy);
+        const pts = enemy.type === 'sam' ? SCORE.bombSam : SCORE.tank;
+        missionState.addScore(pts);
+        missionState.hudCue = `+${pts}`;
+      }
+    }
+    this.cameras.main.shake(200, 0.008);
+  }
+
+  /** Draw scrolling parallax mountain/hill layers behind the terrain. */
+  private drawParallaxBg(): void {
+    // Far layer — distant mountains (parallax factor 0.12).
+    this.bgFarGfx.clear();
+    this.bgFarGfx.fillStyle(0x0d1f2d, 1);
+    const farOff = this.cameraX * 0.12;
+    this.bgFarGfx.beginPath();
+    this.bgFarGfx.moveTo(0, H);
+    this.bgFarGfx.lineTo(0, 400);
+    for (let sx = 0; sx <= W; sx += 40) {
+      const wx = sx + farOff;
+      const y  = 400
+        + Math.sin(wx * 0.0030) * 60
+        + Math.cos(wx * 0.0051) * 40
+        + Math.sin(wx * 0.0011) * 25;
+      this.bgFarGfx.lineTo(sx, y);
+    }
+    this.bgFarGfx.lineTo(W, H);
+    this.bgFarGfx.closePath();
+    this.bgFarGfx.fillPath();
+
+    // Mid layer — nearer hills (parallax factor 0.35).
+    this.bgMidGfx.clear();
+    this.bgMidGfx.fillStyle(0x112218, 1);
+    const midOff = this.cameraX * 0.35;
+    this.bgMidGfx.beginPath();
+    this.bgMidGfx.moveTo(0, H);
+    this.bgMidGfx.lineTo(0, 500);
+    for (let sx = 0; sx <= W; sx += 40) {
+      const wx = sx + midOff;
+      const y  = 500
+        + Math.sin(wx * 0.0027) * 50
+        + Math.cos(wx * 0.0049) * 35
+        + Math.sin(wx * 0.0011) * 20;
+      this.bgMidGfx.lineTo(sx, y);
+    }
+    this.bgMidGfx.lineTo(W, H);
+    this.bgMidGfx.closePath();
+    this.bgMidGfx.fillPath();
+  }
+
+  /** Collect missile and heat-seeker screen positions for proximity beep. */
+  private collectBeepSources(_planeScreenY: number): BeepSource[] {
+    const sources: BeepSource[] = [];
+    for (const enemy of this.activeEnemies) {
+      if (!enemy.alive || !enemy.missile) continue;
+      sources.push({ x: enemy.missile.x, y: enemy.missile.y });
+    }
+    if (this.heatSeeker && this.heatSeeker.phase === 'active') {
+      sources.push({ x: this.heatSeeker.x, y: this.heatSeeker.lockedY });
+    }
+    // Interceptors count too when close.
+    for (const ic of this.interceptors) {
+      if (!ic.alive) continue;
+      sources.push({ x: ic.x, y: ic.y });
+    }
+    return sources;
+  }
 
   private groundYAtWorldX(worldX: number): number {
     const idx = Math.floor(worldX / SEGMENT_W);
@@ -883,6 +1060,7 @@ export class AttackRunScene extends Phaser.Scene {
     gameUi.stageResult    = null;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.touchControls?.destroy();
+    this.proximityBeep.dispose();
     gameUi.attackRunSecsLeft = 0;
   }
 }

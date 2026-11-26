@@ -54,6 +54,7 @@ Every stage renders to a 384 × 216 canvas and reads four abstract inputs: **mov
 - **Enemies:** tanks (ground flak every 2.5 s), SAM sites (one homing-lite missile, turn rate 60°/s), interceptors (enter from right, 2-shot burst).
 - **Heat-seeker:** warned 1.5 s ahead with an arrow at the left edge and a rising tone. It locks your altitude; below 20 px it overshoots. Shooting it after it passes = bonus.
 - **Ground:** contact is harmless on Cadet, a crash on Pilot and Suicidal. Buildings and pylons crash on every difficulty.
+- **Bombs:** action key drops a bomb on a parabolic arc (1.4 s to impact). A crosshair on the ground shows the landing point ~600 world-px ahead of the drop. Max 2 in air; 1.2 s reload after each drop. Blast radius destroys tanks (150 pts) and SAM sites (200 pts) within range.
 
 ### Stage 4 — Silo strike
 
@@ -105,7 +106,7 @@ All devices map to the same four inputs, so stage code never checks what device 
 | --- | --- | --- | --- | --- | --- |
 | 1 Map | — | — | Scramble | — | Tap anywhere |
 | 2 Hangar | Rotate | Up = thrust | — | Open doors / launch spare | Stick X rotates; push stick up to thrust, or hold a Thrust button (setting) |
-| 3 Attack run | Screen position | Altitude | Gun | — | Stick is relative: drag = move, so the thumb never covers the plane |
+| 3 Attack run | Screen position | Altitude | Gun | Drop bomb | Stick is relative: drag = move, so the thumb never covers the plane |
 | 4 Silos | Left/right | Altitude | Rocket | — | Reticle sits 24 px above the plane so it stays visible |
 | 5 Assault | Walk the trench | Elevation | Mortar | — | Elevation also on a vertical slider at the right edge |
 | 6 Reactor | Walk | Aim dot left/right | Throw disc | — | Aim dot on a horizontal slider above Fire; tap the back wall to place it directly |
@@ -144,7 +145,8 @@ One pool, as in the original: surviving planes become the commando squad at Stag
 
 | Event | Points |
 | --- | --- |
-| Tank or SAM site (attack run) | 150 |
+| Tank or SAM site (attack run, gun) | 150 |
+| SAM site (attack run, bomb) | 200 |
 | Interceptor | 250 |
 | Heat-seeker shot from behind | 500 |
 | Side silo | 2,000 + 1 plane |
@@ -167,16 +169,20 @@ A full Pilot run takes 12–18 minutes: about 2.5 minutes per launch run × 4, t
 
 ### Visual direction
 
-Smooth vector/anti-aliased art: clean shapes, a focused palette, smooth 60 fps motion and screen shake. Text lives in a React HTML overlay so fonts scale cleanly to any screen.
+Oregon Trail 2021 style: pixel-art sprites at whole-number scale over smooth painted parallax backgrounds. Sprites use nearest-neighbour filtering; backgrounds use linear filtering and 3–5 depth layers that scroll at different rates. Phaser 4 `PointLight` for engine glow, explosions and warning lights; sprites cast soft elliptical shadows on the ground plane. Text lives in a React HTML overlay so fonts scale cleanly to any screen.
+
+Sprites load from an atlas (`assets/sprites.png` / `assets/sprites.json`) via `BootScene.preload()`; until real art lands, `BootScene.create()` generates coloured placeholder textures with `Graphics.generateTexture()`. Stage code references sprite keys only, so swapping the atlas requires no stage changes.
 
 | Spec | Value |
 | --- | --- |
 | Internal resolution | 1280 × 720 (16:9), Phaser Scale FIT, letterboxed, `pixelArt: false`, `antialias: true`, rendered at `devicePixelRatio` |
+| Sprite rendering | Individual sprite objects call `setTexture(key)`; backgrounds use `LINEAR` filter, sprites use `NEAREST` filter |
 | All px constants | Pre-multiplied by `WORLD_SCALE = 10/3` in `tuning.ts` relative to the original 384 × 216 values |
 | Faction colours | Union = cyan and white; Directorate = rust red and olive |
-| Effects | Particle explosions, screen shake (off in reduced-motion) |
+| Effects | Phaser 4 `PointLight` for glow; particle explosions; screen shake (off in reduced-motion) |
 | Fonts | **Space Grotesk** (UI labels, cues), **JetBrains Mono** (numbers/score/clock) — self-hosted via `@fontsource` npm packages; min 14 CSS px rendered on phones |
 | In-canvas text | Forbidden in stage code. Write to `missionState.hudCue` or `gameUi`; React `<GameOverlay />` displays everything. Exception: full-screen transient overlays (game over). |
+| Atlas pipeline | `BootScene` runs first; `preload()` loads atlas (commented-out until real art); `create()` generates placeholder textures via `generateTexture(key, w, h)`, then routes to `MapScene` or `DebugScene` |
 
 ### HUD
 
@@ -192,6 +198,7 @@ Smooth vector/anti-aliased art: clean shapes, a focused palette, smooth 60 fps m
 | Flight stages | Driving bass loop; tempo rises 10% under 30 s on the clock |
 | Reactor | Low drone + heartbeat that speeds up with the ETCM |
 | SFX | Thrust, door hiss, gun, rocket, explosion small/large, disc throw/bounce/catch, robot hit, warning tone |
+| Missile proximity beep | Web Audio beep; interval 900 ms→120 ms, volume 15%→90%, pitch 880→1 100 Hz as distance shrinks; solid 1 200 Hz tone under 1 s to impact; stereo pan tracks missile X; nearest 2 missiles only. Visual pulsing ring around the plane mirrors the beep rate for sound-off players. |
 | Voice-style alerts | Synth "LAUNCH DETECTED", "CRITICAL MASS"; captioned |
 
 SFX are generated with jsfxr; music composed in a tracker (e.g., Furnace) and exported to OGG + M4A for Safari.

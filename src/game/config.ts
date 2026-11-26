@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { BootScene } from './scenes/BootScene';
 import { DebugScene } from './scenes/DebugScene';
 import { MapScene } from './scenes/MapScene';
 import { HangarScene } from './scenes/HangarScene';
@@ -14,17 +15,7 @@ import { DebugOverlayScene } from './scenes/DebugOverlayScene';
 export const CANVAS_WIDTH = 1280;
 export const CANVAS_HEIGHT = 720;
 
-/** Returns the key of the scene to auto-start. Use ?debug=1 for the input debug screen. */
-function startScene(): string {
-  if (typeof window !== 'undefined') {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('debug') === '1') return 'DebugScene';
-  }
-  return 'MapScene';
-}
-
 export function getGameConfig(): Phaser.Types.Core.GameConfig {
-  const start = startScene();
   return {
     type: Phaser.AUTO,
     width: CANVAS_WIDTH,
@@ -43,10 +34,11 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
       gamepad: true,
     },
     scene: [
-      // The first entry auto-starts; all others are registered but idle.
-      start === 'DebugScene'
-        ? [DebugScene, MapScene]
-        : [MapScene, DebugScene],
+      // BootScene auto-starts first; it generates placeholder textures then
+      // routes to MapScene or DebugScene (?debug=1).
+      BootScene,
+      MapScene,
+      DebugScene,
       HangarScene,
       AttackRunScene,
       SiloScene,
@@ -57,6 +49,6 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
       HudScene,
       InputScene,
       DebugOverlayScene,
-    ].flat(),
+    ],
   };
 }
