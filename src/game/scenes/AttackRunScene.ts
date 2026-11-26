@@ -96,6 +96,13 @@ interface Bomb {
   alive:      boolean;
 }
 
+interface Explosion {
+  worldX:  number;
+  screenY: number;  // screen Y locked at creation
+  t:       number;  // 0 → 1; advances over 0.6s
+  size:    number;  // max radius px
+}
+
 export class AttackRunScene extends Phaser.Scene {
   private launchIndex   = 0;
 
@@ -128,27 +135,41 @@ export class AttackRunScene extends Phaser.Scene {
   private heatSeeker: HeatSeeker | null = null;
   private activeEnemies = new Set<GroundEnemy>();
 
-  // ── Bombs ──────────────────────────────────────────────────────────────────
+  // ── Bombs & explosions ────────────────────────────────────────────────────
   private bombs: Bomb[] = [];
   private bombReloadTimer = 0;
+  private explosions: Explosion[] = [];
+
+  // ── Pre-run briefing & pause ───────────────────────────────────────────────
+  private preRunActive = true;
+  private preRunTimer  = 0;
+  private paused       = false;
 
   // ── Input ─────────────────────────────────────────────────────────────────
   private prevFire   = false;
   private prevAction = false;
+  private prevPause  = false;
   private accumulator = 0;
 
   // ── Audio ─────────────────────────────────────────────────────────────────
   private proximityBeep = new ProximityBeep();
 
   // ── Visuals ───────────────────────────────────────────────────────────────
-  private bgFarGfx!:  Phaser.GameObjects.Graphics;
-  private bgMidGfx!:  Phaser.GameObjects.Graphics;
-  private terrainGfx!: Phaser.GameObjects.Graphics;
-  private enemyGfx!:   Phaser.GameObjects.Graphics;
-  private projGfx!:    Phaser.GameObjects.Graphics;
-  private bombGfx!:    Phaser.GameObjects.Graphics;
-  private planeGfx!:   Phaser.GameObjects.Graphics;
-  private shadowGfx!:  Phaser.GameObjects.Graphics;
+  private bgFarGfx!:     Phaser.GameObjects.Graphics;
+  private bgMidGfx!:     Phaser.GameObjects.Graphics;
+  private terrainGfx!:   Phaser.GameObjects.Graphics;
+  private enemyGfx!:     Phaser.GameObjects.Graphics;
+  private projGfx!:      Phaser.GameObjects.Graphics;
+  private bombGfx!:      Phaser.GameObjects.Graphics;
+  private explosionGfx!: Phaser.GameObjects.Graphics;
+  private planeGfx!:     Phaser.GameObjects.Graphics;
+  private shadowGfx!:    Phaser.GameObjects.Graphics;
+  private preRunGfx!:    Phaser.GameObjects.Graphics;
+  private pauseGfx!:     Phaser.GameObjects.Graphics;
+  private preRunTitleText!:  Phaser.GameObjects.Text;
+  private preRunBodyText!:   Phaser.GameObjects.Text;
+  private preRunPromptText!: Phaser.GameObjects.Text;
+  private pauseLabel!:       Phaser.GameObjects.Text;
   private touchControls!: TouchControls;
   private visibilityHandler!: () => void;
 
@@ -178,6 +199,10 @@ export class AttackRunScene extends Phaser.Scene {
     this.prevAction    = false;
     this.bombs         = [];
     this.bombReloadTimer = 0;
+    this.explosions    = [];
+    this.preRunActive  = true;
+    this.preRunTimer   = 0;
+    this.paused        = false;
     this.hintTimer     = 0;
   }
 
@@ -265,12 +290,40 @@ export class AttackRunScene extends Phaser.Scene {
     this.bgMidGfx = this.add.graphics().setDepth(0.5); // mid hills
 
     // ── Graphics layers ──────────────────────────────────────────────────────
-    this.terrainGfx = this.add.graphics().setDepth(1);
-    this.shadowGfx  = this.add.graphics().setDepth(2);
-    this.enemyGfx   = this.add.graphics().setDepth(3);
-    this.projGfx    = this.add.graphics().setDepth(4);
-    this.bombGfx    = this.add.graphics().setDepth(4.5);
-    this.planeGfx   = this.add.graphics().setDepth(5);
+    this.terrainGfx   = this.add.graphics().setDepth(1);
+    this.shadowGfx    = this.add.graphics().setDepth(2);
+    this.enemyGfx     = this.add.graphics().setDepth(3);
+    this.explosionGfx = this.add.graphics().setDepth(3.5);
+    this.projGfx      = this.add.graphics().setDepth(4);
+    this.bombGfx      = this.add.graphics().setDepth(4.5);
+    this.planeGfx     = this.add.graphics().setDepth(5);
+    this.preRunGfx    = this.add.graphics().setDepth(20);
+    this.pauseGfx     = this.add.graphics().setDepth(22).setVisible(false);
+
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
+    this.preRunTitleText = this.add.text(W / 2, H / 2 - 90,
+      `ATTACK RUN — LAUNCH ${this.launchIndex + 1}`, {
+        fontSize: '44px', color: '#44aaff',
+        fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
+      }).setOrigin(0.5).setDepth(21);
+
+    const diffLabel = missionState.difficulty.toUpperCase();
+    this.preRunBodyText = this.add.text(W / 2, H / 2 - 20,
+      `Threat: ${diffLabel}  ·  ${ATTACK_RUN.duration}s run  ·  Reach the silo`, {
+        fontSize: '26px', color: '#8aaabb',
+        fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
+      }).setOrigin(0.5).setDepth(21);
+
+    this.preRunPromptText = this.add.text(W / 2, H / 2 + 50,
+      'Press FIRE to launch', {
+        fontSize: '30px', color: '#ffffff',
+        fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
+      }).setOrigin(0.5).setDepth(21);
+
+    this.pauseLabel = this.add.text(W / 2, H / 2, 'PAUSED', {
+      fontSize: '72px', color: '#ffffff',
+      fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
+    }).setOrigin(0.5).setDepth(23).setVisible(false);
 
     // ── Touch / pause ────────────────────────────────────────────────────────
     this.touchControls = new TouchControls(this);
@@ -292,9 +345,48 @@ export class AttackRunScene extends Phaser.Scene {
     const input = InputRouter.read();
     const fireJust   = input.fire   && !this.prevFire;
     const actionJust = input.action && !this.prevAction;
+    const pauseJust  = input.pause  && !this.prevPause;
     this.prevFire   = input.fire;
     this.prevAction = input.action;
+    this.prevPause  = input.pause;
 
+    // ── Pre-run briefing ──────────────────────────────────────────────────────
+    if (this.preRunActive) {
+      this.preRunTimer += delta * 0.001;
+      if (fireJust || this.preRunTimer >= 4.0) {
+        this.preRunActive = false;
+        this.preRunGfx.clear();
+        this.preRunTitleText.setVisible(false);
+        this.preRunBodyText.setVisible(false);
+        this.preRunPromptText.setVisible(false);
+      } else {
+        this.renderPreRun(time);
+        debugInfo.fps = Math.round(this.game.loop.actualFps);
+        return;
+      }
+    }
+
+    // ── Pause toggle ──────────────────────────────────────────────────────────
+    if (pauseJust) {
+      this.paused = !this.paused;
+      if (this.paused) {
+        // Draw semi-transparent overlay once when entering pause.
+        this.pauseGfx.clear();
+        this.pauseGfx.fillStyle(0x000000, 0.6);
+        this.pauseGfx.fillRect(0, 0, W, H);
+        this.pauseGfx.setVisible(true);
+        this.pauseLabel.setVisible(true);
+      } else {
+        this.pauseGfx.setVisible(false);
+        this.pauseLabel.setVisible(false);
+      }
+    }
+    if (this.paused) {
+      debugInfo.fps = Math.round(this.game.loop.actualFps);
+      return;
+    }
+
+    // ── Normal game update ────────────────────────────────────────────────────
     this.accumulator += delta * 0.001;
     while (this.accumulator >= FIXED_DT) {
       this.fixedStep(FIXED_DT, input.moveX, input.moveY, fireJust, actionJust);
@@ -396,6 +488,11 @@ export class AttackRunScene extends Phaser.Scene {
       }
     }
 
+    // Advance explosions.
+    for (const ex of this.explosions) {
+      if (ex.t < 1) ex.t = Math.min(1, ex.t + dt / 0.6);
+    }
+
     // Update projectiles.
     for (const proj of this.projectiles) {
       if (!proj.alive) continue;
@@ -487,6 +584,8 @@ export class AttackRunScene extends Phaser.Scene {
           proj.alive   = false;
           enemy.alive  = false;
           this.activeEnemies.delete(enemy);
+          const exGy = this.groundYAtWorldX(enemy.worldX);
+          this.spawnExplosion(enemy.worldX, exGy - (enemy.type === 'tank' ? TANK_H * 0.5 : SAM_H * 0.5), enemy.type === 'tank' ? 50 : 60);
           missionState.addScore(SCORE.tank);
           missionState.hudCue = `+${SCORE.tank}`;
         }
@@ -549,6 +648,7 @@ export class AttackRunScene extends Phaser.Scene {
         if (!proj.alive || proj.fromEnemy) continue;
         if (Math.abs(proj.x - ic.x) < INTERC_W / 2 && Math.abs(proj.y - ic.y) < INTERC_H) {
           proj.alive = false; ic.alive = false;
+          this.spawnExplosion(ic.x + this.cameraX, ic.y, 45);
           missionState.addScore(SCORE.interceptor);
           missionState.hudCue = `+${SCORE.interceptor}`;
           break;
@@ -788,6 +888,9 @@ export class AttackRunScene extends Phaser.Scene {
       }
     }
 
+    // ── Explosions ────────────────────────────────────────────────────────────
+    this.renderExplosions();
+
     // ── Projectiles ────────────────────────────────────────────────────────────
     this.projGfx.clear();
     for (const proj of this.projectiles) {
@@ -809,7 +912,7 @@ export class AttackRunScene extends Phaser.Scene {
       const frac    = bomb.t;
       const curWX   = bomb.worldXDrop + (bomb.landWorldX - bomb.worldXDrop) * frac;
       const bombSX  = curWX - this.cameraX;
-      const alt     = bomb.altAtDrop * (1 - frac); // linear descent (parabolic look is enough)
+      const alt     = bomb.altAtDrop * (1 - frac * frac); // gravity: accelerates as it falls
       const bombGroundY = this.groundYAtWorldX(curWX);
       const bombSY  = bombGroundY - alt;
 
@@ -915,11 +1018,15 @@ export class AttackRunScene extends Phaser.Scene {
   }
 
   private bombExplode(landWorldX: number): void {
+    const groundY = this.groundYAtWorldX(landWorldX);
+    this.spawnExplosion(landWorldX, groundY - 20, 80);
     for (const enemy of this.activeEnemies) {
       if (!enemy.alive) continue;
       if (Math.abs(enemy.worldX - landWorldX) <= ATTACK_RUN.bombBlastRadius) {
         enemy.alive = false;
         this.activeEnemies.delete(enemy);
+        const exEGy = this.groundYAtWorldX(enemy.worldX);
+        this.spawnExplosion(enemy.worldX, exEGy - (enemy.type === 'tank' ? TANK_H * 0.5 : SAM_H * 0.5), 55);
         const pts = enemy.type === 'sam' ? SCORE.bombSam : SCORE.tank;
         missionState.addScore(pts);
         missionState.hudCue = `+${pts}`;
@@ -1055,6 +1162,67 @@ export class AttackRunScene extends Phaser.Scene {
       missionState.startMission({ theme: 'coldfront', difficulty: missionState.difficulty, seed: Date.now() });
       this.scene.start('MapScene', { launchIndex: 0 });
     });
+  }
+
+  private spawnExplosion(worldX: number, screenY: number, size: number): void {
+    this.explosions.push({ worldX, screenY, t: 0, size });
+  }
+
+  private renderExplosions(): void {
+    this.explosionGfx.clear();
+    for (const ex of this.explosions) {
+      if (ex.t >= 1) continue;
+      const sx    = ex.worldX - this.cameraX;
+      const sy    = ex.screenY;
+      const eased = 1 - (1 - ex.t) * (1 - ex.t); // ease-out
+      const radius = ex.size * eased;
+      const alpha  = 1 - eased;
+
+      // White flash core.
+      this.explosionGfx.fillStyle(0xffffff, alpha * 0.9);
+      this.explosionGfx.fillCircle(sx, sy, radius * 0.35);
+
+      // Outer orange ring.
+      this.explosionGfx.lineStyle(3, 0xff6600, alpha);
+      this.explosionGfx.strokeCircle(sx, sy, radius);
+
+      // Inner yellow ring (fades faster).
+      if (ex.t < 0.6) {
+        const innerAlpha = alpha * (1 - ex.t / 0.6);
+        this.explosionGfx.lineStyle(2, 0xffcc44, innerAlpha);
+        this.explosionGfx.strokeCircle(sx, sy, radius * 0.55);
+      }
+
+      // 6 debris dots orbiting outward.
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const dr  = radius * 1.1;
+        this.explosionGfx.fillStyle(0xffcc44, alpha * 0.8);
+        this.explosionGfx.fillCircle(sx + Math.cos(ang) * dr, sy + Math.sin(ang) * dr, 3);
+      }
+    }
+  }
+
+  private renderPreRun(time: number): void {
+    this.preRunGfx.clear();
+    // Dark overlay.
+    this.preRunGfx.fillStyle(0x000000, 0.78);
+    this.preRunGfx.fillRect(0, 0, W, H);
+    // Countdown bar.
+    const prog  = Math.min(this.preRunTimer / 4.0, 1);
+    const BAR_W = 320; const BAR_H = 8;
+    const bx = W / 2 - BAR_W / 2;
+    const by = H / 2 + 100;
+    this.preRunGfx.fillStyle(0x223344, 1);
+    this.preRunGfx.fillRect(bx, by, BAR_W, BAR_H);
+    this.preRunGfx.fillStyle(0x44aaff, 1);
+    this.preRunGfx.fillRect(bx, by, BAR_W * prog, BAR_H);
+    // Flashing prompt.
+    if (Math.sin(time * 0.006) > 0) {
+      this.preRunPromptText.setAlpha(1);
+    } else {
+      this.preRunPromptText.setAlpha(0.4);
+    }
   }
 
   shutdown(): void {
