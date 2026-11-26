@@ -11,6 +11,7 @@ import { createRng } from '../../state/rng';
 import { hasSeenHowToPlay, markSeenHowToPlay } from '../../state/howToPlay';
 import { showStageIntro } from '../../state/stageIntros';
 import { ProximityBeep, BeepSource } from '../audio/ProximityBeep';
+import { EngineSound } from '../audio/EngineSound';
 
 const W = 1280;
 const H = 720;
@@ -79,6 +80,7 @@ interface Interceptor {
   alive: boolean;
   burstLeft: number;
   burstTimer: number;
+  whooshPlayed: boolean;
 }
 
 interface HeatSeeker {
@@ -153,6 +155,7 @@ export class AttackRunScene extends Phaser.Scene {
 
   // ── Audio ─────────────────────────────────────────────────────────────────
   private proximityBeep = new ProximityBeep();
+  private engineSound   = new EngineSound();
 
   // ── Visuals ───────────────────────────────────────────────────────────────
   private bgFarGfx!:     Phaser.GameObjects.Graphics;
@@ -166,6 +169,7 @@ export class AttackRunScene extends Phaser.Scene {
   private shadowGfx!:    Phaser.GameObjects.Graphics;
   private preRunGfx!:    Phaser.GameObjects.Graphics;
   private pauseGfx!:     Phaser.GameObjects.Graphics;
+  private crashGfx!:     Phaser.GameObjects.Graphics;
   private preRunTitleText!:  Phaser.GameObjects.Text;
   private preRunBodyText!:   Phaser.GameObjects.Text;
   private preRunPromptText!: Phaser.GameObjects.Text;
@@ -200,6 +204,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.bombs         = [];
     this.bombReloadTimer = 0;
     this.explosions    = [];
+    this.engineSound.stop();
     this.preRunActive  = true;
     this.preRunTimer   = 0;
     this.paused        = false;
@@ -299,6 +304,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.planeGfx     = this.add.graphics().setDepth(5);
     this.preRunGfx    = this.add.graphics().setDepth(20);
     this.pauseGfx     = this.add.graphics().setDepth(22).setVisible(false);
+    this.crashGfx     = this.add.graphics().setDepth(15);
 
     const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
     this.preRunTitleText = this.add.text(W / 2, H / 2 - 90,
@@ -391,6 +397,11 @@ export class AttackRunScene extends Phaser.Scene {
     while (this.accumulator >= FIXED_DT) {
       this.fixedStep(FIXED_DT, input.moveX, input.moveY, fireJust, actionJust);
       this.accumulator -= FIXED_DT;
+    }
+
+    // Engine sound: update every game frame while flying.
+    if (this.planeState === 'flying') {
+      this.engineSound.update(this.thrusting);
     }
 
     this.renderFrame(time);
@@ -618,7 +629,7 @@ export class AttackRunScene extends Phaser.Scene {
         x: W + 60, y: spawnY,
         vx: -ATTACK_RUN.interceptorSpeed * density,
         alive: true, burstLeft: ATTACK_RUN.interceptorBurstShots,
-        burstTimer: 0.5,
+        burstTimer: 0.5, whooshPlayed: false,
       });
       this.nextInterceptorIdx++;
     }
@@ -641,6 +652,10 @@ export class AttackRunScene extends Phaser.Scene {
         });
       }
 
+      if (!ic.whooshPlayed && ic.x < this.planeX + 60) {
+        ic.whooshPlayed = true;
+        this.engineSound.playWhoosh();
+      }
       if (ic.x < -80) ic.alive = false;
 
       // Player bullet kills interceptor.
@@ -699,7 +714,10 @@ export class AttackRunScene extends Phaser.Scene {
             return;
           }
         }
-        if (hs.x > this.planeX + PLANE_HIT_W + 20) hs.phase = 'passed';
+        if (hs.x > this.planeX + PLANE_HIT_W + 20) {
+          hs.phase = 'passed';
+          this.engineSound.playWhoosh();
+        }
       } else { // passed
         hs.x += ATTACK_RUN.heatSeekerSpeed * dt;
         missionState.hudCue = 'SHOOT IT!';
@@ -1020,6 +1038,35 @@ export class AttackRunScene extends Phaser.Scene {
   private bombExplode(landWorldX: number): void {
     const groundY = this.groundYAtWorldX(landWorldX);
     this.spawnExplosion(landWorldX, groundY - 20, 80);
+    const landSX    = landWorldX - this.cameraX;
+    const airRadius = ATTACK_RUN.bombBlastRadius * 2; // bigger radius for aerial targets
+
+    // Bomb blast hits interceptors.
+    for (const ic of this.interceptors) {
+      if (!ic.alive) continue;
+      const dist = Math.sqrt((ic.x - landSX) ** 2 + (ic.y - groundY) ** 2);
+      if (dist < airRadius) {
+        ic.alive = false;
+        this.spawnExplosion(ic.x + this.cameraX, ic.y, 45);
+        missionState.addScore(SCORE.interceptor);
+        missionState.hudCue = `+${SCORE.interceptor}`;
+      }
+    }
+
+    // Bomb blast hits heat-seeker.
+    if (this.heatSeeker && this.heatSeeker.phase !== 'warning') {
+      const hs = this.heatSeeker;
+      const dist = Math.sqrt((hs.x - landSX) ** 2 + (hs.lockedY - groundY) ** 2);
+      if (dist < airRadius) {
+        this.spawnExplosion(hs.x + this.cameraX, hs.lockedY, 50);
+        this.heatSeeker = null;
+        missionState.addScore(SCORE.heatSeekerFromBehind);
+        missionState.hudCue = `HEAT-SEEKER DOWN! +${SCORE.heatSeekerFromBehind}`;
+        gameUi.callout = `+${SCORE.heatSeekerFromBehind}  NICE SHOT`;
+        gameUi.calloutExpiry = Date.now() + 1500;
+      }
+    }
+
     for (const enemy of this.activeEnemies) {
       if (!enemy.alive) continue;
       if (Math.abs(enemy.worldX - landWorldX) <= ATTACK_RUN.bombBlastRadius) {
@@ -1109,6 +1156,7 @@ export class AttackRunScene extends Phaser.Scene {
     if (this.planeState !== 'flying') return;
     this.planeState = 'crashed';
     this.proximityBeep.stop();
+    this.engineSound.stop();
     missionState.losePlane();
     missionState.hudCue = `CRASHED: ${reason}`;
     gameUi.attackRunSecsLeft = 0;
@@ -1126,6 +1174,7 @@ export class AttackRunScene extends Phaser.Scene {
 
   private onImpactExpired(): void {
     this.proximityBeep.stop();
+    this.engineSound.stop();
     const CITIES = ['Harlan Bay', 'Port Cressa', 'New Allis', 'Veldor'];
     const cityName = CITIES[this.launchIndex % CITIES.length] ?? 'City';
     missionState.cityLost();
@@ -1147,18 +1196,166 @@ export class AttackRunScene extends Phaser.Scene {
 
   private showGameOver(): void {
     missionState.hudCue = 'GAME OVER';
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
-    this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.82).setDepth(20);
-    this.add.text(W / 2, H / 2 - 48, 'GAME OVER', {
-      fontSize: '80px', color: '#ff4444',
-      fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
-    }).setOrigin(0.5).setDepth(21);
-    this.add.text(W / 2, H / 2 + 36, `SCORE: ${missionState.score}`, {
-      fontSize: '40px', color: '#ffffff',
-      fontFamily: "'JetBrains Mono', monospace", resolution: dpr,
-    }).setOrigin(0.5).setDepth(21);
 
-    this.time.delayedCall(4000, () => {
+    const rng        = createRng(missionState.seed + 7919);
+    const terrain    = Math.floor(rng.next() * 3); // 0=forest, 1=river, 2=mountains
+    const dpr        = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
+    const GY         = 490; // crash ground horizon Y on screen
+    const cx         = W / 2 + 55; // crash center X
+
+    const goText = this.add.text(W / 2, GY - 170, 'GAME OVER', {
+      fontSize: '76px', color: '#ff4444',
+      fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(21).setAlpha(0);
+
+    const scoreText = this.add.text(W / 2, GY - 90, `SCORE: ${missionState.score}`, {
+      fontSize: '38px', color: '#ffffff',
+      fontFamily: "'JetBrains Mono', monospace", resolution: dpr,
+      stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(21).setAlpha(0);
+
+    this.time.delayedCall(1800, () => {
+      goText.setAlpha(1);
+      scoreText.setAlpha(1);
+    });
+
+    let firePhase = 0;
+    const drawScene = (): void => {
+      firePhase += 0.18;
+      this.crashGfx.clear();
+
+      // Dramatic smoke-orange sky (horizontal gradient strips).
+      const sky: [number, number][] = [
+        [0, 0x0a0505], [70, 0x1c0906], [140, 0x380e08], [210, 0x601808],
+        [280, 0x902808], [350, 0xbe3c08], [410, 0xd85010], [455, 0xec7020],
+        [480, 0xf09030],
+      ];
+      for (let i = 0; i < sky.length - 1; i++) {
+        this.crashGfx.fillStyle(sky[i][1], 1);
+        this.crashGfx.fillRect(0, sky[i][0], W, sky[i + 1][0] - sky[i][0]);
+      }
+      this.crashGfx.fillStyle(0xf09030, 1);
+      this.crashGfx.fillRect(0, sky[sky.length - 1][0], W, GY - sky[sky.length - 1][0]);
+
+      // ── Terrain ───────────────────────────────────────────────────────────
+      if (terrain === 0) {
+        // Forest.
+        this.crashGfx.fillStyle(0x0e1e14, 1);
+        this.crashGfx.fillRect(0, GY, W, H - GY);
+        // Ground surface.
+        this.crashGfx.fillStyle(0x162218, 1);
+        this.crashGfx.fillRect(0, GY, W, 18);
+        // Pine trees.
+        for (const [tx, by] of [[80, GY], [220, GY - 10], [370, GY + 5], [830, GY - 5], [970, GY], [1150, GY - 8]] as [number, number][]) {
+          this.crashGfx.fillStyle(0x0a1810, 1);
+          this.crashGfx.fillTriangle(tx, by - 82, tx - 28, by, tx + 28, by);
+          this.crashGfx.fillTriangle(tx, by - 60, tx - 22, by + 10, tx + 22, by + 10);
+          this.crashGfx.fillTriangle(tx, by - 38, tx - 16, by + 20, tx + 16, by + 20);
+          this.crashGfx.fillStyle(0x1a0e06, 1);
+          this.crashGfx.fillRect(tx - 4, by + 18, 8, GY - by + 4);
+        }
+      } else if (terrain === 1) {
+        // Riverside.
+        this.crashGfx.fillStyle(0x162010, 1);
+        this.crashGfx.fillRect(0, GY, W, H - GY);
+        this.crashGfx.fillStyle(0x162218, 1);
+        this.crashGfx.fillRect(0, GY, W, 18);
+        // River channel.
+        this.crashGfx.fillStyle(0x1e2c3e, 1);
+        this.crashGfx.fillRect(230, GY + 15, 520, 72);
+        this.crashGfx.fillStyle(0x162434, 1);
+        this.crashGfx.fillRect(255, GY + 25, 470, 52);
+        // Reeds.
+        for (let r = 0; r < 10; r++) {
+          this.crashGfx.lineStyle(2, 0x2a4420, 0.85);
+          this.crashGfx.lineBetween(222 + r * 14, GY + 62, 220 + r * 14, GY + 22);
+          this.crashGfx.lineBetween(758 - r * 14, GY + 62, 756 - r * 14, GY + 22);
+        }
+      } else {
+        // Mountainside.
+        this.crashGfx.fillStyle(0x1e1c20, 1);
+        this.crashGfx.fillRect(0, GY, W, H - GY);
+        this.crashGfx.fillStyle(0x28242c, 1);
+        this.crashGfx.fillTriangle(0, GY + 20, 200, GY - 95, 390, GY + 10);
+        this.crashGfx.fillTriangle(370, GY + 10, 580, GY - 125, 770, GY + 10);
+        this.crashGfx.fillTriangle(750, GY + 10, 950, GY - 100, 1110, GY + 10);
+        this.crashGfx.fillTriangle(1090, GY + 10, 1280, GY - 80, 1280, GY + 20);
+        // Snow caps.
+        this.crashGfx.fillStyle(0xdde0e8, 0.4);
+        this.crashGfx.fillTriangle(200, GY - 95, 170, GY - 65, 230, GY - 65);
+        this.crashGfx.fillTriangle(580, GY - 125, 548, GY - 90, 614, GY - 90);
+        this.crashGfx.fillTriangle(950, GY - 100, 920, GY - 72, 980, GY - 72);
+      }
+
+      // ── Rising smoke (5 puffs) ────────────────────────────────────────────
+      for (let s = 0; s < 5; s++) {
+        const px = cx - 28 + Math.sin(firePhase * 0.07 + s * 0.9) * 7 + s * 9;
+        const py = GY - 52 - s * 44;
+        const pr = 26 + s * 17 + Math.sin(firePhase + s * 1.3) * 5;
+        const pa = (0.65 - s * 0.1) * 0.9;
+        this.crashGfx.fillStyle(0x2a1a14, pa);
+        this.crashGfx.fillCircle(px, py, pr);
+      }
+
+      // ── Crashed plane ─────────────────────────────────────────────────────
+      const ang = 0.52; // ~30° clockwise (nose tilting forward/down)
+      const cosA = Math.cos(ang); const sinA = Math.sin(ang);
+      const rot = (lx: number, ly: number): [number, number] => [
+        cx + lx * cosA - ly * sinA,
+        GY - 22 + lx * sinA + ly * cosA,
+      ];
+
+      // Fuselage (slightly desaturated — battle-worn).
+      this.crashGfx.fillStyle(0x2d7ab0, 1);
+      this.crashGfx.beginPath();
+      const [px0, py0] = rot(PLANE_SIDE_POLY[0][0], PLANE_SIDE_POLY[0][1]);
+      this.crashGfx.moveTo(px0, py0);
+      for (let i = 1; i < PLANE_SIDE_POLY.length; i++) {
+        const [px, py] = rot(PLANE_SIDE_POLY[i][0], PLANE_SIDE_POLY[i][1]);
+        this.crashGfx.lineTo(px, py);
+      }
+      this.crashGfx.closePath();
+      this.crashGfx.fillPath();
+
+      // Broken wing (droops further than normal).
+      this.crashGfx.fillStyle(0x1e6090, 1);
+      const [bw0x, bw0y] = rot(12,  4);
+      const [bw1x, bw1y] = rot(-5,  4);
+      const [bw2x, bw2y] = rot(-2, 46); // droops extra
+      this.crashGfx.fillTriangle(bw0x, bw0y, bw1x, bw1y, bw2x, bw2y);
+
+      // Cockpit (dark, shattered).
+      this.crashGfx.fillStyle(0x0a1a28, 1);
+      const [cpx, cpy] = rot(10, -7);
+      this.crashGfx.fillEllipse(cpx, cpy, 14, 7);
+
+      // Fire at engine (rear/tail).
+      const [efx, efy] = rot(-22, 2);
+      const fv1 = 0.75 + 0.25 * Math.sin(firePhase * 2.1);
+      const fv2 = 0.70 + 0.30 * Math.cos(firePhase * 1.8 + 0.9);
+      this.crashGfx.fillStyle(0xaa1800, 0.9);
+      this.crashGfx.fillEllipse(efx, efy, 54 * fv1, 60 * fv1);
+      this.crashGfx.fillStyle(0xff5500, 0.9);
+      this.crashGfx.fillEllipse(efx + 2, efy - 6, 38 * fv2, 46 * fv2);
+      this.crashGfx.fillStyle(0xffaa00, 1);
+      this.crashGfx.fillEllipse(efx + 2, efy - 11, 24 * fv1, 30 * fv1);
+      this.crashGfx.fillStyle(0xffffff, 0.85);
+      this.crashGfx.fillEllipse(efx + 2, efy - 15, 10, 13);
+
+      // Ground crash marks / debris cloud.
+      this.crashGfx.fillStyle(0x443322, 0.35);
+      this.crashGfx.fillEllipse(cx + 65, GY + 12, 200, 22);
+      this.crashGfx.lineStyle(2, 0x443322, 0.55);
+      for (let d = 0; d < 4; d++) {
+        this.crashGfx.lineBetween(cx + 32 + d * 44, GY + 4, cx + 50 + d * 44, GY + 14);
+      }
+    };
+
+    drawScene();
+    this.time.addEvent({ delay: 60, loop: true, callback: drawScene });
+
+    this.time.delayedCall(5000, () => {
       missionState.startMission({ theme: 'coldfront', difficulty: missionState.difficulty, seed: Date.now() });
       this.scene.start('MapScene', { launchIndex: 0 });
     });
@@ -1231,6 +1428,7 @@ export class AttackRunScene extends Phaser.Scene {
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.touchControls?.destroy();
     this.proximityBeep.dispose();
+    this.engineSound.dispose();
     gameUi.attackRunSecsLeft = 0;
   }
 }
