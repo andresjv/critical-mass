@@ -6,7 +6,21 @@ import type { ChallengerData } from './challengeLink';
 import type { HowToPlayStage } from './howToPlay';
 
 export type DeviceHint = 'keyboard' | 'touch' | 'gamepad';
+export type ProgressStep = 'map' | 'hangar' | 'attack_run' | 'silos';
 export type { ChallengerData, HowToPlayStage };
+
+export interface StageIntroData {
+  stageName: string;
+  goal: string;
+  keyboard: string[];
+  touch: string[];
+}
+
+export interface StageResultData {
+  headline: string;
+  details: string[];
+  next: string;
+}
 
 export const gameUi = {
   /** Last active input device — drives key-hint labels in the HUD. */
@@ -40,4 +54,34 @@ export const gameUi = {
   // ── Silo HUD ─────────────────────────────────────────────────────────
   silosDestroyed: 0,   // 0–4 side silos hit this run
   centralSiloDown: false,
+
+  // ── Player guidance ───────────────────────────────────────────────────
+
+  /** Layer 1: Mission briefing card shown at game start. */
+  showBriefing: false,
+
+  /** Layer 2: Progress breadcrumb — current stage step. */
+  progressStep: null as ProgressStep | null,
+  /** Launch number (1-based) for the breadcrumb sub-line. */
+  launchNumber: 1,
+
+  /** Layer 3: Stage intro card — shown first visit per session. */
+  stageIntro: null as StageIntroData | null,
+
+  /** Layer 4: Short objective line shown below the progress bar. */
+  objective: '',
+
+  /** Layer 6: Contextual hint shown after 5s of inactivity. */
+  contextualHint: null as string | null,
+
+  /** Layer 7: Event callout banner text. */
+  callout: null as string | null,
+  /** Timestamp (ms) when the callout should disappear. */
+  calloutExpiry: 0,
+
+  /** Layer 8: Stage result card shown at scene transitions. */
+  stageResult: null as StageResultData | null,
+
+  /** Layer 9: "Coming soon" card for placeholder stages. */
+  showComingSoon: false,
 };

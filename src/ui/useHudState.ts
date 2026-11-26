@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react';
 import { missionState } from '../state/MissionState';
 import { debugInfo } from '../state/debugInfo';
-import { gameUi, type ChallengerData, type HowToPlayStage } from '../state/gameUi';
+import {
+  gameUi,
+  type ChallengerData,
+  type HowToPlayStage,
+  type ProgressStep,
+  type StageIntroData,
+  type StageResultData,
+} from '../state/gameUi';
 
 export interface HudState {
   score: number;
@@ -33,6 +40,17 @@ export interface HudState {
   // Silo
   silosDestroyed: number;
   centralSiloDown: boolean;
+  // Player guidance
+  showBriefing: boolean;
+  progressStep: ProgressStep | null;
+  launchNumber: number;
+  stageIntro: StageIntroData | null;
+  objective: string;
+  contextualHint: string | null;
+  callout: string | null;
+  calloutExpiry: number;
+  stageResult: StageResultData | null;
+  showComingSoon: boolean;
 }
 
 function snapshot(): HudState {
@@ -61,6 +79,17 @@ function snapshot(): HudState {
     attackRunSecsLeft: gameUi.attackRunSecsLeft,
     silosDestroyed: gameUi.silosDestroyed,
     centralSiloDown: gameUi.centralSiloDown,
+    // Player guidance
+    showBriefing:    gameUi.showBriefing,
+    progressStep:    gameUi.progressStep,
+    launchNumber:    gameUi.launchNumber,
+    stageIntro:      gameUi.stageIntro,
+    objective:       gameUi.objective,
+    contextualHint:  gameUi.contextualHint,
+    callout:         gameUi.callout,
+    calloutExpiry:   gameUi.calloutExpiry,
+    stageResult:     gameUi.stageResult,
+    showComingSoon:  gameUi.showComingSoon,
   };
 }
 

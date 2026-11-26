@@ -12,6 +12,7 @@ import { gameUi } from '../../state/gameUi';
 import { SILO, TUNING, SCORE } from '../../state/tuning';
 import { createRng } from '../../state/rng';
 import { hasSeenHowToPlay, markSeenHowToPlay } from '../../state/howToPlay';
+import { showStageIntro } from '../../state/stageIntros';
 import {
   project,
   drawGround,
@@ -75,6 +76,9 @@ interface Interceptor {
 export class SiloScene extends Phaser.Scene {
   private launchIndex = 0;
 
+  // Contextual hint timer.
+  private hintTimer = 0;
+
   // ── World state ──────────────────────────────────────────────────────────
   private playerWorldX = 0;      // world X of reticle (±SILO.worldXRange)
   private playerWorldY = 200;    // world altitude of reticle (worldYMin..worldYMax)
@@ -112,6 +116,7 @@ export class SiloScene extends Phaser.Scene {
     this.prevFire = false;
     this.accumulator = 0;
     this.frameTime = 0;
+    this.hintTimer = 0;
   }
 
   create(): void {
@@ -137,6 +142,15 @@ export class SiloScene extends Phaser.Scene {
     gameUi.silosDestroyed = 0;
     gameUi.centralSiloDown = false;
     missionState.hudCue = 'ALIGN RETICLE — FIRE [ACTION]';
+
+    // Progress breadcrumb.
+    gameUi.progressStep   = 'silos';
+    gameUi.launchNumber   = this.launchIndex + 1;
+    gameUi.objective      = 'Destroy the central silo';
+    gameUi.contextualHint = null;
+
+    // Stage intro card (first visit this session).
+    showStageIntro('silos');
 
     // ── How-to-play ───────────────────────────────────────────────────────
     if (!hasSeenHowToPlay('silo_strike')) {
@@ -190,6 +204,18 @@ export class SiloScene extends Phaser.Scene {
       SILO.worldYMin,
       SILO.worldYMax,
     );
+
+    // Contextual hint after 5s without movement.
+    const hasMovement = Math.abs(inp.moveX) > 0.05 || Math.abs(inp.moveY) > 0.05;
+    if (hasMovement) {
+      this.hintTimer = 0;
+      gameUi.contextualHint = null;
+    } else {
+      this.hintTimer += dt;
+      if (this.hintTimer >= 5) {
+        gameUi.contextualHint = 'Move reticle to a silo window';
+      }
+    }
 
     // ── Fire rocket ────────────────────────────────────────────────────────
     const fireNow = inp.fire || inp.action;
@@ -331,8 +357,14 @@ export class SiloScene extends Phaser.Scene {
       gameUi.centralSiloDown = true;
       missionState.siteDestroyed();
       // Check all-silos bonus
-      if (this.silosDestroyedCount + 1 >= SILO_COUNT) {
+      const allDown = this.silosDestroyedCount + 1 >= SILO_COUNT;
+      if (allDown) {
         missionState.addScore(SCORE.allSilosBonus);
+        gameUi.callout       = 'ALL SILOS DOWN  +5000';
+        gameUi.calloutExpiry = Date.now() + 1500;
+      } else {
+        gameUi.callout       = 'LAUNCH STOPPED';
+        gameUi.calloutExpiry = Date.now() + 1500;
       }
       this.silosDestroyedCount++;
       gameUi.silosDestroyed = this.silosDestroyedCount;
@@ -342,6 +374,8 @@ export class SiloScene extends Phaser.Scene {
       gameUi.silosDestroyed = this.silosDestroyedCount;
       missionState.addScore(SCORE.sideSilo);
       missionState.addPlane();
+      gameUi.callout       = '+1 PLANE';
+      gameUi.calloutExpiry = Date.now() + 1500;
       // Check all-silos bonus (only if all 5 destroyed, central included as last)
       if (this.silosDestroyedCount >= SILO_COUNT) {
         missionState.addScore(SCORE.allSilosBonus);
@@ -354,6 +388,15 @@ export class SiloScene extends Phaser.Scene {
     this.stageDone = true;
     this.stageDoneTimer = 2.0;  // show result briefly before transitioning
     missionState.hudCue = '';
+    gameUi.contextualHint = null;
+
+    // Stage result card — central silo destroyed.
+    const moreSites = this.launchIndex < 3; // 0-indexed, 4 total sites
+    gameUi.stageResult = {
+      headline: 'LAUNCH STOPPED',
+      details: ['Central silo destroyed'],
+      next: moreSites ? 'Next launch site' : 'Vostgrad Assault',
+    };
   }
 
   private crashPlane(): void {
@@ -373,18 +416,35 @@ export class SiloScene extends Phaser.Scene {
     }
 
     // If central silo is NOT down, the launch succeeds → lose a city
-    if (!gameUi.centralSiloDown) {
+    const centralDown = gameUi.centralSiloDown;
+    if (!centralDown) {
+      const CITIES = ['Harlan Bay', 'Port Cressa', 'New Allis', 'Veldor'];
+      const cityName = CITIES[this.launchIndex % CITIES.length] ?? 'City';
       missionState.cityLost();
+      // Show "launch succeeded" result card briefly.
+      gameUi.stageResult = {
+        headline: 'LAUNCH SUCCEEDED',
+        details: [`City hit — one city lost`],
+        next: 'Next launch site',
+      };
+      gameUi.callout       = `CITY LOST: ${cityName}`;
+      gameUi.calloutExpiry = Date.now() + 1500;
     }
 
-    gameUi.silosDestroyed = 0;
+    gameUi.silosDestroyed  = 0;
     gameUi.centralSiloDown = false;
 
     if (missionState.isGameOver) {
+      gameUi.stageResult = null;
       this.scene.start('MapScene');
       return;
     }
-    this.scene.start('PlaceholderAssaultScene', { launchIndex: this.launchIndex });
+
+    // Delay transition slightly so the result card is visible.
+    this.time.delayedCall(centralDown ? 0 : 2000, () => {
+      gameUi.stageResult = null;
+      this.scene.start('PlaceholderAssaultScene', { launchIndex: this.launchIndex });
+    });
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -559,8 +619,14 @@ export class SiloScene extends Phaser.Scene {
     this.effectGfx.fillCircle(rp.sx, rp.sy, 3);
   }
 
-  destroy(): void {
+  shutdown(): void {
+    gameUi.contextualHint = null;
+    gameUi.stageResult    = null;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.touchControls?.destroy();
+  }
+
+  destroy(): void {
+    this.shutdown();
   }
 }

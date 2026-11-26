@@ -5,6 +5,7 @@ import { missionState } from '../../state/MissionState';
 import { debugInfo } from '../../state/debugInfo';
 import { gameUi } from '../../state/gameUi';
 import { HANGAR } from '../../state/tuning';
+import { showStageIntro } from '../../state/stageIntros';
 
 const W = 1280;
 const H = 720;
@@ -54,6 +55,9 @@ interface HangarData {
 export class HangarScene extends Phaser.Scene {
   // ── Persistent across restarts ───────────────────────────────────────────
   private launchIndex = 0;
+
+  // Contextual hint timer (seconds of no relevant input).
+  private hintTimer = 0;
 
   // ── Physics state ────────────────────────────────────────────────────────
   private px = W / 2;
@@ -124,6 +128,15 @@ export class HangarScene extends Phaser.Scene {
   create(): void {
     this.scene.bringToTop('HudScene');
     gameUi.mapActive = false;
+
+    // Progress breadcrumb.
+    gameUi.progressStep   = 'hangar';
+    gameUi.launchNumber   = this.launchIndex + 1;
+    gameUi.objective      = 'Fly through the bay doors';
+    gameUi.contextualHint = null;
+
+    // Stage intro card (first visit this session).
+    showStageIntro('hangar');
 
     // ── Background ──────────────────────────────────────────────────────────
     this.add.rectangle(W / 2, H / 2, W, H, 0x040410);
@@ -244,6 +257,23 @@ export class HangarScene extends Phaser.Scene {
       const rad = Phaser.Math.DegToRad(this.shipAngle);
       this.vx += Math.cos(rad) * HANGAR.thrustAccel * dt;
       this.vy += Math.sin(rad) * HANGAR.thrustAccel * dt;
+    }
+
+    // Contextual hints.
+    const hasThrust = this.thrusting || Math.abs(moveX) > 0.1;
+    if (hasThrust) {
+      this.hintTimer = 0;
+      gameUi.contextualHint = null;
+    } else {
+      this.hintTimer += dt;
+      if (this.hintTimer >= 5) {
+        // Different hint depending on door state.
+        if (this.doorState === 'open') {
+          gameUi.contextualHint = 'Doors open — fly up through them!';
+        } else {
+          gameUi.contextualHint = 'Hold ↑ to thrust forward';
+        }
+      }
     }
 
     const dragFactor = 1 - HANGAR.drag * dt;
@@ -452,8 +482,12 @@ export class HangarScene extends Phaser.Scene {
   }
 
   private onImpactExpired(): void {
+    const CITIES = ['Harlan Bay', 'Port Cressa', 'New Allis', 'Veldor'];
+    const cityName = CITIES[this.launchIndex % CITIES.length] ?? 'City';
     missionState.cityLost();
     missionState.hudCue = 'CITY LOST';
+    gameUi.callout       = `CITY LOST: ${cityName}`;
+    gameUi.calloutExpiry = Date.now() + 1500;
     this.time.delayedCall(1500, () => {
       if (missionState.isGameOver) {
         this.showGameOver();
@@ -614,6 +648,7 @@ export class HangarScene extends Phaser.Scene {
   }
 
   shutdown(): void {
+    gameUi.contextualHint = null;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.touchControls?.destroy();
   }

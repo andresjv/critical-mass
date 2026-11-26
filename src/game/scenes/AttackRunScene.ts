@@ -9,6 +9,7 @@ import { gameUi } from '../../state/gameUi';
 import { ATTACK_RUN, TUNING, SCORE } from '../../state/tuning';
 import { createRng } from '../../state/rng';
 import { hasSeenHowToPlay, markSeenHowToPlay } from '../../state/howToPlay';
+import { showStageIntro } from '../../state/stageIntros';
 
 const W = 1280;
 const H = 720;
@@ -89,6 +90,9 @@ interface HeatSeeker {
 export class AttackRunScene extends Phaser.Scene {
   private launchIndex   = 0;
 
+  // Contextual hint timer.
+  private hintTimer = 0;
+
   // ── Terrain data ─────────────────────────────────────────────────────────
   private groundHeights: number[] = [];
   private obstacles: Obstacle[] = [];
@@ -151,6 +155,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.nextHeatSeekerIdx   = 0;
     this.accumulator = 0;
     this.prevFire    = false;
+    this.hintTimer   = 0;
   }
 
   create(): void {
@@ -160,6 +165,15 @@ export class AttackRunScene extends Phaser.Scene {
     missionState.hudCue = 'ATTACK RUN';
     debugInfo.doorState = '—';
     debugInfo.speed     = 0;
+
+    // Progress breadcrumb.
+    gameUi.progressStep   = 'attack_run';
+    gameUi.launchNumber   = this.launchIndex + 1;
+    gameUi.objective      = 'Survive and reach the silos';
+    gameUi.contextualHint = null;
+
+    // Stage intro card (first visit this session).
+    showStageIntro('attack_run');
 
     // ── Generate terrain ────────────────────────────────────────────────────
     this.totalSegments = Math.ceil(
@@ -281,6 +295,17 @@ export class AttackRunScene extends Phaser.Scene {
       ATTACK_RUN.altitudeMax,
     );
     this.thrusting = Math.abs(mx) > 0.05 || Math.abs(my) > 0.05;
+
+    // Contextual hint after 5s without movement.
+    if (this.thrusting) {
+      this.hintTimer = 0;
+      gameUi.contextualHint = null;
+    } else {
+      this.hintTimer += dt;
+      if (this.hintTimer >= 5) {
+        gameUi.contextualHint = 'Move up/down to dodge enemies';
+      }
+    }
 
     // Ground collision.
     const groundY = this.groundYAtWorldX(this.cameraX + this.planeX);
@@ -535,6 +560,8 @@ export class AttackRunScene extends Phaser.Scene {
             this.heatSeeker = null;
             missionState.addScore(SCORE.heatSeekerFromBehind);
             missionState.hudCue = `HEAT-SEEKER DOWN! +${SCORE.heatSeekerFromBehind}`;
+            gameUi.callout = `+${SCORE.heatSeekerFromBehind}  NICE SHOT`;
+            gameUi.calloutExpiry = Date.now() + 1500;
             break;
           }
         }
@@ -554,7 +581,15 @@ export class AttackRunScene extends Phaser.Scene {
 
     if (this.stageTimer <= 0) {
       gameUi.attackRunSecsLeft = 0;
-      this.time.delayedCall(300, () => {
+      gameUi.contextualHint = null;
+      // Show stage result card for 2s before transitioning.
+      gameUi.stageResult = {
+        headline: 'ATTACK RUN COMPLETE',
+        details: [],
+        next: 'SILO STRIKE — target the central silo',
+      };
+      this.time.delayedCall(2000, () => {
+        gameUi.stageResult = null;
         this.scene.start('SiloScene', { launchIndex: this.launchIndex });
       });
       this.planeState = 'gameover'; // freeze updates
@@ -805,9 +840,14 @@ export class AttackRunScene extends Phaser.Scene {
   }
 
   private onImpactExpired(): void {
+    const CITIES = ['Harlan Bay', 'Port Cressa', 'New Allis', 'Veldor'];
+    const cityName = CITIES[this.launchIndex % CITIES.length] ?? 'City';
     missionState.cityLost();
-    missionState.hudCue = 'CITY LOST';
+    missionState.hudCue      = 'CITY LOST';
     gameUi.attackRunSecsLeft = 0;
+    gameUi.contextualHint    = null;
+    gameUi.callout           = `CITY LOST: ${cityName}`;
+    gameUi.calloutExpiry     = Date.now() + 1500;
     this.planeState = 'gameover';
 
     this.time.delayedCall(1500, () => {
@@ -839,6 +879,8 @@ export class AttackRunScene extends Phaser.Scene {
   }
 
   shutdown(): void {
+    gameUi.contextualHint = null;
+    gameUi.stageResult    = null;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.touchControls?.destroy();
     gameUi.attackRunSecsLeft = 0;

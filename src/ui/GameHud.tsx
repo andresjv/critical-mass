@@ -11,6 +11,24 @@ function actionLabel(device: HudState['device']): string {
   return 'X';
 }
 
+/** Format seconds as m:ss when >= 60, otherwise Ns. */
+function formatClock(secs: number): string {
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${String(s).padStart(2, '0')}s`;
+}
+
+const LABEL_STYLE: React.CSSProperties = {
+  fontFamily: "'Space Grotesk', sans-serif",
+  fontSize: 11,
+  letterSpacing: 2,
+  color: '#556677',
+  textTransform: 'uppercase' as const,
+  display: 'block',
+  marginBottom: 2,
+};
+
 export function GameHud({ s }: Props) {
   const score = String(s.score).padStart(7, '0');
   const clockSecs = Math.ceil(s.clock);
@@ -24,7 +42,7 @@ export function GameHud({ s }: Props) {
         top: 0,
         left: 0,
         right: 0,
-        height: 48,
+        height: 64,
         background: 'rgba(0,0,0,0.65)',
         display: 'flex',
         alignItems: 'center',
@@ -32,43 +50,71 @@ export function GameHud({ s }: Props) {
         gap: 0,
       }}>
         {/* Score */}
-        <span style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 28,
-          color: '#ffffff',
-          letterSpacing: 2,
-          flex: 1,
-        }}>
-          {score}
-        </span>
-
-        {/* Impact clock */}
-        {s.clock > 0 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <span style={LABEL_STYLE}>SCORE</span>
           <span style={{
             fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 32,
-            color: clockColor,
-            letterSpacing: 1,
-            flex: 1,
-            textAlign: 'center',
+            fontSize: 28,
+            color: '#ffffff',
+            letterSpacing: 2,
           }}>
-            {clockSecs}s
+            {score}
           </span>
-        )}
-        {s.clock <= 0 && <span style={{ flex: 1 }} />}
+        </div>
+
+        {/* Impact clock */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          {s.clock > 0 ? (
+            <>
+              <span style={{ ...LABEL_STYLE, textAlign: 'center' }}>MISSILE IMPACT</span>
+              <span style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 32,
+                color: clockColor,
+                letterSpacing: 1,
+              }}>
+                {formatClock(clockSecs)}
+              </span>
+            </>
+          ) : (
+            <span style={{ flex: 1 }} />
+          )}
+        </div>
 
         {/* Planes */}
-        <span style={{
-          fontFamily: "'Space Grotesk', sans-serif",
-          fontSize: 24,
-          color: '#88ccff',
-          flex: 1,
-          textAlign: 'right',
-          letterSpacing: 4,
-        }}>
-          {'▶'.repeat(Math.max(0, s.planes))}
-        </span>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <span style={{ ...LABEL_STYLE, textAlign: 'right' }}>PLANES</span>
+          <span style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: 24,
+            color: '#88ccff',
+            letterSpacing: 4,
+          }}>
+            {'▶'.repeat(Math.max(0, s.planes))}
+          </span>
+        </div>
       </div>
+
+      {/* ── Objective line ───────────────────────────────────────────────── */}
+      {s.objective && s.progressStep && (
+        <div style={{
+          position: 'absolute',
+          top: s.launchSite ? 103 : 85,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          pointerEvents: 'none',
+        }}>
+          <span style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: 13,
+            color: '#556677',
+            letterSpacing: 1,
+          }}>
+            {s.objective}
+          </span>
+        </div>
+      )}
 
       {/* ── Stage cue at bottom-centre ──────────────────────────────────── */}
       {s.hudCue && (
@@ -94,7 +140,7 @@ export function GameHud({ s }: Props) {
       {s.attackRunSecsLeft > 0 && (
         <div style={{
           position: 'absolute',
-          top: 56,
+          top: 72,
           right: 24,
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: 26,
@@ -108,7 +154,7 @@ export function GameHud({ s }: Props) {
       {s.silosDestroyed > 0 && (
         <div style={{
           position: 'absolute',
-          top: 56,
+          top: 72,
           right: 24,
           fontFamily: "'Space Grotesk', sans-serif",
           fontSize: 22,
