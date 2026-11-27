@@ -8,6 +8,8 @@ export type TreeKind = 'pine' | 'snowpine' | 'swamp' | 'cactus' | 'rocks';
 export type PoolKind = 'lake' | 'ice' | 'bog' | 'oasis' | 'crater';
 export type SkyBodyKind = 'moon' | 'sun' | 'earth';
 export type BuildingKind = 'block' | 'cabin' | 'adobe' | 'logcabin' | 'dome';
+export type Weather = 'none' | 'rain' | 'fireflies' | 'dust' | 'snow' | 'meteors';
+export type Landmark = 'tower' | 'shack' | 'arch' | 'radar' | 'dish';
 export type GroundDecor = 'grass' | 'reeds' | 'stones' | 'snow' | 'craters';
 
 export interface RidgeLayer {
@@ -41,6 +43,12 @@ export interface Biome {
     outside: number; outsideDetail: number;
   };
   pylon: { body: number; beacon: number };
+  /** Background atmosphere: drifting clouds, weather particles, landmark silhouettes. */
+  atmos: {
+    clouds: { color: number; shade: number; alpha: number } | null;
+    weather: Weather; weatherColor: number;
+    landmark: Landmark; beacon: number;
+  };
 }
 
 const BIOMES: Record<LevelId, Biome> = {
@@ -60,6 +68,7 @@ const BIOMES: Record<LevelId, Biome> = {
     sam:      { box: 0x443322, rail: 0x556644 },
     hangar:   { floor: 0x2a3138, floorLine: 0x384048, wall: 0x1c2430, wallRib: 0x2c3846, lamp: 0xfff2c8, drift: null, outside: 0x1a3020, outsideDetail: 0x0f2216 },
     pylon:    { body: 0x445566, beacon: 0xffaa00 },
+    atmos:    { clouds: { color: 0x2c3e58, shade: 0x1a2638, alpha: 0.55 }, weather: 'rain', weatherColor: 0x9fb8d8, landmark: 'tower', beacon: 0xff3a2a },
   },
   swamp: {
     sky:  { top: 0x0e1612, bottom: 0x2b3a2c, stars: 0xc9d6b0, starAlpha: 0.35, horizonGlow: 0x4a5a38 },
@@ -77,6 +86,7 @@ const BIOMES: Record<LevelId, Biome> = {
     sam:      { box: 0x4a3a26, rail: 0x5a5a34 },
     hangar:   { floor: 0x2c3029, floorLine: 0x3a3f34, wall: 0x22261e, wallRib: 0x343a2c, lamp: 0xf4e8a8, drift: 0x3a3322, outside: 0x24301a, outsideDetail: 0x16220f },
     pylon:    { body: 0x4a4a3a, beacon: 0xffcc33 },
+    atmos:    { clouds: { color: 0x3c4a3a, shade: 0x262f24, alpha: 0.45 }, weather: 'fireflies', weatherColor: 0xd8ff6a, landmark: 'shack', beacon: 0xffb84a },
   },
   desert: {
     sky:  { top: 0x5a8cc8, bottom: 0xf0c890, stars: 0xffffff, starAlpha: 0, horizonGlow: 0xffd8a0 },
@@ -94,6 +104,7 @@ const BIOMES: Record<LevelId, Biome> = {
     sam:      { box: 0xa8885a, rail: 0x8a7048 },
     hangar:   { floor: 0x6a6458, floorLine: 0x7a7466, wall: 0x4a4236, wallRib: 0x5e5446, lamp: 0xfff4d8, drift: 0xd2a868, outside: 0xc8935a, outsideDetail: 0x4a7a3a },
     pylon:    { body: 0x8a7458, beacon: 0xff5522 },
+    atmos:    { clouds: { color: 0xfff4e4, shade: 0xe8c8a0, alpha: 0.8 }, weather: 'dust', weatherColor: 0xe8c48a, landmark: 'arch', beacon: 0xff3a2a },
   },
   snow: {
     sky:  { top: 0x7f9ab8, bottom: 0xdfe8f0, stars: 0xffffff, starAlpha: 0, horizonGlow: 0xf4f8fc },
@@ -111,6 +122,7 @@ const BIOMES: Record<LevelId, Biome> = {
     sam:      { box: 0xc8d0d8, rail: 0x8a96a2 },
     hangar:   { floor: 0x4a525c, floorLine: 0x5a636e, wall: 0x2e3640, wallRib: 0x3e4854, lamp: 0xe8f4ff, drift: 0xeef4fa, outside: 0xe6eef5, outsideDetail: 0x1f3a32 },
     pylon:    { body: 0x5a6a7a, beacon: 0xff3322 },
+    atmos:    { clouds: { color: 0xe4ecf4, shade: 0xb8c6d4, alpha: 0.6 }, weather: 'snow', weatherColor: 0xffffff, landmark: 'radar', beacon: 0xff3a2a },
   },
   moon: {
     sky:  { top: 0x010205, bottom: 0x0a0c14, stars: 0xffffff, starAlpha: 1, horizonGlow: null },
@@ -128,6 +140,7 @@ const BIOMES: Record<LevelId, Biome> = {
     sam:      { box: 0xb8bcc4, rail: 0x6a6e76 },
     hangar:   { floor: 0x3a3e46, floorLine: 0x4c525c, wall: 0x262a32, wallRib: 0x3a404a, lamp: 0xbfeaff, drift: null, outside: 0x6b6e75, outsideDetail: 0x4e5056 },
     pylon:    { body: 0x9aa0aa, beacon: 0x66ddff },
+    atmos:    { clouds: null, weather: 'meteors', weatherColor: 0xfff2d0, landmark: 'dish', beacon: 0x6af0ff },
   },
 };
 

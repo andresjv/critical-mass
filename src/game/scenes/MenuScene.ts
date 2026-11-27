@@ -59,6 +59,6 @@ export class MenuScene extends Phaser.Scene {
       this.backdrop.setBiome(getBiome(this.shownLevel), 3);
     }
     this.cameraX += MENU_SCROLL * delta * 0.001;
-    this.backdrop.draw(this.cameraX);
+    this.backdrop.draw(this.cameraX, this.time.now);
   }
 }

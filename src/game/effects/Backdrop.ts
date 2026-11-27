@@ -1,7 +1,8 @@
 // Backdrop — sky plus scrolling parallax scenery for a biome.
 //   sky  (static):  gradient, stars, sun / moon / Earth
 //   far  (0.05 / 0.12): two ridge layers (peaks, dunes or mesas) with optional caps
-//   mid  (0.25 / 0.45): hills with pools, then a tree line (pines, swamp trees, cacti, rocks)
+//   mid  (0.25 / 0.35 / 0.45): hills with pools and landmarks, a distant tree row, the main tree line
+//   atmosphere: drifting clouds, haze between layers, twinkling stars, weather particles
 // Visual only; layout comes from a deterministic hash so a given seed always looks the same.
 import Phaser from 'phaser';
 import type { Biome, RidgeLayer } from '../theme/biomes';
@@ -14,6 +15,12 @@ const H = 720;
 export function hash01(n: number): number {
   const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return s - Math.floor(s);
+}
+
+/** Linear blend of two 0xRRGGBB colours (t = 0 → a, 1 → b). */
+function mix(a: number, b: number, t: number): number {
+  const ch = (sh: number): number => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t) << sh;
+  return ch(16) | ch(8) | ch(0);
 }
 
 export class Backdrop {
@@ -81,12 +88,18 @@ export class Backdrop {
     }
   }
 
-  draw(cameraX: number): void {
+  /** time = scene clock in ms (drives clouds, weather and blinking lights). */
+  draw(cameraX: number, time = 0): void {
     const b = this.biome;
     const g = this.farGfx;
     g.clear();
+    this.drawTwinkles(g, time);
+    this.drawClouds(g, cameraX * 0.02 + time * 0.006, 0);
     this.drawRidge(g, cameraX * 0.05, 330, 150, 380, b.far, 1);
+    this.haze(g, 180, 0.22);
+    this.drawClouds(g, cameraX * 0.06 + time * 0.012, 1);
     this.drawRidge(g, cameraX * 0.12, 400, 120, 260, b.mid, 2);
+    this.haze(g, 280, 0.12);
 
     const m = this.midGfx;
     m.clear();
@@ -103,6 +116,14 @@ export class Backdrop {
     for (let sx = 0; sx <= W; sx += 20) m.lineTo(sx, hillY(sx));
     m.lineTo(W, H); m.closePath(); m.fillPath();
 
+    // Landmarks on the hills: radio towers, shacks, rock arches, radar domes, dishes.
+    const LGAP = 760;
+    for (let n = Math.floor(hillOff / LGAP) - 1; n <= Math.floor((hillOff + W) / LGAP) + 1; n++) {
+      if (hash01(n * 1.37 + s + 9) > 0.7) continue;
+      const sx = n * LGAP + 340 + hash01(n * 2.9 + s) * 200 - hillOff;
+      this.drawLandmark(m, sx, hillY(sx) + 6, n, time);
+    }
+
     // Pools in the hills: lakes, frozen ponds, bogs, oases or craters.
     const GAP = 640;
     for (let n = Math.floor(hillOff / GAP) - 1; n <= Math.floor((hillOff + W) / GAP) + 1; n++) {
@@ -112,6 +133,17 @@ export class Backdrop {
       const y  = hillY(sx) + 22;
       this.drawPool(m, sx, y, w);
     }
+
+    // Distant tree row: smaller, hazier, slower.
+    const rowOff = cameraX * 0.35 + s * 71;
+    const rowY = (sx: number): number => 540 + Math.sin((sx + rowOff) * 0.005) * 10;
+    const rgap = 26;
+    for (let n = Math.floor(rowOff / rgap) - 2; n <= Math.floor((rowOff + W) / rgap) + 2; n++) {
+      if (hash01(n * 0.53 + s + 3) < (b.forest.kind === 'cactus' ? 0.7 : 0.35)) continue;
+      const sx = n * rgap + hash01(n * 2.1 + s) * rgap * 0.6 - rowOff;
+      this.drawTree(m, sx, rowY(sx) + 4, n + 5000, 0.62, 0.7);
+    }
+    this.haze(m, 500, 0.1);
 
     // Tree line (fastest background layer).
     const forOff = cameraX * 0.45 + s * 53;
@@ -139,6 +171,183 @@ export class Backdrop {
         m.fillStyle(b.fog.color, b.fog.alpha / 4);
         m.fillRect(0, 495 + i * 10, W, 110 - i * 10);
       }
+    }
+    this.drawWeather(m, cameraX, time);
+  }
+
+  private skyAt(y: number): number {
+    return mix(this.biome.sky.top, this.biome.sky.bottom, Phaser.Math.Clamp(y / H, 0, 1));
+  }
+
+  /** Thin wash of the horizon colour over everything below y — fakes atmospheric depth. */
+  private haze(g: Phaser.GameObjects.Graphics, y: number, alpha: number): void {
+    g.fillStyle(this.biome.sky.bottom, alpha * 0.5); g.fillRect(0, y, W, H - y);
+    g.fillStyle(this.biome.sky.bottom, alpha * 0.5); g.fillRect(0, y + 60, W, H - y - 60);
+  }
+
+  private drawTwinkles(g: Phaser.GameObjects.Graphics, time: number): void {
+    const b = this.biome;
+    if (b.sky.starAlpha <= 0) return;
+    for (let i = 0; i < 28; i++) {
+      const x = hash01(i * 9.3 + this.seed + 50) * W, y = hash01(i * 4.1 + this.seed + 50) * H * 0.45;
+      const a = (0.5 + 0.5 * Math.sin(time * 0.002 * (0.6 + hash01(i))+ i * 2.1)) * b.sky.starAlpha;
+      g.fillStyle(b.sky.stars, a); g.fillCircle(x, y, 1.6);
+      g.fillStyle(b.sky.stars, a * 0.35);
+      g.fillRect(x - 5, y - 0.5, 10, 1); g.fillRect(x - 0.5, y - 5, 1, 10);
+    }
+  }
+
+  /** Puffy cloud banks; layer 0 = high and faint, layer 1 = lower, larger, in front of the far ridge. */
+  private drawClouds(g: Phaser.GameObjects.Graphics, off: number, layer: number): void {
+    const c = this.biome.atmos.clouds;
+    if (c === null) return;
+    const GAP = layer === 0 ? 300 : 460, s = this.seed + layer * 31;
+    for (let n = Math.floor(off / GAP) - 1; n <= Math.floor((off + W) / GAP) + 1; n++) {
+      if (hash01(n * 1.9 + s) < 0.3) continue;
+      const cx = n * GAP + hash01(n * 3.7 + s) * GAP * 0.5 - off;
+      const cy = (layer === 0 ? 50 : 170) + hash01(n * 5.3 + s) * (layer === 0 ? 110 : 90);
+      const w = (layer === 0 ? 140 : 220) + hash01(n * 7.1 + s) * 160;
+      // Opaque colours pre-mixed with the sky behind, so overlapping puffs don't show seams.
+      const a = c.alpha * (layer === 0 ? 0.6 : 1);
+      const sky = this.skyAt(cy);
+      const body = mix(sky, c.color, a), shade = mix(sky, c.shade, a);
+      g.fillStyle(shade, 1); g.fillEllipse(cx, cy + w * 0.05, w, w * 0.16);
+      const puffs = 5;
+      for (let k = 0; k < puffs; k++) {
+        const t = k / (puffs - 1) - 0.5;
+        const px = cx + t * w * 0.7, r = w * (0.1 + hash01(n * 11 + k + s) * 0.08) * (1 - Math.abs(t) * 0.6);
+        g.fillStyle(body, 1); g.fillCircle(px, cy - r * 0.35, r);
+      }
+      g.fillStyle(body, 1); g.fillEllipse(cx, cy, w * 0.85, w * 0.12);
+    }
+  }
+
+  private drawLandmark(m: Phaser.GameObjects.Graphics, x: number, base: number, n: number, time: number): void {
+    const b = this.biome, sil = b.forest.dark, hi = b.forest.light, beacon = b.atmos.beacon;
+    const blink = Math.sin(time * 0.004 + n) > 0.2;
+    switch (b.atmos.landmark) {
+      case 'tower': {
+        // Lattice radio mast with guy wires and a blinking beacon.
+        const h = 120 + hash01(n * 4.4) * 40;
+        m.lineStyle(2, sil, 1);
+        m.lineBetween(x - 9, base, x, base - h); m.lineBetween(x + 9, base, x, base - h);
+        for (let y = 14; y < h - 10; y += 14) {
+          const w = 9 * (1 - y / h);
+          m.lineBetween(x - w, base - y, x + w * 0.8, base - y - 12);
+        }
+        m.lineStyle(1, sil, 0.6);
+        m.lineBetween(x, base - h * 0.7, x - 60, base + 4); m.lineBetween(x, base - h * 0.7, x + 60, base + 4);
+        m.fillStyle(sil, 1); m.fillRect(x - 16, base - 14, 18, 14); // equipment hut
+        if (blink) { m.fillStyle(beacon, 0.35); m.fillCircle(x, base - h, 7); m.fillStyle(beacon, 1); m.fillCircle(x, base - h, 2.5); }
+        break;
+      }
+      case 'shack': {
+        // Stilt shack over the water with a lit window and a jetty.
+        m.lineStyle(3, sil, 1);
+        for (const dx of [-22, -6, 10, 24]) m.lineBetween(x + dx, base, x + dx, base - 26);
+        m.lineBetween(x + 24, base - 18, x + 70, base - 16);
+        m.fillStyle(sil, 1); m.fillRect(x - 28, base - 54, 58, 30);
+        m.fillTriangle(x - 34, base - 52, x + 36, base - 52, x + 2, base - 74);
+        m.fillStyle(beacon, 0.25); m.fillCircle(x - 8, base - 40, 12);
+        m.fillStyle(beacon, 0.9); m.fillRect(x - 13, base - 45, 10, 9);
+        // Dead tree beside it.
+        m.lineStyle(3, sil, 1); m.lineBetween(x - 60, base, x - 64, base - 70);
+        m.lineStyle(2, sil, 1); m.lineBetween(x - 63, base - 48, x - 84, base - 66); m.lineBetween(x - 64, base - 60, x - 48, base - 82);
+        break;
+      }
+      case 'arch': {
+        // Wind-carved rock arch: two tapering legs and a thick sagging span.
+        const w = 130 + hash01(n * 2.2) * 50, h = 85 + hash01(n * 3.4) * 30, col = b.far.color;
+        const leg = (x0: number, x1: number, lean: number): void => {
+          m.fillStyle(col, 1);
+          m.fillPoints(pts([{ x: x0, y: base + 4 }, { x: x1, y: base + 4 }, { x: x1 + lean, y: base - h }, { x: x0 + lean * 0.4, y: base - h }]), true);
+        };
+        leg(x - w / 2, x - w / 2 + w * 0.3, 6);
+        leg(x + w / 2 - w * 0.28, x + w / 2, -4);
+        m.fillStyle(col, 1); m.fillEllipse(x, base - h + 4, w * 1.08, h * 0.42);
+        m.fillStyle(b.hills, 1); m.fillEllipse(x + 2, base - h * 0.28, w * 0.42, h * 1.05);
+        m.fillStyle(0x000000, 0.18); m.fillEllipse(x + 4, base - h + 14, w * 0.9, h * 0.12);
+        m.fillStyle(b.far.cap ?? b.mid.color, 0.25); m.fillEllipse(x - w * 0.1, base - h - 2, w * 0.7, h * 0.1);
+        break;
+      }
+      case 'radar': {
+        // Early-warning station: dome, mast, rotating dish.
+        m.fillStyle(sil, 1); m.fillRect(x - 30, base - 22, 60, 22);
+        m.fillStyle(hi, 1); m.beginPath(); m.arc(x, base - 22, 26, Math.PI, 0, false); m.closePath(); m.fillPath();
+        m.fillStyle(0xffffff, 0.5); m.beginPath(); m.arc(x, base - 22, 26, Math.PI, Math.PI * 1.35, false); m.lineTo(x, base - 22); m.closePath(); m.fillPath();
+        m.lineStyle(2, sil, 1); m.lineBetween(x + 46, base, x + 46, base - 70);
+        const sw = Math.cos(time * 0.0015 + n) * 16;
+        m.lineStyle(4, sil, 1); m.lineBetween(x + 46 - sw, base - 76, x + 46 + sw, base - 70);
+        if (blink) { m.fillStyle(beacon, 1); m.fillCircle(x + 46, base - 80, 2.5); }
+        break;
+      }
+      case 'dish': {
+        // Lunar antenna dish on a tripod.
+        m.lineStyle(2, sil, 1);
+        m.lineBetween(x - 20, base, x, base - 40); m.lineBetween(x + 20, base, x, base - 40); m.lineBetween(x, base, x, base - 40);
+        m.fillStyle(hi, 1);
+        m.beginPath(); m.arc(x - 6, base - 58, 34, Math.PI * 0.85, Math.PI * 1.85, false); m.closePath(); m.fillPath();
+        m.lineStyle(2, sil, 1); m.lineBetween(x - 6, base - 58, x + 14, base - 82);
+        if (blink) { m.fillStyle(beacon, 0.4); m.fillCircle(x + 14, base - 82, 6); m.fillStyle(beacon, 1); m.fillCircle(x + 14, base - 82, 2); }
+        break;
+      }
+    }
+  }
+
+  /** Screen-space weather. Deterministic in (time, camera) so nothing needs per-particle state. */
+  private drawWeather(m: Phaser.GameObjects.Graphics, cameraX: number, time: number): void {
+    const a = this.biome.atmos, c = a.weatherColor, t = time * 0.001;
+    const wrap = (v: number, span: number): number => ((v % span) + span) % span;
+    switch (a.weather) {
+      case 'rain':
+        m.lineStyle(1.2, c, 0.35);
+        for (let i = 0; i < 70; i++) {
+          const x = wrap(hash01(i * 1.3) * W - cameraX * 0.6 - t * 140, W + 40) - 20;
+          const y = wrap(hash01(i * 2.7) * H + t * (700 + hash01(i) * 200), H);
+          m.lineBetween(x, y, x - 5, y + 16);
+        }
+        break;
+      case 'snow':
+        for (let i = 0; i < 80; i++) {
+          const r = 1 + hash01(i * 3.1) * 2;
+          const x = wrap(hash01(i * 1.7) * W - cameraX * (0.3 + r * 0.15) + Math.sin(t * 1.3 + i) * 14, W);
+          const y = wrap(hash01(i * 5.3) * H + t * (30 + r * 22), H);
+          m.fillStyle(c, 0.5 + r * 0.15); m.fillCircle(x, y, r);
+        }
+        break;
+      case 'dust':
+        for (let i = 0; i < 45; i++) {
+          const x = wrap(hash01(i * 2.3) * W - cameraX * 0.5 - t * (60 + hash01(i) * 80), W);
+          const y = 380 + hash01(i * 4.9) * 300 + Math.sin(t * 2 + i) * 8;
+          m.fillStyle(c, 0.25 + hash01(i * 7) * 0.3); m.fillCircle(x, y, 1 + hash01(i * 8.8) * 1.6);
+        }
+        // Occasional low dust gust streak.
+        m.fillStyle(c, 0.06);
+        m.fillEllipse(wrap(-t * 220 - cameraX * 0.4, W + 800) - 400, 600, 700, 50);
+        break;
+      case 'fireflies':
+        for (let i = 0; i < 30; i++) {
+          const x = wrap(hash01(i * 2.9) * W - cameraX * 0.45 + Math.sin(t * 0.7 + i * 1.3) * 30, W);
+          const y = 500 + hash01(i * 6.1) * 120 + Math.cos(t * 0.9 + i) * 14;
+          const glow = Math.max(0, Math.sin(t * (1.5 + hash01(i) * 2) + i * 4));
+          if (glow < 0.05) continue;
+          m.fillStyle(c, glow * 0.25); m.fillCircle(x, y, 5);
+          m.fillStyle(c, glow); m.fillCircle(x, y, 1.6);
+        }
+        break;
+      case 'meteors': {
+        // A shooting star every few seconds, at a seeded spot per cycle.
+        const period = 3.5, k = Math.floor(t / period), ph = (t % period) / 0.6;
+        if (ph < 1) {
+          const sx = 200 + hash01(k * 1.7 + this.seed) * 900, sy = 40 + hash01(k * 2.3 + this.seed) * 160;
+          const x = sx + ph * 220, y = sy + ph * 90;
+          m.lineStyle(2, c, 0.8 * (1 - ph)); m.lineBetween(x, y, x - 60, y - 25);
+          m.fillStyle(c, 1 - ph); m.fillCircle(x, y, 2);
+        }
+        break;
+      }
+      case 'none':
+        break;
     }
   }
 
@@ -170,10 +379,21 @@ export class Backdrop {
     }
   }
 
-  private drawTree(m: Phaser.GameObjects.Graphics, sx: number, base: number, n: number): void {
+  private drawTree(m: Phaser.GameObjects.Graphics, sx: number, base: number, n: number, k = 1, alpha = 1): void {
     const f = this.biome.forest, s = this.seed;
     const r = hash01(n * 2.3 + s);
     const col = hash01(n * 4.1 + s) < 0.5 ? f.dark : f.light;
+    if (k !== 1 || alpha !== 1) {
+      // Distant row: plain silhouettes scaled down.
+      m.fillStyle(col, alpha);
+      if (f.kind === 'cactus') { const h = (22 + r * 22) * k; m.fillRect(sx - 2.5 * k, base - h, 5 * k, h); return; }
+      if (f.kind === 'rocks') { const w = (10 + r * 18) * k; m.fillEllipse(sx, base - w * 0.25, w, w * 0.6); return; }
+      if (f.kind === 'swamp') { const h = (34 + r * 26) * k; m.fillRect(sx - 1.5, base - h, 3, h); m.fillEllipse(sx, base - h, 32 * k, 14 * k); return; }
+      const h = (26 + r * 30) * k, w = h * 0.42;
+      m.fillTriangle(sx - w, base, sx + w, base, sx, base - h);
+      if (f.kind === 'snowpine') { m.fillStyle(f.accent, alpha * 0.8); m.fillTriangle(sx - w * 0.35, base - h * 0.7, sx + w * 0.35, base - h * 0.7, sx, base - h); }
+      return;
+    }
     switch (f.kind) {
       case 'pine':
       case 'snowpine': {
@@ -255,6 +475,34 @@ export class Backdrop {
     const start = -(((off % 12) + 12) % 12); // world-aligned columns so edges don't shimmer
     for (let sx = start; sx <= W + 12; sx += 12) g.lineTo(sx, ridgeY(sx));
     g.lineTo(W, H); g.closePath(); g.fillPath();
+    // Shadowed faces: darken columns where the skyline falls away to the right (light from the left).
+    g.fillStyle(0x000000, 0.2);
+    if (layer.style === 'mesas') {
+      for (let sx = start; sx < W; sx += 12) {
+        const y0 = ridgeY(sx), y1 = ridgeY(sx + 12);
+        if (y1 - y0 < 0.8) continue;
+        g.fillPoints(pts([{ x: sx, y: y0 }, { x: sx + 12, y: y1 }, { x: sx + 12, y: H }, { x: sx, y: H }]), true);
+      }
+    } else if (layer.style === 'peaks') {
+      // One shadow facet per peak: summit → right foot → a point under the summit.
+      for (let n = Math.floor(off / gap) - 2; n <= Math.floor((off + W) / gap) + 2; n++) {
+        const cx = (n + 0.2 + hash01(n * 3.3 + seed) * 0.6) * gap - off;
+        const halfW = gap * (0.55 + hash01(n * 5.1 + seed) * 0.5);
+        if (cx + halfW < -20 || cx - 20 > W) continue;
+        // Follow the skyline down the right flank until it turns upward (next peak) so the
+        // facet never spills into the sky.
+        const edge: { x: number; y: number }[] = [{ x: cx, y: ridgeY(cx) }];
+        let prev = edge[0].y;
+        for (let x = cx + 8; x <= cx + halfW; x += 8) {
+          const y = ridgeY(x);
+          if (y < prev - 1) break;
+          edge.push({ x, y }); prev = y;
+        }
+        if (edge.length < 3) continue;
+        edge.push({ x: cx + halfW * 0.12, y: baseY + 60 });
+        g.fillPoints(pts(edge), true);
+      }
+    }
     if (layer.cap === null) return;
 
     if (layer.style === 'mesas') {
