@@ -8,6 +8,7 @@ import {
   type ProgressStep,
   type StageIntroData,
   type StageResultData,
+  type TouchLabels,
 } from '../state/gameUi';
 
 export interface HudState {
@@ -22,6 +23,8 @@ export interface HudState {
   doorTimer: number;
   debugVisible: boolean;
   device: 'keyboard' | 'touch' | 'gamepad';
+  touchLabels: TouchLabels | null;
+  paused: boolean;
   // Map overlay
   mapActive: boolean;
   launchSite: string;
@@ -66,6 +69,8 @@ function snapshot(): HudState {
     doorTimer:    debugInfo.doorTimer,
     debugVisible: gameUi.debugVisible,
     device:       gameUi.device,
+    touchLabels:  gameUi.touchLabels,
+    paused:       gameUi.paused,
     mapActive:    gameUi.mapActive,
     launchSite:   gameUi.launchSite,
     targetCity:   gameUi.targetCity,

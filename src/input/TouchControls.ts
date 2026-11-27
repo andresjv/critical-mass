@@ -1,16 +1,18 @@
 import Phaser from 'phaser';
 import { InputRouter } from './InputRouter';
-import { gameUi } from '../state/gameUi';
+import { gameUi, type TouchLabels } from '../state/gameUi';
 
-// Canvas-coordinate positions (1280 × 720 internal canvas).
-const FIRE_CENTER = { x: 1167, y: 633 } as const;
-const ACTION_CENTER = { x: 1060, y: 527 } as const;
+const DEFAULT_LABELS: TouchLabels = { move: 'STEER', fire: 'FIRE', action: 'ACTION' };
+
+import {
+  FIRE_CENTER, ACTION_CENTER, FIRE_VISUAL_RADIUS, ACTION_VISUAL_RADIUS, JOYSTICK_ZONE_X,
+} from './touchLayout';
+
 const FIRE_TOUCH_RADIUS = 120;   // px — touch hit zone
 const ACTION_TOUCH_RADIUS = 93;  // px
 const JOYSTICK_VISUAL_RADIUS = 120; // px — base ring radius
 const THUMB_VISUAL_RADIUS = 60;     // px
 const JOYSTICK_MAX_DELTA = 107;     // px — max thumb travel (32 × WORLD_SCALE)
-const JOYSTICK_ZONE_X = 640;        // joystick zone is left half of canvas
 const FADE_DELAY_MS = 3000;
 const ACTIVE_ALPHA = 1.0;
 const IDLE_ALPHA = 0.35;
@@ -42,11 +44,16 @@ export class TouchControls {
   private actionPointerId = -1;
 
   private lastTouchMs = 0;
+  private destroyed = false;
+  private labels: TouchLabels;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, labels: TouchLabels = DEFAULT_LABELS) {
     this.scene = scene;
     // Show only on actual touch devices.
     this.isTouchDevice = navigator.maxTouchPoints > 0;
+    this.labels = labels;
+    if (this.isTouchDevice) gameUi.touchLabels = labels;
+    scene.events.once('shutdown', () => this.destroy());
 
     // Build visuals regardless of device so references are always valid;
     // hide everything on non-touch devices.
@@ -61,12 +68,12 @@ export class TouchControls {
       .setDepth(11);
 
     this.fireArc = scene.add
-      .arc(FIRE_CENTER.x, FIRE_CENTER.y, 80, 0, 360, false, 0xcc4444, 0.7)
+      .arc(FIRE_CENTER.x, FIRE_CENTER.y, FIRE_VISUAL_RADIUS, 0, 360, false, 0xcc4444, 0.7)
       .setVisible(this.isTouchDevice)
       .setDepth(10);
 
     this.actionArc = scene.add
-      .arc(ACTION_CENTER.x, ACTION_CENTER.y, 67, 0, 360, false, 0x44cc88, 0.7)
+      .arc(ACTION_CENTER.x, ACTION_CENTER.y, ACTION_VISUAL_RADIUS, 0, 360, false, 0x44cc88, 0.7)
       .setVisible(this.isTouchDevice)
       .setDepth(10);
 
@@ -170,7 +177,16 @@ export class TouchControls {
     this.actionArc.setAlpha(alpha);
   }
 
+  /** Change button labels mid-scene (e.g. hangar: OPEN DOORS → LAUNCH). */
+  setLabels(labels: TouchLabels): void {
+    this.labels = labels;
+    if (this.isTouchDevice && !this.destroyed) gameUi.touchLabels = labels;
+  }
+
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    if (gameUi.touchLabels === this.labels) gameUi.touchLabels = null;
     if (this.isTouchDevice) {
       this.scene.input.off('pointerdown', this.onPointerDown);
       this.scene.input.off('pointermove', this.onPointerMove);

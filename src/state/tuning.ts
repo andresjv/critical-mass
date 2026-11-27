@@ -161,7 +161,15 @@ export const ATTACK_RUN = {
   /** SAM homing-missile turn rate, degrees/s. */
   samTurnRate: 60,
   /** Interceptor burst count per pass. */
-  interceptorBurstShots: 2,
+  interceptorBurstShots: 3,
+  /** Seconds between shots in an interceptor burst. */
+  interceptorBurstGap: 0.3,
+  /** How fast interceptors steer toward the player's altitude, px/s. */
+  interceptorTrackSpeed: 200,
+  /** Shots per aimed tank burst. */
+  tankBurstShots: 3,
+  /** Seconds between shots in a tank burst. */
+  tankBurstGap: 0.25,
   // ── Added for T6 ──────────────────────────────────────────────────────────
   /** Leftmost screen X the plane can occupy, px. */
   planeXMin: 100,
@@ -184,7 +192,7 @@ export const ATTACK_RUN = {
   /** Enemy density per launchIndex (0–3): 0.5 → 0.73 → 0.97 → 1.2. */
   enemyDensity: [0.5, 0.73, 0.97, 1.2] as const,
   /** Interceptor spawn interval base, seconds. */
-  interceptorInterval: 9,
+  interceptorInterval: 10,
   /** Seconds bomb travels to ground. */
   bombArcTime: 1.4,
   /** Max simultaneous bombs in flight. */
@@ -256,3 +264,14 @@ export const REACTOR = {
   /** Rear hits needed to destroy one robot. */
   hitsToDestroy: 4,
 } as const;
+
+// Audio mix: channel levels into the master limiter (0–1).
+export const AUDIO_MIX = {
+  master: 0.9,
+  music:  0.45,
+  sfx:    0.9,
+  radio:  0.7,
+  musicDuckOnExplosion: 0.4, // music level multiplier during a blast
+  musicWhenPaused: 0.3,      // music level multiplier while the game is paused
+  duckRecoverSecs: 0.6,
+};

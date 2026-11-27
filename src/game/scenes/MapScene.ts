@@ -4,6 +4,7 @@ import { debugInfo } from '../../state/debugInfo';
 import { gameUi } from '../../state/gameUi';
 import { TUNING, LIMITS, SCORE } from '../../state/tuning';
 import { InputRouter } from '../../input/InputRouter';
+import { PauseController } from '../PauseController';
 import { TouchControls } from '../../input/TouchControls';
 import { parseChallengeFromURL, getPlayerName } from '../../state/challengeLink';
 import { showStageIntro } from '../../state/stageIntros';
@@ -40,6 +41,7 @@ export class MapScene extends Phaser.Scene {
   private hintTimer = 0;
 
   private touchControls!: TouchControls;
+  private pauseCtl!: PauseController;
   private siteDots: Phaser.GameObjects.Arc[] = [];
   private arcGfx!:     Phaser.GameObjects.Graphics;
   private spaceKey!:   Phaser.Input.Keyboard.Key;
@@ -150,12 +152,14 @@ export class MapScene extends Phaser.Scene {
     });
 
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.touchControls = new TouchControls(this);
+    this.touchControls = new TouchControls(this, { move: 'MOVE', fire: 'GO', action: '' });
+    this.pauseCtl = new PauseController(this);
 
     this.visibilityHandler = () => {
       if (document.hidden) this.scene.pause(); else this.scene.resume();
     };
     document.addEventListener('visibilitychange', this.visibilityHandler);
+    this.events.once('shutdown', this.shutdown, this);
   }
 
   private drawArc(): void {
@@ -184,6 +188,7 @@ export class MapScene extends Phaser.Scene {
     if (this.scrambled) return;
 
     const input = InputRouter.read();
+    if (this.pauseCtl.update(input.pause)) return;
     this.touchControls.update();
     const fireJustPressed = input.fire && !this.prevFire;
     this.prevFire = input.fire;

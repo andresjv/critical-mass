@@ -30,8 +30,16 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
+    // All audio is managed via raw Web Audio API (src/game/audio/).
+    // Disabling Phaser's audio prevents it from creating its own AudioContext
+    // before a user gesture, which triggers browser autoplay warnings.
+    audio: {
+      noAudio: true,
+    },
     input: {
       gamepad: true,
+      // Phaser tracks one touch by default; steer + fire + action needs three.
+      activePointers: 4,
     },
     scene: [
       // BootScene auto-starts first; it generates placeholder textures then

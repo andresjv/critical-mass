@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { InputRouter } from '../../input/InputRouter';
+import { PauseController } from '../PauseController';
+import { HangarAmbience } from '../audio/HangarAmbience';
 import { TouchControls } from '../../input/TouchControls';
 import { missionState } from '../../state/MissionState';
 import { debugInfo } from '../../state/debugInfo';
@@ -94,6 +96,8 @@ export class HangarScene extends Phaser.Scene {
   private rightDoor!:       Phaser.GameObjects.Rectangle;
   private doorGfx!:         Phaser.GameObjects.Graphics; // door trim + lights
   private touchControls!:   TouchControls;
+  private pauseCtl!: PauseController;
+  private ambience = new HangarAmbience();
 
   private visibilityHandler!: () => void;
 
@@ -189,13 +193,17 @@ export class HangarScene extends Phaser.Scene {
     this.drawPlane(0x44aaff, false);
 
     // ── Touch controls ───────────────────────────────────────────────────────
-    this.touchControls = new TouchControls(this);
+    this.touchControls = new TouchControls(this, { move: 'FLY', fire: 'SKIP', action: 'OPEN / LAUNCH' });
+    this.pauseCtl = new PauseController(this);
+    this.ambience.start();
+    this.events.once('shutdown', () => this.ambience.stop());
 
     // ── Pause on visibility ──────────────────────────────────────────────────
     this.visibilityHandler = () => {
       if (document.hidden) this.scene.pause(); else this.scene.resume();
     };
     document.addEventListener('visibilitychange', this.visibilityHandler);
+    this.events.once('shutdown', this.shutdown, this);
 
     this.updateHudCue();
   }
@@ -204,6 +212,7 @@ export class HangarScene extends Phaser.Scene {
     this.touchControls.update();
 
     const input = InputRouter.read();
+    if (this.pauseCtl.update(input.pause)) return;
     const actionJustPressed = input.action && !this.prevAction;
     const fireJustPressed   = input.fire   && !this.prevFire;
     this.prevAction = input.action;

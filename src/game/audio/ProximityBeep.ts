@@ -1,4 +1,5 @@
 // ProximityBeep.ts — Web Audio proximity warning for missiles and heat-seekers.
+import { getAudioCtx, getBus } from './audioCtx';
 // Nearest-2 sources; interval/volume/pitch all lerp with distance.
 // Also drives a pulsing ring radius for sound-off players (ringPhase, isActive).
 
@@ -26,7 +27,6 @@ export class ProximityBeep {
   /** Current beep interval in ms; exposed so external code can read rate. */
   beepInterval = MAX_INTERVAL;
 
-  private ctx: AudioContext | null = null;
   private lastBeepAt = 0;
   private solidOsc: OscillatorNode | null = null;
 
@@ -104,30 +104,13 @@ export class ProximityBeep {
 
   dispose(): void {
     this.stopSolid();
-    if (this.ctx) {
-      this.ctx.close().catch(() => { /* ignore */ });
-      this.ctx = null;
-    }
+    // Don't close the shared context — other audio classes still use it.
   }
 
   // ── Private ──────────────────────────────────────────────────────────────
 
-  private getCtx(): AudioContext | null {
-    if (!this.ctx) {
-      try {
-        this.ctx = new AudioContext();
-      } catch {
-        return null;
-      }
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => { /* ignore */ });
-    }
-    return this.ctx;
-  }
-
   private playBeep(freq: number, volume: number, pan: number): void {
-    const ctx = this.getCtx();
+    const ctx = getAudioCtx();
     if (!ctx) return;
 
     const osc    = ctx.createOscillator();
@@ -141,7 +124,7 @@ export class ProximityBeep {
 
     osc.connect(gain);
     gain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(getBus('sfx') ?? ctx.destination);
 
     const t0 = ctx.currentTime;
     gain.gain.setValueAtTime(volume * 0.15, t0);
@@ -152,7 +135,7 @@ export class ProximityBeep {
 
   private ensureSolid(freq: number, volume: number, pan: number): void {
     if (this.solidOsc) return; // already playing
-    const ctx = this.getCtx();
+    const ctx = getAudioCtx();
     if (!ctx) return;
 
     const osc    = ctx.createOscillator();
@@ -166,7 +149,7 @@ export class ProximityBeep {
 
     osc.connect(gain);
     gain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(getBus('sfx') ?? ctx.destination);
     osc.start();
 
     this.solidOsc = osc;

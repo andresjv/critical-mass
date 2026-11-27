@@ -5,6 +5,7 @@
 
 import Phaser from 'phaser';
 import { InputRouter } from '../../input/InputRouter';
+import { PauseController } from '../PauseController';
 import { TouchControls } from '../../input/TouchControls';
 import { missionState } from '../../state/MissionState';
 import { debugInfo } from '../../state/debugInfo';
@@ -100,6 +101,7 @@ export class SiloScene extends Phaser.Scene {
   private siloGfx!:      Phaser.GameObjects.Graphics;
   private effectGfx!:    Phaser.GameObjects.Graphics;
   private touchControls!: TouchControls;
+  private pauseCtl!: PauseController;
   private visibilityHandler!: () => void;
 
   constructor() { super({ key: 'SiloScene' }); }
@@ -135,7 +137,8 @@ export class SiloScene extends Phaser.Scene {
     this.effectGfx = this.add.graphics();
 
     // ── Touch controls ────────────────────────────────────────────────────
-    this.touchControls = new TouchControls(this);
+    this.touchControls = new TouchControls(this, { move: 'MOVE', fire: 'FIRE', action: 'FIRE' });
+    this.pauseCtl = new PauseController(this);
 
     // ── HUD setup ─────────────────────────────────────────────────────────
     gameUi.mapActive = false;
@@ -159,13 +162,16 @@ export class SiloScene extends Phaser.Scene {
     }
 
     // ── Visibility pause ─────────────────────────────────────────────────
-    this.visibilityHandler = () => { this.scene.pause(); };
-    document.addEventListener('visibilitychange', () => {
+    this.visibilityHandler = () => {
       if (document.hidden) this.scene.pause(); else this.scene.resume();
-    });
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+    this.events.once('shutdown', this.shutdown, this);
   }
 
   update(_time: number, delta: number): void {
+    this.touchControls.update();
+    if (this.pauseCtl.update(InputRouter.read().pause)) return;
     this.frameTime = delta * 0.001;
     this.accumulator += this.frameTime;
 
