@@ -82,8 +82,6 @@ export const gameUi = {
 
   // ── Player guidance ───────────────────────────────────────────────────
 
-  /** Layer 1: Mission briefing card shown at game start. */
-  showBriefing: false,
 
   /** Layer 2: Progress breadcrumb — current stage step. */
   progressStep: null as ProgressStep | null,

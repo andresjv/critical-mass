@@ -46,7 +46,6 @@ export interface HudState {
   silosDestroyed: number;
   centralSiloDown: boolean;
   // Player guidance
-  showBriefing: boolean;
   progressStep: ProgressStep | null;
   launchNumber: number;
   stageIntro: StageIntroData | null;
@@ -88,7 +87,6 @@ function snapshot(): HudState {
     silosDestroyed: gameUi.silosDestroyed,
     centralSiloDown: gameUi.centralSiloDown,
     // Player guidance
-    showBriefing:    gameUi.showBriefing,
     progressStep:    gameUi.progressStep,
     launchNumber:    gameUi.launchNumber,
     stageIntro:      gameUi.stageIntro,

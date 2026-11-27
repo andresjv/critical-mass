@@ -6,7 +6,6 @@ import { GameHud } from './GameHud';
 import { DebugOverlay } from './DebugOverlay';
 import { HowToPlayCard } from './HowToPlayCard';
 import { ResultsScreen } from './ResultsScreen';
-import { MissionBriefing } from './MissionBriefing';
 import { MainMenu } from './MainMenu';
 import { ProgressBar } from './ProgressBar';
 import { StageIntroCard } from './StageIntroCard';
@@ -25,7 +24,6 @@ export function GameOverlay() {
   const needsPointerEvents =
     inMenu ||
     s.showResults ||
-    s.showBriefing ||
     !!s.stageIntro ||
     s.showComingSoon;
 
@@ -132,7 +130,6 @@ export function GameOverlay() {
         )}
 
         <StageIntroCard intro={s.stageIntro} device={s.device} />
-        <MissionBriefing show={s.showBriefing && !inMenu} />
         <MainMenu show={inMenu} device={s.device} />
       </div>
     </div>
