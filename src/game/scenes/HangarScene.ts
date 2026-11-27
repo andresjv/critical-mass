@@ -9,6 +9,11 @@ import { debugInfo } from '../../state/debugInfo';
 import { gameUi } from '../../state/gameUi';
 import { HANGAR } from '../../state/tuning';
 import { showStageIntro } from '../../state/stageIntros';
+import { createRng, type Rng } from '../../state/rng';
+import { getBiome } from '../theme/biomes';
+import { PLAYER_JET } from '../theme/factions';
+import { drawJetTopDown } from '../models/Vehicles';
+import { drawHangarStatic, HangarCrew } from '../hangar/HangarDecor';
 
 const W = 1280;
 const H = 720;
@@ -28,25 +33,6 @@ const DOOR_ANIM_TIME = 0.25;
 
 // Wall margins (px) — 10 × WORLD_SCALE.
 const WALL_MARGIN = 33;
-
-// Fighter-jet polygon points (pointing right, local origin at centre).
-// Built for approx 80 × 76 bounding box.
-const PLANE_POLY: [number, number][] = [
-  [38,   0],
-  [20,  -8],
-  [ 0, -10],
-  [-8,  -38],
-  [-18, -10],
-  [-30, -16],
-  [-30,  -6],
-  [-36,   0],
-  [-30,   6],
-  [-30,  16],
-  [-18,  10],
-  [-8,   38],
-  [  0,  10],
-  [ 20,   8],
-];
 
 type DoorState = 'closed' | 'opening' | 'open' | 'closing' | 'cooldown';
 type PlaneState = 'flying' | 'exited' | 'crashed' | 'gameover';
@@ -99,6 +85,10 @@ export class HangarScene extends Phaser.Scene {
   private touchControls!:   TouchControls;
   private pauseCtl!: PauseController;
   private ambience = new HangarAmbience();
+  private crew!: HangarCrew;
+  private crewGfx!: Phaser.GameObjects.Graphics;
+  private crewRng!: Rng;
+  private doorColor = { panel: 0, rib: 0, lamp: 0 };
 
   private visibilityHandler!: () => void;
 
@@ -143,40 +133,26 @@ export class HangarScene extends Phaser.Scene {
     // Stage intro card (first visit this session).
     showStageIntro('hangar');
 
-    // ── Background ──────────────────────────────────────────────────────────
-    this.add.rectangle(W / 2, H / 2, W, H, 0x040410);
-
-    // Station walls.
-    this.add.rectangle(WALL_MARGIN / 2,         H / 2, WALL_MARGIN,     H, 0x1a2235);
-    this.add.rectangle(W - WALL_MARGIN / 2,     H / 2, WALL_MARGIN,     H, 0x1a2235);
-    this.add.rectangle(W / 2,     H - WALL_MARGIN / 2, W,     WALL_MARGIN, 0x1a2235);
-
-    // Hangar floor glow lines.
-    const floorGfx = this.add.graphics();
-    floorGfx.lineStyle(2, 0x2244aa, 0.4);
-    for (let i = 0; i < 8; i++) {
-      const x = WALL_MARGIN + (W - WALL_MARGIN * 2) * i / 7;
-      floorGfx.lineBetween(x, H - WALL_MARGIN - 60, x, H - WALL_MARGIN);
-    }
-
-    // Docking ring where plane starts.
-    const ringGfx = this.add.graphics();
-    ringGfx.lineStyle(2, 0x2244aa, 0.6);
-    ringGfx.strokeCircle(W / 2, H - 107, 60);
-    ringGfx.lineStyle(1, 0x2244aa, 0.3);
-    ringGfx.strokeCircle(W / 2, H - 107, 90);
+    // ── Hangar interior + the level's terrain outside the doors ────────────
+    const biome = getBiome(missionState.level);
+    const seed = (missionState.seed % 1000) + this.launchIndex * 13;
+    drawHangarStatic(this.add.graphics().setDepth(0), biome, { wallMargin: WALL_MARGIN, doorH: DOOR_H }, seed);
+    this.crewRng = createRng(seed + 7);
+    this.crew = new HangarCrew(this.crewRng);
+    this.crewGfx = this.add.graphics().setDepth(1);
+    this.doorColor = { panel: biome.hangar.wall, rib: biome.hangar.wallRib, lamp: biome.hangar.lamp };
 
     // ── Bay doors ───────────────────────────────────────────────────────────
     this.leftDoor = this.add.rectangle(
       DOOR_HALF_W / 2, DOOR_Y + DOOR_H / 2,
       DOOR_HALF_W, DOOR_H,
-      0x2a3a4a,
+      this.doorColor.panel,
     ).setDepth(2);
 
     this.rightDoor = this.add.rectangle(
       W - DOOR_HALF_W / 2, DOOR_Y + DOOR_H / 2,
       DOOR_HALF_W, DOOR_H,
-      0x2a3a4a,
+      this.doorColor.panel,
     ).setDepth(2);
 
     // Door trim & status lights drawn on a persistent Graphics layer.
@@ -191,7 +167,7 @@ export class HangarScene extends Phaser.Scene {
     this.planeGfx = this.add.graphics();
     this.planeContainer.add(this.planeGfx);
 
-    this.drawPlane(0x44aaff, false);
+    this.drawPlane(false, false);
 
     // ── Touch controls ───────────────────────────────────────────────────────
     this.touchControls = new TouchControls(this, { move: 'FLY', fire: 'SKIP', action: 'OPEN / LAUNCH' });
@@ -238,6 +214,7 @@ export class HangarScene extends Phaser.Scene {
     actionJustPressed: boolean,
     fireJustPressed: boolean,
   ): void {
+    this.crew.update(dt, this.crewRng);
     switch (this.planeState) {
       case 'flying':
         this.stepFlying(dt, moveX, moveY, actionJustPressed);
@@ -549,70 +526,28 @@ export class HangarScene extends Phaser.Scene {
     // ── Plane ──────────────────────────────────────────────────────────────
     this.planeContainer.setPosition(this.px, this.py).setAngle(this.shipAngle);
 
-    // Determine plane tint based on alignment.
-    const inGap       = Math.abs(this.px - W / 2) < 67;
-    const doorReady   = this.doorState === 'open' || this.doorOpenAmt > 0.5;
-    const planeColor  = inGap && doorReady ? 0x44ff88 : 0x44aaff;
-
-    this.drawPlane(planeColor, this.thrusting && this.planeState === 'flying', time);
+    // Green guide glow when lined up with open doors.
+    const inGap     = Math.abs(this.px - W / 2) < 67;
+    const doorReady = this.doorState === 'open' || this.doorOpenAmt > 0.5;
+    this.drawPlane(inGap && doorReady, this.thrusting && this.planeState === 'flying', time);
+    this.crew.draw(this.crewGfx);
 
     // ── Doors ──────────────────────────────────────────────────────────────
     const offset = this.doorOpenAmt * DOOR_HALF_W;
     this.leftDoor.setPosition(DOOR_HALF_W / 2 - offset, DOOR_Y + DOOR_H / 2);
     this.rightDoor.setPosition(W - DOOR_HALF_W / 2 + offset, DOOR_Y + DOOR_H / 2);
 
-    // Door tint by state.
-    const doorColor = this.doorState === 'open'                       ? 0x224433
-                    : this.doorState === 'closing' || this.doorState === 'cooldown' ? 0x332222
-                    : 0x2a3a4a;
-    this.leftDoor.setFillStyle(doorColor);
-    this.rightDoor.setFillStyle(doorColor);
-
     this.drawDoorExtras();
   }
 
-  private drawPlane(color: number, thrusting: boolean, time = 0): void {
-    // ── Flame ──────────────────────────────────────────────────────────────
+  private drawPlane(aligned: boolean, thrusting: boolean, time = 0): void {
     this.flameGfx.clear();
-    if (thrusting) {
-      const flicker   = 0.75 + 0.25 * Math.sin(time * 0.018);
-      const flameLen  = 48 * flicker;
-
-      // Outer flame (orange).
-      this.flameGfx.fillStyle(0xff6600, 0.75 * flicker);
-      this.flameGfx.fillTriangle(-36, -10, -36, 10, -36 - flameLen, 0);
-
-      // Inner flame (yellow-white core).
-      this.flameGfx.fillStyle(0xffee88, 0.9 * flicker);
-      this.flameGfx.fillTriangle(-36, -5, -36, 5, -36 - flameLen * 0.6, 0);
+    if (aligned) {
+      this.flameGfx.fillStyle(0x44ff88, 0.16); this.flameGfx.fillCircle(0, 0, 58);
+      this.flameGfx.lineStyle(2, 0x44ff88, 0.7); this.flameGfx.strokeCircle(0, 0, 50);
     }
-
-    // ── Plane body ─────────────────────────────────────────────────────────
     this.planeGfx.clear();
-
-    // Body fill.
-    this.planeGfx.fillStyle(color, 1);
-    this.planeGfx.beginPath();
-    this.planeGfx.moveTo(PLANE_POLY[0][0], PLANE_POLY[0][1]);
-    for (let i = 1; i < PLANE_POLY.length; i++) {
-      this.planeGfx.lineTo(PLANE_POLY[i][0], PLANE_POLY[i][1]);
-    }
-    this.planeGfx.closePath();
-    this.planeGfx.fillPath();
-
-    // Bright edge outline.
-    this.planeGfx.lineStyle(1.5, 0xaaddff, 0.8);
-    this.planeGfx.beginPath();
-    this.planeGfx.moveTo(PLANE_POLY[0][0], PLANE_POLY[0][1]);
-    for (let i = 1; i < PLANE_POLY.length; i++) {
-      this.planeGfx.lineTo(PLANE_POLY[i][0], PLANE_POLY[i][1]);
-    }
-    this.planeGfx.closePath();
-    this.planeGfx.strokePath();
-
-    // Cockpit canopy highlight.
-    this.planeGfx.fillStyle(0xcceeFF, 0.5);
-    this.planeGfx.fillEllipse(22, 0, 14, 7);
+    drawJetTopDown(this.planeGfx, 0, 0, PLAYER_JET, { thrust: thrusting ? 1 : 0, time });
   }
 
   private drawDoorExtras(): void {
@@ -622,7 +557,16 @@ export class HangarScene extends Phaser.Scene {
     const leftX  = this.leftDoor.x  - DOOR_HALF_W / 2;
     const rightX = this.rightDoor.x - DOOR_HALF_W / 2;
 
-    this.doorGfx.lineStyle(1, 0x446688, 0.8);
+    // Corrugated ribs and a hazard-striped leading edge on each panel.
+    for (const [x0, edge] of [[leftX, leftX + DOOR_HALF_W], [rightX, rightX]] as const) {
+      this.doorGfx.fillStyle(this.doorColor.rib, 1);
+      for (let x = x0 + 20; x < x0 + DOOR_HALF_W - 10; x += 40) this.doorGfx.fillRect(x, DOOR_Y + 4, 6, DOOR_H - 8);
+      for (let y = 0; y < DOOR_H; y += 12) {
+        this.doorGfx.fillStyle(y % 24 === 0 ? 0xf2c218 : 0x1a1a1a, 1);
+        this.doorGfx.fillRect(edge - 6, DOOR_Y + y, 12, 12);
+      }
+    }
+    this.doorGfx.lineStyle(1, this.doorColor.rib, 0.8);
     this.doorGfx.lineBetween(leftX,  DOOR_Y,         leftX  + DOOR_HALF_W, DOOR_Y);
     this.doorGfx.lineBetween(leftX,  DOOR_Y + DOOR_H, leftX + DOOR_HALF_W, DOOR_Y + DOOR_H);
     this.doorGfx.lineBetween(rightX, DOOR_Y,          rightX + DOOR_HALF_W, DOOR_Y);
