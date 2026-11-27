@@ -135,10 +135,8 @@ export const HANGAR = {
   doorOpenDuration: 3.0,
   /** Cooldown after doors close before they can reopen, seconds. */
   doorCooldown: 2.0,
-  /** Window after exit during which a spare plane can be launched, seconds. */
-  spareWindow: 6.0,
-  /** Maximum spare planes in flight simultaneously. */
-  spareMaxInFlight: 3,
+  /** Length of the takeoff animation after flying out of the bay doors, seconds. */
+  takeoffTime: 3.4,
 } as const;
 
 // ─── Stage 3 — Attack Run ────────────────────────────────────────────────────
@@ -164,8 +162,12 @@ export const ATTACK_RUN = {
   interceptorBurstShots: 3,
   /** Seconds between shots in an interceptor burst. */
   interceptorBurstGap: 0.3,
-  /** How fast interceptors steer toward the player's altitude, px/s. */
-  interceptorTrackSpeed: 200,
+  /** Max climb / dive rate of an interceptor, px/s (it pitches its nose to match). */
+  interceptorClimbRate: 115,
+  /** How quickly an interceptor changes its climb rate, px/s². Lower = lazier turns. */
+  interceptorPitchAccel: 150,
+  /** Max nose pitch drawn for an interceptor, radians. */
+  interceptorMaxPitch: 0.45,
   /** Tank turret turn speed while tracking the plane, degrees/s. */
   tankTurretTurnRate: 90,
   /** Interceptor bullet speed (fires straight ahead), px/s. */
@@ -185,14 +187,20 @@ export const ATTACK_RUN = {
   flakSpeed: 267,
   /** SAM homing missile speed, px/s (80 × WORLD_SCALE). */
   samMissileSpeed: 267,
-  /** Interceptor lateral speed, px/s (130 × WORLD_SCALE). */
-  interceptorSpeed: 433,
+  /** Interceptor lateral speed, px/s (≈100 × WORLD_SCALE; slowed from 130 so they read as jets). */
+  interceptorSpeed: 340,
   /** Heat-seeker speed, px/s (130 × WORLD_SCALE). */
   heatSeekerSpeed: 433,
   /** Enemy density per launchIndex (0–3): 0.5 → 0.73 → 0.97 → 1.2. */
   enemyDensity: [0.5, 0.73, 0.97, 1.2] as const,
   /** Interceptor spawn interval base, seconds. */
   interceptorInterval: 10,
+  /** A bomb landing within this many px of a tank locks on and steers into it (one tank hitbox). */
+  bombHomingRange: 60,
+  /** How fast a locked bomb shifts its impact point toward the tank, px/s. */
+  bombHomingSpeed: 420,
+  /** Seconds between smoke puffs left behind a missile in flight. */
+  missileTrailInterval: 0.045,
   /** Seconds bomb travels to ground. */
   bombArcTime: 1.4,
   /** Max simultaneous bombs in flight. */
@@ -297,3 +305,49 @@ export const AUDIO_MIX = {
   musicWhenPaused: 0.3,      // music level multiplier while the game is paused
   duckRecoverSecs: 0.6,
 };
+
+// ─── Background battle (attack run, visual only) ─────────────────────────────
+
+export const BATTLE = {
+  /** Width of one battle sector on the tree-line layer, px. Each has a blue and a red line. */
+  sectorWidth: 1500,
+  /** Soldiers per side per sector (min..max). */
+  soldiersMin: 5,
+  soldiersMax: 8,
+  /** Soldier height at the far / near edge of the strip, px (plane is ~74 px long). */
+  soldierHeightFar: 14,
+  soldierHeightNear: 22,
+  /** Depth of the strip below the tree-line floor, px. */
+  stripDepth: 18,
+  /** Seconds between shots per soldier (min..max). */
+  fireMin: 0.9,
+  fireMax: 2.8,
+  /** Chance a soldier's shot drops its target. */
+  hitChance: 0.07,
+  /** Seconds before a fallen soldier is replaced by a reinforcement running in. */
+  reinforceDelay: 4,
+  /** Soldier walk speed when advancing / reinforcing, px/s. */
+  walkSpeed: 22,
+  /** Tank gunner: seconds between bursts, chance each burst kills, kills before he is shot. */
+  gunnerFireInterval: 1.1,
+  gunnerHitChance: 0.55,
+  gunnerKillsMin: 3,
+  gunnerKillsMax: 5,
+  /** Far-layer dogfights: pairs in the sky at once, jet scale, speed px/s, turn rate rad/s. */
+  dogfightPairs: 2,
+  farJetScale: 0.3,
+  farJetSpeed: 120,
+  farJetTurn: 1.3,
+  /** Chance per burst that a chasing jet shoots its target down; seconds before a new pair arrives. */
+  farKillChance: 0.12,
+  farRespawn: 5,
+} as const;
+
+// ─── Game over screen ────────────────────────────────────────────────────────
+
+export const GAME_OVER = {
+  /** Seconds before FIRE / tap can dismiss it (avoids skipping it by accident). */
+  minShowSecs: 1.2,
+  /** Seconds before it returns to the menu on its own. */
+  autoReturnSecs: 9,
+} as const;

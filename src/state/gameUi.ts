@@ -30,7 +30,7 @@ export interface TouchLabels {
   action: string; // '' hides the label
 }
 
-export type UiScreen = 'menu' | 'game';
+export type UiScreen = 'menu' | 'game' | 'gameover';
 
 export interface MenuRequest { level: LevelId; difficulty: Difficulty }
 

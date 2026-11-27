@@ -88,6 +88,15 @@ export class Backdrop {
     }
   }
 
+  /** Layer-world offset of the tree line (parallax 0.45) — screen x + this = layer x. */
+  forestOffset(cameraX: number): number { return cameraX * 0.45 + this.seed * 53; }
+
+  /** Screen y of the tree-line floor at screen x (where background soldiers stand). */
+  forestY(sx: number, cameraX: number): number {
+    const wx = sx + this.forestOffset(cameraX);
+    return 568 + Math.sin(wx * 0.006) * 14 + Math.cos(wx * 0.0027) * 10;
+  }
+
   /** time = scene clock in ms (drives clouds, weather and blinking lights). */
   draw(cameraX: number, time = 0): void {
     const b = this.biome;
@@ -146,11 +155,8 @@ export class Backdrop {
     this.haze(m, 500, 0.1);
 
     // Tree line (fastest background layer).
-    const forOff = cameraX * 0.45 + s * 53;
-    const forY = (sx: number): number => {
-      const wx = sx + forOff;
-      return 568 + Math.sin(wx * 0.006) * 14 + Math.cos(wx * 0.0027) * 10;
-    };
+    const forOff = this.forestOffset(cameraX);
+    const forY = (sx: number): number => this.forestY(sx, cameraX);
     m.fillStyle(b.forest.floor, 1);
     m.beginPath(); m.moveTo(0, H);
     for (let sx = 0; sx <= W; sx += 20) m.lineTo(sx, forY(sx));

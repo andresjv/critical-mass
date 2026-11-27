@@ -410,8 +410,7 @@ export class SiloScene extends Phaser.Scene {
     if (missionState.planes > 0) {
       this.scene.restart({ launchIndex: this.launchIndex });
     } else {
-      // Game over — go back to map which will handle game-over logic
-      this.scene.start('MapScene');
+      this.scene.start('GameOverScene');
     }
   }
 
@@ -442,8 +441,7 @@ export class SiloScene extends Phaser.Scene {
 
     if (missionState.isGameOver) {
       gameUi.stageResult = null;
-      missionState.endMission();
-      this.scene.start('MenuScene');
+      this.scene.start('GameOverScene');
       return;
     }
 
