@@ -23,6 +23,7 @@ import { getBiome, type Biome } from '../theme/biomes';
 import { Backdrop, hash01 } from '../effects/Backdrop';
 import { drawJet, drawTank, TURRET_PIVOT_Y } from '../models/Vehicles';
 import { drawBuilding } from '../models/Buildings';
+import { drawTracer, drawShell, drawMissile } from '../models/Weapons';
 import { PLAYER_JET } from '../theme/factions';
 import { settings, haptic } from '../../state/settings';
 
@@ -48,15 +49,11 @@ const PLANE_HIT_H = 18;  // half-height
 const TANK_W = 60;   const TANK_H = 28;   const TANK_BARREL = 30;
 const SAM_W  = 40;   const SAM_H  = 55;
 const INTERC_W = 55; const INTERC_H = 22;
-const BULLET_W = 18; const BULLET_H = 7;
-const FLAK_SIZE = 10;
-const MISSILE_W = 24; const MISSILE_H = 8;
 const HEATSEEK_W = 28; const HEATSEEK_H = 10;
 const BLDG_W = 90;   const BLDG_H = 140;
 
 interface SceneData {
   launchIndex: number;
-  sparesLaunched?: number;
 }
 
 type PlaneState = 'flying' | 'crashed' | 'gameover';
@@ -90,11 +87,15 @@ interface Projectile {
   vx: number; vy: number;
   alive: boolean;
   fromEnemy: boolean;
+  /** bullet = tracer (player / jets), shell = tank round. */
+  kind: 'bullet' | 'shell';
 }
 
 interface Interceptor {
   x: number; y: number;
   vx: number;
+  /** Vertical speed, px/s; the jet pitches its nose to match. */
+  vy: number;
   alive: boolean;
   burstLeft: number;
   burstTimer: number;
@@ -114,6 +115,8 @@ interface Bomb {
   landWorldX: number;
   t:          number;   // 0 → 1 progress through parabolic arc
   alive:      boolean;
+  /** Tank this bomb has locked onto (lands within one tank hitbox of it). */
+  target:     GroundEnemy | null;
 }
 
 
@@ -152,6 +155,7 @@ export class AttackRunScene extends Phaser.Scene {
   // ── Bombs & explosions ────────────────────────────────────────────────────
   private bombs: Bomb[] = [];
   private bombReloadTimer = 0;
+  private trailTimer = 0;
   private fx!: Effects;
 
   // ── Pre-run briefing & pause ───────────────────────────────────────────────
@@ -484,7 +488,7 @@ export class AttackRunScene extends Phaser.Scene {
         x: this.planeX + PLANE_HIT_W,
         y: planeScreenY,
         vx: ATTACK_RUN.bulletSpeed, vy: 0,
-        alive: true, fromEnemy: false,
+        alive: true, fromEnemy: false, kind: 'bullet',
       });
     }
 
@@ -503,6 +507,22 @@ export class AttackRunScene extends Phaser.Scene {
     for (const bomb of this.bombs) {
       if (!bomb.alive) continue;
       bomb.t += dt / ATTACK_RUN.bombArcTime;
+
+      // Homing: lock onto a tank if the impact point is within one tank hitbox of it,
+      // then slide the impact point onto the tank as it drives.
+      if (!bomb.target || !bomb.target.alive) {
+        bomb.target = null;
+        let best: number = ATTACK_RUN.bombHomingRange;
+        for (const e of this.groundEnemies) {
+          if (!e.alive || e.type !== 'tank') continue;
+          const d = Math.abs(e.worldX - bomb.landWorldX);
+          if (d <= best) { best = d; bomb.target = e; }
+        }
+      }
+      if (bomb.target) {
+        const maxStep = ATTACK_RUN.bombHomingSpeed * dt;
+        bomb.landWorldX += Phaser.Math.Clamp(bomb.target.worldX - bomb.landWorldX, -maxStep, maxStep);
+      }
 
       // Mid-flight proximity check for aerial targets.
       const curWX    = bomb.worldXDrop + (bomb.landWorldX - bomb.worldXDrop) * bomb.t;
@@ -554,6 +574,19 @@ export class AttackRunScene extends Phaser.Scene {
       if (proj.x > W + 50 || proj.x < -50 || proj.y < 0 || proj.y > H) {
         proj.alive = false;
       }
+    }
+
+    // Smoke trails behind missiles in flight.
+    this.trailTimer -= dt;
+    if (this.trailTimer <= 0) {
+      this.trailTimer = ATTACK_RUN.missileTrailInterval;
+      for (const e of this.activeEnemies) {
+        if (!e.missile) continue;
+        const a = Math.atan2(e.missile.vy, e.missile.vx);
+        this.fx.smokePuff(e.missile.x - Math.cos(a) * 22 + this.cameraX, e.missile.y - Math.sin(a) * 22, 7);
+      }
+      const hs = this.heatSeeker;
+      if (hs && hs.phase !== 'warning') this.fx.smokePuff(hs.x - 26 + this.cameraX, hs.lockedY, 7);
     }
 
     // Activate ground enemies entering viewport.
@@ -612,7 +645,7 @@ export class AttackRunScene extends Phaser.Scene {
             x: mx, y: my,
             vx: Math.cos(enemy.aim) * ATTACK_RUN.flakSpeed,
             vy: Math.sin(enemy.aim) * ATTACK_RUN.flakSpeed,
-            alive: true, fromEnemy: true,
+            alive: true, fromEnemy: true, kind: 'shell',
           });
           enemy.fireAnim = ATTACK_RUN.tankRecoilTime;
           this.fx.muzzleFlash(mx + this.cameraX, my, enemy.aim);
@@ -709,7 +742,7 @@ export class AttackRunScene extends Phaser.Scene {
                      (this.rng.next() * ATTACK_RUN.altitudeMax * 0.3);
       this.interceptors.push({
         x: W + 60, y: spawnY,
-        vx: -ATTACK_RUN.interceptorSpeed * density,
+        vx: -ATTACK_RUN.interceptorSpeed * density, vy: 0,
         alive: true, burstLeft: ATTACK_RUN.interceptorBurstShots,
         burstTimer: 0.5, whooshPlayed: false,
       });
@@ -722,23 +755,27 @@ export class AttackRunScene extends Phaser.Scene {
 
     for (const ic of this.interceptors) {
       if (!ic.alive) continue;
+      // Fly like a jet: ease the climb rate toward the player's altitude (level off once
+      // past them); the nose pitches with the climb in renderFrame.
+      const wantVy = ic.x > this.planeX
+        ? Phaser.Math.Clamp((planeScreenY - ic.y) * 1.4, -ATTACK_RUN.interceptorClimbRate, ATTACK_RUN.interceptorClimbRate)
+        : 0;
+      const dv = ATTACK_RUN.interceptorPitchAccel * dt;
+      ic.vy += Phaser.Math.Clamp(wantVy - ic.vy, -dv, dv);
       ic.x += ic.vx * dt;
-      // Steer toward the player's altitude until it has passed them.
-      if (ic.x > this.planeX) {
-        const maxDy = ATTACK_RUN.interceptorTrackSpeed * dt;
-        ic.y += Phaser.Math.Clamp(planeScreenY - ic.y, -maxDy, maxDy);
-      }
+      ic.y += ic.vy * dt;
 
       // Burst fire.
       ic.burstTimer -= dt;
       if (ic.burstTimer <= 0 && ic.burstLeft > 0) {
         ic.burstLeft--;
         ic.burstTimer = ATTACK_RUN.interceptorBurstGap;
-        // Straight ahead (the direction the interceptor is flying), not aimed.
+        // Straight out of the nose, along the direction the jet is flying.
+        const p = this.interceptorPitch(ic), c = Math.cos(p), sn = Math.sin(p);
         this.projectiles.push({
-          x: ic.x - 30, y: ic.y,
-          vx: -ATTACK_RUN.interceptorBulletSpeed, vy: 0,
-          alive: true, fromEnemy: true,
+          x: ic.x - 30 * c, y: ic.y + 30 * sn,
+          vx: -ATTACK_RUN.interceptorBulletSpeed * c, vy: ATTACK_RUN.interceptorBulletSpeed * sn,
+          alive: true, fromEnemy: true, kind: 'bullet',
         });
       }
 
@@ -934,37 +971,21 @@ export class AttackRunScene extends Phaser.Scene {
       // SAM missile in flight.
       if (enemy.missile) {
         const m = enemy.missile;
-        const a = Math.atan2(m.vy, m.vx), c = Math.cos(a), s = Math.sin(a);
-        const hx = c * MISSILE_W / 2, hy = s * MISSILE_W / 2, px = -s * MISSILE_H / 2, py = c * MISSILE_H / 2;
-        // Exhaust flame behind the missile.
-        const fl = 0.7 + 0.3 * Math.sin(time * 0.05);
-        this.enemyGfx.fillStyle(0xff9900, 0.8);
-        this.enemyGfx.fillTriangle(m.x - hx + px, m.y - hy + py, m.x - hx - px, m.y - hy - py,
-          m.x - hx * (2 + fl), m.y - hy * (2 + fl));
-        this.enemyGfx.fillStyle(0xff6633, 1);
-        this.enemyGfx.fillPoints(pts([
-          { x: m.x - hx + px, y: m.y - hy + py }, { x: m.x + hx + px, y: m.y + hy + py },
-          { x: m.x + hx * 1.4, y: m.y + hy * 1.4 },
-          { x: m.x + hx - px, y: m.y + hy - py }, { x: m.x - hx - px, y: m.y - hy - py },
-        ]), true);
+        drawMissile(this.enemyGfx, m.x, m.y, Math.atan2(m.vy, m.vx), time);
       }
     }
 
     // Interceptors: red-marked fighter jets flying left, afterburners lit.
     for (const ic of this.interceptors) {
       if (!ic.alive) continue;
-      drawJet(this.enemyGfx, ic.x, ic.y, this.biome.enemyJet, { facing: -1, thrust: 0.8, time });
+      // Mirrored jet: positive rot lifts the nose (which points left).
+      drawJet(this.enemyGfx, ic.x, ic.y, this.biome.enemyJet, { facing: -1, rot: this.interceptorPitch(ic), thrust: 0.8, time });
     }
 
     // Heat-seeker.
     if (this.heatSeeker && this.heatSeeker.phase !== 'warning') {
       const hs = this.heatSeeker;
-      const flicker = Math.sin(time * 0.025) > 0 ? 1 : 0.6;
-      this.enemyGfx.fillStyle(0xff3300, flicker);
-      this.enemyGfx.fillRect(hs.x - HEATSEEK_W / 2, hs.lockedY - HEATSEEK_H / 2, HEATSEEK_W, HEATSEEK_H);
-      // Flame trail.
-      this.enemyGfx.fillStyle(0xff8800, 0.5 * flicker);
-      this.enemyGfx.fillRect(hs.x - HEATSEEK_W / 2 - 20, hs.lockedY - 4, 20, 8);
+      drawMissile(this.enemyGfx, hs.x, hs.lockedY, 0, time, 1.15);
     }
 
     // Heat-seeker warning arrow.
@@ -988,13 +1009,8 @@ export class AttackRunScene extends Phaser.Scene {
     this.projGfx.clear();
     for (const proj of this.projectiles) {
       if (!proj.alive) continue;
-      if (proj.fromEnemy) {
-        this.projGfx.fillStyle(0xff6622, 0.9);
-        this.projGfx.fillRect(proj.x - FLAK_SIZE / 2, proj.y - FLAK_SIZE / 2, FLAK_SIZE, FLAK_SIZE);
-      } else {
-        this.projGfx.fillStyle(0xffee44, 1);
-        this.projGfx.fillRect(proj.x, proj.y - BULLET_H / 2, BULLET_W, BULLET_H);
-      }
+      if (proj.kind === 'shell') drawShell(this.projGfx, proj.x, proj.y, Math.atan2(proj.vy, proj.vx), time);
+      else drawTracer(this.projGfx, proj.x, proj.y, proj.vx, proj.vy, proj.fromEnemy);
     }
 
     // ── Bombs ─────────────────────────────────────────────────────────────────
@@ -1017,6 +1033,16 @@ export class AttackRunScene extends Phaser.Scene {
       const crossY = this.groundYAtWorldX(bomb.landWorldX);
       this.bombGfx.fillStyle(FX_PALETTE.aimMarker, 0.35 + 0.25 * Math.sin(time * 0.03));
       this.bombGfx.fillEllipse(landSX, crossY, 40, 10);
+      if (bomb.target?.alive) {
+        // Lock-on brackets around the tank this bomb is homing onto.
+        const tx = bomb.target.worldX - this.cameraX, ty = this.groundYAtWorldX(bomb.target.worldX) - TANK_H / 2;
+        const r = 40 + Math.sin(time * 0.02) * 4;
+        this.bombGfx.lineStyle(3, FX_PALETTE.lockRing, 0.9);
+        for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+          this.bombGfx.lineBetween(tx + sx * r, ty + sy * r * 0.7, tx + sx * (r - 12), ty + sy * r * 0.7);
+          this.bombGfx.lineBetween(tx + sx * r, ty + sy * r * 0.7, tx + sx * r, ty + sy * (r * 0.7 - 10));
+        }
+      }
 
       // Bomb, nose along its on-screen velocity (level at release, tips over as it falls).
       const vx = (bomb.landWorldX - bomb.worldXDrop) / ATTACK_RUN.bombArcTime - ATTACK_RUN.scrollSpeed;
@@ -1051,6 +1077,11 @@ export class AttackRunScene extends Phaser.Scene {
     }
   }
 
+  /** Interceptor nose pitch from its climb rate (positive = nose up), radians. */
+  private interceptorPitch(ic: Interceptor): number {
+    return Phaser.Math.Clamp(Math.atan2(-ic.vy, Math.abs(ic.vx)), -ATTACK_RUN.interceptorMaxPitch, ATTACK_RUN.interceptorMaxPitch);
+  }
+
   private drawSidePlane(sy: number, time: number): void {
     drawJet(this.planeGfx, this.planeX, sy, PLAYER_JET, { facing: 1, thrust: this.thrusting ? 1 : 0.15, time });
   }
@@ -1065,6 +1096,7 @@ export class AttackRunScene extends Phaser.Scene {
       landWorldX: worldXDrop + ATTACK_RUN.bombHorizOffset,
       t: 0,
       alive: true,
+      target: null,
     });
     this.voice.say('Bomb away', 'bomb');
   }

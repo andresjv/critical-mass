@@ -8,6 +8,7 @@ import { updateSettings } from '../../state/settings';
 import type { LevelId } from '../../state/levels';
 import { getBiome } from '../theme/biomes';
 import { Backdrop } from '../effects/Backdrop';
+import { MusicTrack } from '../audio/MusicTrack';
 
 /** Menu backdrop scroll speed, px/s. */
 const MENU_SCROLL = 60;
@@ -18,6 +19,8 @@ export class MenuScene extends Phaser.Scene {
   private cameraX = 0;
 
   constructor() { super({ key: 'MenuScene' }); }
+
+  private music = new MusicTrack('menu');
 
   create(): void {
     gameUi.screen       = 'menu';
@@ -42,6 +45,10 @@ export class MenuScene extends Phaser.Scene {
     const shade = this.add.graphics().setDepth(3);
     shade.fillStyle(0x000000, 0.12);
     shade.fillRect(0, 0, 1280, 720);
+
+    // Menu theme (waits silently until the first tap/click unlocks audio).
+    this.music.start();
+    this.events.once('shutdown', () => this.music.fadeOut(0.8));
   }
 
   update(_time: number, delta: number): void {

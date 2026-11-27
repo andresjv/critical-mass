@@ -135,10 +135,8 @@ export const HANGAR = {
   doorOpenDuration: 3.0,
   /** Cooldown after doors close before they can reopen, seconds. */
   doorCooldown: 2.0,
-  /** Window after exit during which a spare plane can be launched, seconds. */
-  spareWindow: 6.0,
-  /** Maximum spare planes in flight simultaneously. */
-  spareMaxInFlight: 3,
+  /** Length of the takeoff animation after flying out of the bay doors, seconds. */
+  takeoffTime: 3.4,
 } as const;
 
 // ─── Stage 3 — Attack Run ────────────────────────────────────────────────────
@@ -164,8 +162,12 @@ export const ATTACK_RUN = {
   interceptorBurstShots: 3,
   /** Seconds between shots in an interceptor burst. */
   interceptorBurstGap: 0.3,
-  /** How fast interceptors steer toward the player's altitude, px/s. */
-  interceptorTrackSpeed: 200,
+  /** Max climb / dive rate of an interceptor, px/s (it pitches its nose to match). */
+  interceptorClimbRate: 115,
+  /** How quickly an interceptor changes its climb rate, px/s². Lower = lazier turns. */
+  interceptorPitchAccel: 150,
+  /** Max nose pitch drawn for an interceptor, radians. */
+  interceptorMaxPitch: 0.45,
   /** Tank turret turn speed while tracking the plane, degrees/s. */
   tankTurretTurnRate: 90,
   /** Interceptor bullet speed (fires straight ahead), px/s. */
@@ -185,14 +187,20 @@ export const ATTACK_RUN = {
   flakSpeed: 267,
   /** SAM homing missile speed, px/s (80 × WORLD_SCALE). */
   samMissileSpeed: 267,
-  /** Interceptor lateral speed, px/s (130 × WORLD_SCALE). */
-  interceptorSpeed: 433,
+  /** Interceptor lateral speed, px/s (≈100 × WORLD_SCALE; slowed from 130 so they read as jets). */
+  interceptorSpeed: 340,
   /** Heat-seeker speed, px/s (130 × WORLD_SCALE). */
   heatSeekerSpeed: 433,
   /** Enemy density per launchIndex (0–3): 0.5 → 0.73 → 0.97 → 1.2. */
   enemyDensity: [0.5, 0.73, 0.97, 1.2] as const,
   /** Interceptor spawn interval base, seconds. */
   interceptorInterval: 10,
+  /** A bomb landing within this many px of a tank locks on and steers into it (one tank hitbox). */
+  bombHomingRange: 60,
+  /** How fast a locked bomb shifts its impact point toward the tank, px/s. */
+  bombHomingSpeed: 420,
+  /** Seconds between smoke puffs left behind a missile in flight. */
+  missileTrailInterval: 0.045,
   /** Seconds bomb travels to ground. */
   bombArcTime: 1.4,
   /** Max simultaneous bombs in flight. */

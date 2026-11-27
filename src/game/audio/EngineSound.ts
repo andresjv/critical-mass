@@ -1,74 +1,109 @@
-// EngineSound — fighter jet engine rumble + interceptor whoosh SFX.
-// Engine: two layered sawtooth oscillators (83 Hz + 167 Hz) whose gain ramps
-// between idle and thrust level. Whoosh: pitch-swept sine burst (650→70 Hz).
+// EngineSound — jet engine + fly-by SFX, all synthesised.
+// Engine layers (fed by one thrust level 0..1):
+//   roar   – looping noise through a band-pass whose centre rises with thrust
+//   rumble – low-passed noise for body
+//   whine  – quiet turbine tone that climbs in pitch
+//   hum    – low triangle for weight on small speakers
+// Whoosh (enemy jet passing): band-passed noise sweeping down, like a doppler fly-by.
 
 import { getAudioCtx, getBus } from './audioCtx';
 
-export class EngineSound {
-  private osc1: OscillatorNode | null = null;
-  private osc2: OscillatorNode | null = null;
-  private gain1: GainNode | null = null;
-  private gain2: GainNode | null = null;
-  private started = false;
+const NOISE_SECS = 2;
 
-  update(thrusting: boolean): void {
+export class EngineSound {
+  private nodes: {
+    roarGain: GainNode; roarFilt: BiquadFilterNode;
+    rumbleGain: GainNode;
+    whine: OscillatorNode; whineGain: GainNode;
+    hum: OscillatorNode; humGain: GainNode;
+    src: AudioBufferSourceNode;
+  } | null = null;
+  private static noise: AudioBuffer | null = null;
+
+  /** thrust: boolean (old API) or 0..1 intensity. */
+  update(thrust: boolean | number): void {
     const ctx = getAudioCtx();
     if (!ctx) return;
-    if (!this.started) this.startOscillators(ctx);
-    const t1 = thrusting ? 0.20 : 0.07;
-    const t2 = thrusting ? 0.08 : 0.03;
-    const ramp = ctx.currentTime + 0.08;
-    this.gain1?.gain.linearRampToValueAtTime(t1, ramp);
-    this.gain2?.gain.linearRampToValueAtTime(t2, ramp);
+    if (!this.nodes) this.build(ctx);
+    const n = this.nodes!;
+    const k = typeof thrust === 'number' ? Math.max(0, Math.min(1, thrust)) : thrust ? 1 : 0.25;
+    const t = ctx.currentTime + 0.12;
+    n.roarGain.gain.linearRampToValueAtTime(0.06 + 0.22 * k, t);
+    n.roarFilt.frequency.linearRampToValueAtTime(380 + 900 * k, t);
+    n.rumbleGain.gain.linearRampToValueAtTime(0.10 + 0.16 * k, t);
+    n.whine.frequency.linearRampToValueAtTime(1500 + 1300 * k, t);
+    n.whineGain.gain.linearRampToValueAtTime(0.008 + 0.018 * k, t);
+    n.hum.frequency.linearRampToValueAtTime(55 + 25 * k, t);
+    n.humGain.gain.linearRampToValueAtTime(0.05 + 0.05 * k, t);
   }
 
   playWhoosh(): void {
     const ctx = getAudioCtx();
     if (!ctx) return;
-    const osc  = ctx.createOscillator();
+    const src = ctx.createBufferSource();
+    src.buffer = EngineSound.getNoise(ctx);
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'bandpass'; filt.Q.value = 1.4;
     const gain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.value = 1200;
-    gain.gain.value = 0.30;
-    osc.connect(gain);
-    gain.connect(getBus('sfx') ?? ctx.destination);
     const t0 = ctx.currentTime;
-    osc.frequency.exponentialRampToValueAtTime(250, t0 + 0.35);
-    gain.gain.setValueAtTime(0.30, t0);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.35);
-    osc.start(t0);
-    osc.stop(t0 + 0.36);
+    filt.frequency.setValueAtTime(2400, t0);
+    filt.frequency.exponentialRampToValueAtTime(320, t0 + 0.9);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.5, t0 + 0.18);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.95);
+    src.connect(filt); filt.connect(gain); gain.connect(getBus('sfx') ?? ctx.destination);
+    src.start(t0, Math.random() * 1.0);
+    src.stop(t0 + 1.0);
   }
 
   stop(): void {
     const ctx = getAudioCtx();
-    if (!ctx || !this.gain1 || !this.gain2) return;
-    const ramp = ctx.currentTime + 0.15;
-    this.gain1.gain.linearRampToValueAtTime(0, ramp);
-    this.gain2.gain.linearRampToValueAtTime(0, ramp);
+    if (!ctx || !this.nodes) return;
+    const n = this.nodes, t = ctx.currentTime + 0.2;
+    for (const g of [n.roarGain, n.rumbleGain, n.whineGain, n.humGain]) g.gain.linearRampToValueAtTime(0, t);
   }
 
   dispose(): void {
-    try { this.osc1?.stop(); } catch { /* already stopped */ }
-    try { this.osc2?.stop(); } catch { /* already stopped */ }
-    // Don't close the shared context — other audio classes still use it.
-    this.osc1 = null; this.osc2 = null;
-    this.gain1 = null; this.gain2 = null; this.started = false;
+    if (!this.nodes) return;
+    for (const s of [this.nodes.src, this.nodes.whine, this.nodes.hum]) { try { s.stop(); } catch { /* stopped */ } }
+    this.nodes = null;
   }
 
-  private startOscillators(ctx: AudioContext): void {
-    this.osc1 = ctx.createOscillator();
-    this.osc2 = ctx.createOscillator();
-    this.gain1 = ctx.createGain();
-    this.gain2 = ctx.createGain();
-    this.osc1.type = 'sawtooth'; this.osc1.frequency.value = 130;
-    this.osc2.type = 'sawtooth'; this.osc2.frequency.value = 260;
-    this.gain1.gain.value = 0.07;
-    this.gain2.gain.value = 0.03;
-    this.osc1.connect(this.gain1); this.gain1.connect(getBus('sfx') ?? ctx.destination);
-    this.osc2.connect(this.gain2); this.gain2.connect(getBus('sfx') ?? ctx.destination);
-    this.osc1.start(); this.osc2.start();
-    this.started = true;
+  private build(ctx: AudioContext): void {
+    const out = getBus('sfx') ?? ctx.destination;
+    const src = ctx.createBufferSource();
+    src.buffer = EngineSound.getNoise(ctx); src.loop = true;
+
+    const roarFilt = ctx.createBiquadFilter(); roarFilt.type = 'bandpass'; roarFilt.Q.value = 0.8; roarFilt.frequency.value = 500;
+    const roarGain = ctx.createGain(); roarGain.gain.value = 0;
+    src.connect(roarFilt); roarFilt.connect(roarGain); roarGain.connect(out);
+
+    const rumbleFilt = ctx.createBiquadFilter(); rumbleFilt.type = 'lowpass'; rumbleFilt.frequency.value = 160;
+    const rumbleGain = ctx.createGain(); rumbleGain.gain.value = 0;
+    src.connect(rumbleFilt); rumbleFilt.connect(rumbleGain); rumbleGain.connect(out);
+
+    const whine = ctx.createOscillator(); whine.type = 'sine'; whine.frequency.value = 1500;
+    const whineGain = ctx.createGain(); whineGain.gain.value = 0;
+    whine.connect(whineGain); whineGain.connect(out);
+
+    const hum = ctx.createOscillator(); hum.type = 'triangle'; hum.frequency.value = 55;
+    const humGain = ctx.createGain(); humGain.gain.value = 0;
+    hum.connect(humGain); humGain.connect(out);
+
+    src.start(); whine.start(); hum.start();
+    this.nodes = { roarGain, roarFilt, rumbleGain, whine, whineGain, hum, humGain, src };
   }
 
+  private static getNoise(ctx: AudioContext): AudioBuffer {
+    if (!EngineSound.noise) {
+      const len = Math.floor(ctx.sampleRate * NOISE_SECS);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      // Audio-only noise (not game logic), so Math.random is fine here; brown-ish for warmth.
+      let last = 0;
+      for (let i = 0; i < len; i++) { last = (last + 0.06 * (Math.random() * 2 - 1)) / 1.06; d[i] = last * 3.2; }
+      EngineSound.noise = buf;
+    }
+    return EngineSound.noise;
+  }
 }

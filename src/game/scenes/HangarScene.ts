@@ -14,6 +14,9 @@ import { getBiome } from '../theme/biomes';
 import { PLAYER_JET } from '../theme/factions';
 import { drawJetTopDown } from '../models/Vehicles';
 import { drawHangarStatic, HangarCrew } from '../hangar/HangarDecor';
+import { TakeoffCutscene } from '../hangar/TakeoffCutscene';
+import { EngineSound } from '../audio/EngineSound';
+import type { Biome } from '../theme/biomes';
 
 const W = 1280;
 const H = 720;
@@ -65,8 +68,8 @@ export class HangarScene extends Phaser.Scene {
 
   // ── Plane state ──────────────────────────────────────────────────────────
   private planeState: PlaneState = 'flying';
-  private spareWindowTimer = 0;
-  private sparesLaunched   = 0;
+  private takeoff: TakeoffCutscene | null = null;
+  private leaving = false;
 
   // ── Fixed-step accumulator ───────────────────────────────────────────────
   private accumulator = 0;
@@ -85,6 +88,9 @@ export class HangarScene extends Phaser.Scene {
   private touchControls!:   TouchControls;
   private pauseCtl!: PauseController;
   private ambience = new HangarAmbience();
+  private engine = new EngineSound();
+  private biome!: Biome;
+  private seed = 0;
   private crew!: HangarCrew;
   private crewGfx!: Phaser.GameObjects.Graphics;
   private crewRng!: Rng;
@@ -113,8 +119,8 @@ export class HangarScene extends Phaser.Scene {
     this.doorCooldown  = 0;
     this.doorOpenAmt   = 0;
     this.planeState    = 'flying';
-    this.spareWindowTimer = 0;
-    this.sparesLaunched   = 0;
+    this.takeoff = null;
+    this.leaving = false;
     this.accumulator = 0;
     this.prevAction  = false;
     this.prevFire    = false;
@@ -136,6 +142,7 @@ export class HangarScene extends Phaser.Scene {
     // ── Hangar interior + the level's terrain outside the doors ────────────
     const biome = getBiome(missionState.level);
     const seed = (missionState.seed % 1000) + this.launchIndex * 13;
+    this.biome = biome; this.seed = seed;
     drawHangarStatic(this.add.graphics().setDepth(0), biome, { wallMargin: WALL_MARGIN, doorH: DOOR_H }, seed);
     this.crewRng = createRng(seed + 7);
     this.crew = new HangarCrew(this.crewRng);
@@ -173,7 +180,7 @@ export class HangarScene extends Phaser.Scene {
     this.touchControls = new TouchControls(this, { move: 'FLY', fire: 'SKIP', action: 'OPEN / LAUNCH' });
     this.pauseCtl = new PauseController(this);
     this.ambience.start();
-    this.events.once('shutdown', () => this.ambience.stop());
+    this.events.once('shutdown', () => { this.ambience.stop(); this.engine.stop(); this.takeoff?.destroy(); });
 
     // ── Pause on visibility ──────────────────────────────────────────────────
     this.visibilityHandler = () => {
@@ -212,7 +219,7 @@ export class HangarScene extends Phaser.Scene {
     dt: number,
     moveX: number, moveY: number,
     actionJustPressed: boolean,
-    fireJustPressed: boolean,
+    _fireJustPressed: boolean,
   ): void {
     this.crew.update(dt, this.crewRng);
     switch (this.planeState) {
@@ -223,7 +230,7 @@ export class HangarScene extends Phaser.Scene {
         break;
 
       case 'exited':
-        this.stepSpareWindow(dt, actionJustPressed, fireJustPressed);
+        this.stepTakeoff(dt);
         this.stepImpactClock(dt);
         break;
 
@@ -382,20 +389,12 @@ export class HangarScene extends Phaser.Scene {
     if (missionState.tickImpactClock(dt)) this.onImpactExpired();
   }
 
-  private stepSpareWindow(dt: number, actionJustPressed: boolean, fireJustPressed: boolean): void {
-    this.spareWindowTimer -= dt;
-    const remaining = Math.ceil(Math.max(0, this.spareWindowTimer));
-    const key = gameUi.device === 'touch' ? '[◉]'
-              : gameUi.device === 'gamepad' ? '[B]'
-              : '[ACTION]';
-    missionState.hudCue = `LAUNCH SPARE ${key} — ${remaining}s`;
-
-    if (actionJustPressed && this.sparesLaunched < HANGAR.spareMaxInFlight) {
-      this.sparesLaunched++;
-      missionState.hudCue = `SPARE ${this.sparesLaunched} LAUNCHED`;
-    }
-
-    if (this.spareWindowTimer <= 0 || fireJustPressed) {
+  private stepTakeoff(dt: number): void {
+    if (!this.takeoff) return;
+    this.takeoff.update(dt);
+    missionState.hudCue = '';
+    if (this.takeoff.done && !this.leaving) {
+      this.leaving = true;
       this.transitionToAttackRun();
     }
   }
@@ -440,8 +439,9 @@ export class HangarScene extends Phaser.Scene {
   private onPlaneExited(): void {
     this.planeState = 'exited';
     this.planeContainer.setVisible(false);
-    this.spareWindowTimer = HANGAR.spareWindow;
-    this.sparesLaunched   = 0;
+    // Cut to the side-view takeoff animation (drawn above everything in this scene).
+    this.takeoff = new TakeoffCutscene(this, this.biome, this.seed, 20);
+    gameUi.contextualHint = null;
   }
 
   private crashPlane(reason: string): void {
@@ -486,10 +486,8 @@ export class HangarScene extends Phaser.Scene {
   }
 
   private transitionToAttackRun(): void {
-    this.scene.start('AttackRunScene', {
-      launchIndex:    this.launchIndex,
-      sparesLaunched: this.sparesLaunched,
-    });
+    this.engine.stop();
+    this.scene.start('AttackRunScene', { launchIndex: this.launchIndex });
   }
 
   private showGameOver(): void {
@@ -538,6 +536,11 @@ export class HangarScene extends Phaser.Scene {
     this.rightDoor.setPosition(W - DOOR_HALF_W / 2 + offset, DOOR_Y + DOOR_H / 2);
 
     this.drawDoorExtras();
+
+    // Engine: idles in the hangar, roars on thrust and during the takeoff run.
+    if (this.takeoff) { this.takeoff.render(time); this.engine.update(this.takeoff.thrust); }
+    else if (this.planeState === 'flying') this.engine.update(this.thrusting ? 0.75 : 0.2);
+    else this.engine.stop();
   }
 
   private drawPlane(aligned: boolean, thrusting: boolean, time = 0): void {
