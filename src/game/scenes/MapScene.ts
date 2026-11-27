@@ -159,6 +159,7 @@ export class MapScene extends Phaser.Scene {
       if (document.hidden) this.scene.pause(); else this.scene.resume();
     };
     document.addEventListener('visibilitychange', this.visibilityHandler);
+    this.events.once('shutdown', this.shutdown, this);
   }
 
   private drawArc(): void {

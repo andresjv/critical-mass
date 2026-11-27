@@ -62,6 +62,7 @@ interface GroundEnemy {
   type: 'tank' | 'sam';
   alive: boolean;
   fireTimer: number;
+  burstLeft: number; // tank: shots left in the current burst
   // SAM only:
   missile: { x: number; y: number; vx: number; vy: number } | null;
 }
@@ -160,6 +161,7 @@ export class AttackRunScene extends Phaser.Scene {
   private engineSound   = new EngineSound();
   private musicTrack    = new MusicTrack();
   private pauseCtl!: PauseController;
+  private rng = createRng(0);
   private voice         = new VoiceCallout();
   private firstInterceptorVoiced = false;
 
@@ -247,6 +249,7 @@ export class AttackRunScene extends Phaser.Scene {
     ];
     const fireRateMult = TUNING[missionState.difficulty].enemyFireRate;
     const rng = createRng(missionState.seed + this.launchIndex * 1000 + 300);
+    this.rng = rng;
 
     for (let i = 0; i < this.totalSegments; i++) {
       const variation = rng.next() * GROUND_VARIATION * 2 - GROUND_VARIATION;
@@ -263,13 +266,13 @@ export class AttackRunScene extends Phaser.Scene {
         this.groundEnemies.push({
           worldX: wx, type: 'tank', alive: true,
           fireTimer: (ATTACK_RUN.tankFireInterval / fireRateMult) * (0.8 + rng.next() * 0.4),
-          missile: null,
+          missile: null, burstLeft: 0,
         });
       } else if (rng.next() < 0.08 * density) {
         this.groundEnemies.push({
           worldX: wx, type: 'sam', alive: true,
           fireTimer: (3.0 / fireRateMult) * (0.8 + rng.next() * 0.4),
-          missile: null,
+          missile: null, burstLeft: 0,
         });
       }
 
@@ -563,10 +566,18 @@ export class AttackRunScene extends Phaser.Scene {
         const gy = this.groundYAtWorldX(enemy.worldX);
 
         if (enemy.type === 'tank') {
-          enemy.fireTimer = ATTACK_RUN.tankFireInterval / TUNING[missionState.difficulty].enemyFireRate;
+          // Aimed bursts: a few quick shots at the plane, then a reload.
+          if (enemy.burstLeft <= 0) enemy.burstLeft = ATTACK_RUN.tankBurstShots;
+          enemy.burstLeft--;
+          enemy.fireTimer = enemy.burstLeft > 0
+            ? ATTACK_RUN.tankBurstGap
+            : ATTACK_RUN.tankFireInterval / TUNING[missionState.difficulty].enemyFireRate;
+          const ty  = gy - TANK_H;
+          const ang = Phaser.Math.Angle.Between(sx, ty, this.planeX, planeScreenY);
           this.projectiles.push({
-            x: sx, y: gy - TANK_H,
-            vx: 0, vy: -ATTACK_RUN.flakSpeed,
+            x: sx, y: ty,
+            vx: Math.cos(ang) * ATTACK_RUN.flakSpeed,
+            vy: Math.sin(ang) * ATTACK_RUN.flakSpeed,
             alive: true, fromEnemy: true,
           });
         } else { // sam
@@ -655,7 +666,7 @@ export class AttackRunScene extends Phaser.Scene {
       this.stageTimer <= this.interceptorSchedule[this.nextInterceptorIdx]
     ) {
       const spawnY = GROUND_BASE_Y - ATTACK_RUN.altitudeMax * 0.5 -
-                     (Math.random() * ATTACK_RUN.altitudeMax * 0.3);
+                     (this.rng.next() * ATTACK_RUN.altitudeMax * 0.3);
       this.interceptors.push({
         x: W + 60, y: spawnY,
         vx: -ATTACK_RUN.interceptorSpeed * density,
@@ -672,12 +683,17 @@ export class AttackRunScene extends Phaser.Scene {
     for (const ic of this.interceptors) {
       if (!ic.alive) continue;
       ic.x += ic.vx * dt;
+      // Steer toward the player's altitude until it has passed them.
+      if (ic.x > this.planeX) {
+        const maxDy = ATTACK_RUN.interceptorTrackSpeed * dt;
+        ic.y += Phaser.Math.Clamp(planeScreenY - ic.y, -maxDy, maxDy);
+      }
 
       // Burst fire.
       ic.burstTimer -= dt;
       if (ic.burstTimer <= 0 && ic.burstLeft > 0) {
         ic.burstLeft--;
-        ic.burstTimer = 0.35;
+        ic.burstTimer = ATTACK_RUN.interceptorBurstGap;
         const ang = Phaser.Math.Angle.Between(ic.x, ic.y, this.planeX, planeScreenY);
         this.projectiles.push({
           x: ic.x, y: ic.y,

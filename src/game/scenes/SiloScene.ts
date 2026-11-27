@@ -162,10 +162,11 @@ export class SiloScene extends Phaser.Scene {
     }
 
     // ── Visibility pause ─────────────────────────────────────────────────
-    this.visibilityHandler = () => { this.scene.pause(); };
-    document.addEventListener('visibilitychange', () => {
+    this.visibilityHandler = () => {
       if (document.hidden) this.scene.pause(); else this.scene.resume();
-    });
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+    this.events.once('shutdown', this.shutdown, this);
   }
 
   update(_time: number, delta: number): void {
