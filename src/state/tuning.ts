@@ -166,10 +166,10 @@ export const ATTACK_RUN = {
   interceptorBurstGap: 0.3,
   /** How fast interceptors steer toward the player's altitude, px/s. */
   interceptorTrackSpeed: 200,
-  /** Shots per aimed tank burst. */
-  tankBurstShots: 3,
-  /** Seconds between shots in a tank burst. */
-  tankBurstGap: 0.25,
+  /** Tank turret turn speed while tracking the plane, degrees/s. */
+  tankTurretTurnRate: 90,
+  /** Interceptor bullet speed (fires straight ahead), px/s. */
+  interceptorBulletSpeed: 900,
   // ── Added for T6 ──────────────────────────────────────────────────────────
   /** Leftmost screen X the plane can occupy, px. */
   planeXMin: 100,

@@ -40,7 +40,7 @@ const PLANE_HIT_W = 28;  // half-width of hitbox
 const PLANE_HIT_H = 18;  // half-height
 
 // Enemy & projectile sizes (px)
-const TANK_W = 60;   const TANK_H = 28;
+const TANK_W = 60;   const TANK_H = 28;   const TANK_BARREL = 30;
 const SAM_W  = 40;   const SAM_H  = 55;
 const INTERC_W = 55; const INTERC_H = 22;
 const BULLET_W = 18; const BULLET_H = 7;
@@ -62,7 +62,7 @@ interface GroundEnemy {
   type: 'tank' | 'sam';
   alive: boolean;
   fireTimer: number;
-  burstLeft: number; // tank: shots left in the current burst
+  aim: number; // tank: turret angle, radians (0 = right, -PI/2 = up)
   // SAM only:
   missile: { x: number; y: number; vx: number; vy: number } | null;
 }
@@ -266,13 +266,13 @@ export class AttackRunScene extends Phaser.Scene {
         this.groundEnemies.push({
           worldX: wx, type: 'tank', alive: true,
           fireTimer: (ATTACK_RUN.tankFireInterval / fireRateMult) * (0.8 + rng.next() * 0.4),
-          missile: null, burstLeft: 0,
+          missile: null, aim: -Math.PI / 2,
         });
       } else if (rng.next() < 0.08 * density) {
         this.groundEnemies.push({
           worldX: wx, type: 'sam', alive: true,
           fireTimer: (3.0 / fireRateMult) * (0.8 + rng.next() * 0.4),
-          missile: null, burstLeft: 0,
+          missile: null, aim: -Math.PI / 2,
         });
       }
 
@@ -561,23 +561,28 @@ export class AttackRunScene extends Phaser.Scene {
       if (!enemy.alive) continue;
       enemy.fireTimer -= dt;
 
+      if (enemy.type === 'tank') {
+        // Turret swings toward the plane at a limited rate, never below the horizon.
+        const pivot  = this.tankPivot(enemy);
+        let target = Phaser.Math.Angle.Between(pivot.x, pivot.y, this.planeX, planeScreenY);
+        if (target > 0) target = target > Math.PI / 2 ? -Math.PI : 0; // plane below: stay level on its side
+        const maxTurn = Phaser.Math.DegToRad(ATTACK_RUN.tankTurretTurnRate) * dt;
+        enemy.aim += Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(target - enemy.aim), -maxTurn, maxTurn);
+      }
+
       if (enemy.fireTimer <= 0) {
         const sx = enemy.worldX - this.cameraX;
         const gy = this.groundYAtWorldX(enemy.worldX);
 
         if (enemy.type === 'tank') {
-          // Aimed bursts: a few quick shots at the plane, then a reload.
-          if (enemy.burstLeft <= 0) enemy.burstLeft = ATTACK_RUN.tankBurstShots;
-          enemy.burstLeft--;
-          enemy.fireTimer = enemy.burstLeft > 0
-            ? ATTACK_RUN.tankBurstGap
-            : ATTACK_RUN.tankFireInterval / TUNING[missionState.difficulty].enemyFireRate;
-          const ty  = gy - TANK_H;
-          const ang = Phaser.Math.Angle.Between(sx, ty, this.planeX, planeScreenY);
+          // One round out of the barrel, along wherever the turret is pointing.
+          enemy.fireTimer = ATTACK_RUN.tankFireInterval / TUNING[missionState.difficulty].enemyFireRate;
+          const pivot = this.tankPivot(enemy);
           this.projectiles.push({
-            x: sx, y: ty,
-            vx: Math.cos(ang) * ATTACK_RUN.flakSpeed,
-            vy: Math.sin(ang) * ATTACK_RUN.flakSpeed,
+            x: pivot.x + Math.cos(enemy.aim) * TANK_BARREL,
+            y: pivot.y + Math.sin(enemy.aim) * TANK_BARREL,
+            vx: Math.cos(enemy.aim) * ATTACK_RUN.flakSpeed,
+            vy: Math.sin(enemy.aim) * ATTACK_RUN.flakSpeed,
             alive: true, fromEnemy: true,
           });
         } else { // sam
@@ -694,11 +699,10 @@ export class AttackRunScene extends Phaser.Scene {
       if (ic.burstTimer <= 0 && ic.burstLeft > 0) {
         ic.burstLeft--;
         ic.burstTimer = ATTACK_RUN.interceptorBurstGap;
-        const ang = Phaser.Math.Angle.Between(ic.x, ic.y, this.planeX, planeScreenY);
+        // Straight ahead (the direction the interceptor is flying), not aimed.
         this.projectiles.push({
-          x: ic.x, y: ic.y,
-          vx: Math.cos(ang) * 300,
-          vy: Math.sin(ang) * 300,
+          x: ic.x - 30, y: ic.y,
+          vx: -ATTACK_RUN.interceptorBulletSpeed, vy: 0,
           alive: true, fromEnemy: true,
         });
       }
@@ -890,9 +894,11 @@ export class AttackRunScene extends Phaser.Scene {
         // Turret.
         this.enemyGfx.fillStyle(0x556644, 1);
         this.enemyGfx.fillRect(sx - 15, gy - TANK_H - 12, 30, 12);
-        // Barrel (angled up).
+        // Barrel (tracks the plane).
+        const pivot = this.tankPivot(enemy);
         this.enemyGfx.lineStyle(4, 0x667755, 1);
-        this.enemyGfx.lineBetween(sx + 10, gy - TANK_H - 6, sx + 36, gy - TANK_H - 24);
+        this.enemyGfx.lineBetween(pivot.x, pivot.y,
+          pivot.x + Math.cos(enemy.aim) * TANK_BARREL, pivot.y + Math.sin(enemy.aim) * TANK_BARREL);
         // Treads.
         this.enemyGfx.fillStyle(0x334422, 1);
         this.enemyGfx.fillRect(sx - TANK_W / 2, gy - 10, TANK_W, 10);
@@ -1396,6 +1402,11 @@ export class AttackRunScene extends Phaser.Scene {
       missionState.startMission({ theme: 'coldfront', difficulty: missionState.difficulty, seed: Date.now() });
       this.scene.start('MapScene', { launchIndex: 0 });
     });
+  }
+
+  /** Screen-space turret pivot (centre of the turret block). */
+  private tankPivot(enemy: GroundEnemy): { x: number; y: number } {
+    return { x: enemy.worldX - this.cameraX, y: this.groundYAtWorldX(enemy.worldX) - TANK_H - 6 };
   }
 
   private spawnExplosion(worldX: number, screenY: number, size: number): void {
