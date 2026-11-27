@@ -40,7 +40,7 @@ export class MenuScene extends Phaser.Scene {
     );
     // Darken the bottom so the menu text stays readable over bright biomes.
     const shade = this.add.graphics().setDepth(3);
-    shade.fillStyle(0x000000, 0.35);
+    shade.fillStyle(0x000000, 0.12);
     shade.fillRect(0, 0, 1280, 720);
   }
 
@@ -59,6 +59,6 @@ export class MenuScene extends Phaser.Scene {
       this.backdrop.setBiome(getBiome(this.shownLevel), 3);
     }
     this.cameraX += MENU_SCROLL * delta * 0.001;
-    this.backdrop.draw(this.cameraX);
+    this.backdrop.draw(this.cameraX, this.time.now);
   }
 }

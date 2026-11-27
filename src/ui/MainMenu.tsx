@@ -7,7 +7,7 @@ import { LEVELS, levelInfo, type LevelId } from '../state/levels';
 import { settings, updateSettings, type Settings } from '../state/settings';
 import type { Difficulty } from '../state/tuning';
 
-type Page = 'title' | 'levels' | 'settings';
+type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'achievements';
 
 const ACCENT = '#88ccff';
 const FONT = "'Space Grotesk', sans-serif";
@@ -22,12 +22,14 @@ const DIFFICULTIES: { id: Difficulty; label: string; note: string }[] = [
 export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' | 'touch' | 'gamepad' }) {
   const [page, setPage]   = useState<Page>('title');
   const [level, setLevel] = useState<LevelId>(settings.lastLevel);
+  /** Level highlighted while browsing the level page (not chosen until clicked). */
+  const [browse, setBrowse] = useState<LevelId>(settings.lastLevel);
   const [diff, setDiff]   = useState<Difficulty>(settings.lastDifficulty);
   const [prefs, setPrefs] = useState<Settings>({ ...settings });
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Scenery behind the menu follows the highlighted level.
-  useEffect(() => { gameUi.menuPreview = level; }, [level]);
+  // Scenery behind the menu shows the chosen level, or the one being browsed.
+  useEffect(() => { gameUi.menuPreview = page === 'levels' ? browse : level; }, [level, browse, page]);
 
   // Back to the title page whenever the menu reappears (e.g. after game over).
   useEffect(() => { if (show) setPage('title'); }, [show]);
@@ -78,48 +80,69 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
     setPrefs({ ...settings });
   };
   const play = () => { gameUi.menuRequest = { level, difficulty: diff }; };
+  const chooseLevel = (id: LevelId) => {
+    setLevel(id);
+    updateSettings({ lastLevel: id, lastDifficulty: diff });
+    setPage('title');
+  };
+  const openLevels = () => { setBrowse(level); setPage('levels'); };
+  const info = levelInfo(level);
+  const levelNo = LEVELS.findIndex(l => l.id === level) + 1;
 
   return (
     <div ref={rootRef} style={{
       position: 'absolute', inset: 0, zIndex: 120, pointerEvents: 'auto',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, color: '#dde8f2',
-      background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%)',
+      background: page === 'title'
+        ? 'linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.25) 50%, rgba(0,0,0,0.05) 100%)'
+        : 'rgba(0,0,0,0.35)',
     }}>
       {page === 'title' && (
-        <>
-          <div style={{ fontSize: 22, letterSpacing: 8, color: '#7f97ad', marginBottom: 10 }}>
-            FOUR LAUNCHES · ONE PILOT
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', padding: '0 72px', gap: 56 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 22, letterSpacing: 8, color: '#9fb3c6', marginBottom: 8 }}>FOUR LAUNCHES · ONE PILOT</div>
+            <div style={{
+              fontSize: 96, fontWeight: 700, letterSpacing: 8, color: '#ffffff', lineHeight: 1,
+              textShadow: `0 0 40px ${ACCENT}66`, marginBottom: 36,
+            }}>
+              CRITICAL<br />MASS
+            </div>
+            {/* The chosen level, shown over its own scenery. */}
+            <div style={{
+              display: 'inline-block', padding: '18px 24px', borderRadius: 8, maxWidth: 560,
+              background: 'rgba(4,8,14,0.72)', borderLeft: `4px solid ${ACCENT}`,
+            }}>
+              <div style={{ fontFamily: MONO, fontSize: 20, color: ACCENT, letterSpacing: 2 }}>
+                LEVEL {levelNo} · {DIFFICULTIES.find(d => d.id === diff)?.label.toUpperCase()}
+              </div>
+              <div style={{ fontSize: 44, fontWeight: 700, color: '#fff', lineHeight: 1.15 }}>{info.name}</div>
+              <div style={{ fontSize: 22, color: '#b9cad8', lineHeight: 1.35 }}>{info.premise}</div>
+            </div>
           </div>
-          <div style={{
-            fontSize: 112, fontWeight: 700, letterSpacing: 10, color: '#ffffff', lineHeight: 1,
-            textShadow: `0 0 40px ${ACCENT}66`, marginBottom: 14,
-          }}>
-            CRITICAL MASS
-          </div>
-          <div style={{ fontSize: 26, color: '#a9bccd', marginBottom: 44 }}>
-            {levelInfo(level).name} · {DIFFICULTIES.find(d => d.id === diff)?.label}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: 420 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, width: 400, flexShrink: 0 }}>
             <MenuButton primary autoFocus onClick={play}>Play</MenuButton>
-            <MenuButton onClick={() => setPage('levels')}>Select level</MenuButton>
+            <MenuButton onClick={openLevels}>Select level</MenuButton>
+            <MenuButton onClick={() => setPage('inventory')}>Inventory</MenuButton>
+            <MenuButton onClick={() => setPage('achievements')}>Achievements</MenuButton>
             <MenuButton onClick={() => setPage('settings')}>Settings</MenuButton>
           </div>
-        </>
+        </div>
       )}
 
       {page === 'levels' && (
         <Panel title="Select level" onBack={() => setPage('title')}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 18 }}>
             {LEVELS.map((l, i) => {
-              const selected = l.id === level;
+              const selected = l.id === browse;
               return (
                 <button
                   key={l.id}
                   data-nav
-                  data-autofocus={selected ? '' : undefined}
-                  onClick={() => setLevel(l.id)}
-                  onFocus={() => setLevel(l.id)}
+                  data-autofocus={l.id === level ? '' : undefined}
+                  onClick={() => chooseLevel(l.id)}
+                  onFocus={() => setBrowse(l.id)}
+                  onMouseEnter={() => setBrowse(l.id)}
                   style={{
                     ...resetBtn, textAlign: 'left', borderRadius: 8, overflow: 'hidden',
                     border: `2px solid ${selected ? ACCENT : 'rgba(255,255,255,0.12)'}`,
@@ -133,16 +156,17 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
                   <div style={{ padding: '12px 14px 16px' }}>
                     <div style={{ fontFamily: MONO, fontSize: 20, color: '#6f879c', marginBottom: 2 }}>LEVEL {i + 1}</div>
                     <div style={{ fontSize: 28, fontWeight: 700, color: '#fff', lineHeight: 1.1 }}>{l.name}</div>
+                    {l.id === level && <div style={{ fontSize: 18, color: ACCENT, marginTop: 4 }}>CURRENT</div>}
                   </div>
                 </button>
               );
             })}
           </div>
-          <div style={{ fontSize: 24, color: '#b9cad8', minHeight: 34, marginBottom: 18 }}>{levelInfo(level).premise}</div>
+          <div style={{ fontSize: 24, color: '#b9cad8', minHeight: 34, marginBottom: 18 }}>{levelInfo(browse).premise} <span style={{ color: '#6f879c' }}>· Tap a level to choose it</span></div>
           <div style={{ fontSize: 20, letterSpacing: 3, color: '#7f97ad', marginBottom: 10 }}>DIFFICULTY</div>
           <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
             {DIFFICULTIES.map(d => (
-              <button key={d.id} data-nav onClick={() => setDiff(d.id)} style={{
+              <button key={d.id} data-nav onClick={() => { setDiff(d.id); updateSettings({ lastDifficulty: d.id }); }} style={{
                 ...resetBtn, flex: 1, padding: '10px 16px', borderRadius: 6, textAlign: 'left',
                 border: `2px solid ${d.id === diff ? ACCENT : 'rgba(255,255,255,0.12)'}`,
                 background: d.id === diff ? 'rgba(136,204,255,0.12)' : 'rgba(8,14,22,0.9)',
@@ -153,8 +177,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
             ))}
           </div>
           <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
-            <MenuButton onClick={() => setPage('title')} style={{ width: 200 }}>Back</MenuButton>
-            <MenuButton primary onClick={play} style={{ width: 340 }}>Play</MenuButton>
+            <MenuButton onClick={() => setPage('title')} style={{ width: 240 }}>Back</MenuButton>
           </div>
         </Panel>
       )}
@@ -173,8 +196,36 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
         </Panel>
       )}
 
+      {page === 'inventory' && (
+        <Panel title="Inventory" onBack={() => setPage('title')}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+            <Slot name="Falcon" detail="Fighter jet · Equipped" equipped icon={<JetIcon />} />
+            <Slot name="Cannon" detail="Forward guns · Standard" icon={<GunIcon />} />
+            <Slot name="Iron bomb" detail="Ground strike · Standard" icon={<BombIcon />} />
+            {Array.from({ length: 5 }, (_, i) => <Slot key={i} name="Locked" detail="Coming soon" locked />)}
+          </div>
+          <MenuButton onClick={() => setPage('title')} style={{ width: 240 }}>Back</MenuButton>
+        </Panel>
+      )}
+
+      {page === 'achievements' && (
+        <Panel title="Achievements" onBack={() => setPage('title')} narrow>
+          <div style={{ fontSize: 24, color: '#b9cad8', marginBottom: 20 }}>Achievements are coming soon.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} style={{
+                aspectRatio: '1', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(8,14,22,0.9)', border: '2px dashed rgba(136,204,255,0.2)',
+                fontFamily: MONO, fontSize: 32, color: '#3f5468',
+              }}>?</div>
+            ))}
+          </div>
+          <MenuButton onClick={() => setPage('title')}>Back</MenuButton>
+        </Panel>
+      )}
+
       {page === 'title' && device !== 'touch' && (
-        <div style={{ position: 'absolute', bottom: 22, fontSize: 20, color: '#6f879c', letterSpacing: 2 }}>
+        <div style={{ position: 'absolute', bottom: 18, right: 72, fontSize: 20, color: '#8ea3b6', letterSpacing: 2 }}>
           ARROWS / TAB TO MOVE · ENTER TO SELECT
         </div>
       )}
@@ -192,7 +243,7 @@ function MenuButton({ children, onClick, primary, autoFocus, style }: {
   return (
     <button data-nav data-autofocus={autoFocus ? '' : undefined} onClick={onClick} style={{
       ...resetBtn, fontSize: 28, fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase',
-      padding: '16px 24px', borderRadius: 6,
+      padding: '13px 24px', borderRadius: 6,
       color: primary ? '#06121e' : '#dde8f2',
       background: primary ? ACCENT : 'rgba(8,14,22,0.85)',
       border: `2px solid ${primary ? ACCENT : 'rgba(136,204,255,0.35)'}`,
@@ -256,5 +307,62 @@ function Toggle({ label, note, value, onChange }: { label: string; note: string;
         }} />
       </span>
     </button>
+  );
+}
+
+function Slot({ name, detail, icon, equipped, locked }: {
+  name: string; detail: string; icon?: ReactNode; equipped?: boolean; locked?: boolean;
+}) {
+  return (
+    <div style={{
+      borderRadius: 8, padding: '14px 16px', minHeight: 150, display: 'flex', flexDirection: 'column', gap: 6,
+      background: locked ? 'rgba(8,14,22,0.6)' : 'rgba(8,14,22,0.92)',
+      border: `2px ${locked ? 'dashed' : 'solid'} ${equipped ? ACCENT : 'rgba(136,204,255,0.2)'}`,
+      opacity: locked ? 0.6 : 1,
+    }}>
+      <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3f5468', fontFamily: MONO, fontSize: 32 }}>
+        {icon ?? '?'}
+      </div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: '#fff' }}>{name}</div>
+      <div style={{ fontSize: 18, color: equipped ? ACCENT : '#9fb2c3' }}>{detail}</div>
+    </div>
+  );
+}
+
+/** Side view of the player's blue fighter, matching the in-game model. */
+function JetIcon() {
+  return (
+    <svg viewBox="-44 -26 92 40" width="150" height="64" aria-hidden="true">
+      <polygon points="-16,-5 -30,-5 -37,-23 -30,-23" fill="#3a8fe0" />
+      <polygon points="-27,-14 -33,-14 -35.5,-21 -30.5,-21" fill="#ffffff" />
+      <polygon points="38,0.5 28,-2 16,-5 0,-6.5 -22,-6.5 -32,-5 -37,-3.5 -37,3.5 -30,5.5 -6,6.5 12,6 26,3" fill="#3a8fe0" />
+      <polygon points="38,0.5 30,-1.6 30,3.4" fill="#1f5ea8" />
+      <polygon points="22,-4.5 16,-9.5 8,-10.5 2,-6.5" fill="#bfe6ff" />
+      <polygon points="6,2.5 -9,2.5 -19,10.5 -13,10.5" fill="#1f5ea8" />
+      <polygon points="-25,2 -34,2 -39,8 -33,8" fill="#1f5ea8" />
+      <circle cx="-8" cy="-0.5" r="3.6" fill="#fff" /><circle cx="-8" cy="-0.5" r="1.8" fill="#1f5ea8" />
+      <rect x="-40" y="-3.5" width="3.5" height="7" fill="#2a2e33" />
+    </svg>
+  );
+}
+
+function GunIcon() {
+  return (
+    <svg viewBox="0 0 60 30" width="110" height="56" aria-hidden="true">
+      <rect x="4" y="12" width="34" height="8" rx="2" fill="#8ea3b6" />
+      <rect x="36" y="13" width="20" height="3" fill="#cfd8e0" /><rect x="36" y="17" width="20" height="2" fill="#cfd8e0" />
+      <rect x="40" y="6" width="10" height="3" rx="1" fill="#ffd060" /><rect x="40" y="22" width="10" height="3" rx="1" fill="#ffd060" />
+    </svg>
+  );
+}
+
+function BombIcon() {
+  return (
+    <svg viewBox="-24 -10 44 20" width="110" height="52" aria-hidden="true">
+      <polygon points="-10,0 -20,-9 -22,-9 -18,0 -22,9 -20,9" fill="#6b7660" />
+      <polygon points="-14,-4 6,-6 12,-4 16,0 12,4 6,6 -14,4" fill="#4a5444" />
+      <polygon points="10,-4.5 14,-2.5 16,0 14,2.5 10,4.5" fill="#2f362b" />
+      <rect x="-4" y="-5.6" width="3" height="11.2" fill="#d8c040" />
+    </svg>
   );
 }

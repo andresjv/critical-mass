@@ -181,3 +181,55 @@ function camo(t: Xform, pal: VehiclePalette, seed: number, x: number, y: number,
     t.ellipse(pal.camo[i % pal.camo.length], cx, cy, 3 + r * 4, 1.6 + r * 2, 0.9);
   }
 }
+
+/**
+ * Top-down fighter jet (hangar view), ~80 px long and ~76 px wingspan, nose pointing +x.
+ * Draw at (x, y) with `rot` in radians, or at (0, 0) inside a rotated container.
+ */
+export function drawJetTopDown(
+  g: Phaser.GameObjects.Graphics, x: number, y: number, pal: JetPalette,
+  o: { rot?: number; scale?: number; thrust?: number; time?: number },
+): void {
+  const t = new Xform(g, x, y, o.rot ?? 0, 1, o.scale ?? 1);
+  const thrust = o.thrust ?? 0, time = o.time ?? 0;
+
+  // Twin afterburners.
+  if (thrust > 0) {
+    const fl = 0.75 + 0.25 * Math.sin(time * 0.03);
+    const len = 18 + 34 * thrust * fl;
+    for (const sy of [-3, 3]) {
+      t.poly(0xff6a1a, [[-38, sy - 3], [-38, sy + 3], [-38 - len, sy]], 0.75);
+      t.poly(0xffe8a0, [[-38, sy - 1.6], [-38, sy + 1.6], [-38 - len * 0.6, sy]], 0.9);
+    }
+  }
+  // Delta wings (both sides) with darker leading edge.
+  for (const sgn of [-1, 1]) {
+    t.poly(pal.dark, [[12, 6 * sgn], [-14, 37 * sgn], [-23, 37 * sgn], [-21, 6 * sgn]]);
+    t.poly(pal.body, [[9, 6 * sgn], [-14, 34 * sgn], [-21, 34 * sgn], [-19, 6 * sgn]]);
+    // Wingtip missile rail.
+    t.rect(0xdde4ea, -22, 36 * sgn - 1.2, 16, 2.4);
+    t.poly(pal.marking, [[-6, 36 * sgn - 1.2], [-3, 36 * sgn], [-6, 36 * sgn + 1.2]]);
+    // Roundel.
+    t.circle(pal.marking, -11, 21 * sgn, 4);
+    t.circle(pal.markingCore, -11, 21 * sgn, 2);
+    // Tailplanes.
+    t.poly(pal.dark, [[-25, 6 * sgn], [-35, 18 * sgn], [-39, 18 * sgn], [-37, 6 * sgn]]);
+    // Intake.
+    t.rect(0x15181c, 2, sgn > 0 ? 6 : -9, 10, 3);
+  }
+  // Fuselage.
+  t.poly(pal.body, [[42, 0], [32, -3.5], [16, -6.5], [-30, -6.5], [-37, -4.5], [-37, 4.5], [-30, 6.5], [16, 6.5], [32, 3.5]]);
+  t.poly(pal.dark, [[42, 0], [33, -2.2], [33, 2.2]]);
+  // Twin fins seen from above.
+  t.rect(pal.dark, -34, -6, 14, 2.2);
+  t.rect(pal.dark, -34, 3.8, 14, 2.2);
+  t.rect(pal.marking, -26, -6, 5, 2.2);
+  t.rect(pal.marking, -26, 3.8, 5, 2.2);
+  // Spine line and canopy.
+  t.line(pal.dark, 1, 8, 0, -28, 0, 0.6);
+  t.ellipse(pal.canopy, 20, 0, 9, 3.6);
+  t.ellipse(0xffffff, 23, -1, 3.5, 1.2, 0.6);
+  // Nozzles.
+  t.circle(0x2a2e33, -37.5, -3, 2.4);
+  t.circle(0x2a2e33, -37.5, 3, 2.4);
+}

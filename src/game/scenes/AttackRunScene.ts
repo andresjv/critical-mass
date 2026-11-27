@@ -869,7 +869,7 @@ export class AttackRunScene extends Phaser.Scene {
     const planeScreenY = groundY - this.planeAlt;
 
     // ── Parallax background ──────────────────────────────────────────────────
-    this.backdrop.draw(this.cameraX);
+    this.backdrop.draw(this.cameraX, this.time.now);
 
     // ── Terrain ──────────────────────────────────────────────────────────────
     this.terrainGfx.clear();

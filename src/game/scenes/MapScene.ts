@@ -9,8 +9,6 @@ import { TouchControls } from '../../input/TouchControls';
 import { parseChallengeFromURL, getPlayerName } from '../../state/challengeLink';
 import { showStageIntro } from '../../state/stageIntros';
 
-// Module-level flag: show briefing only on first visit per page load.
-let briefingShown = false;
 
 const W = 1280;
 const H = 720;
@@ -79,11 +77,6 @@ export class MapScene extends Phaser.Scene {
       }
     }
 
-    // Mission briefing before the first launch of the session.
-    if (!briefingShown && this.launchIndex === 0) {
-      briefingShown = true;
-      gameUi.showBriefing = true;
-    }
 
     // Write to gameUi so the React overlay can render the map panel.
     gameUi.mapActive          = true;
