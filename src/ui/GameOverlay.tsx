@@ -1,6 +1,7 @@
 import { useCanvasScale } from './useCanvasScale';
 import { TouchControlLabels } from './TouchControlLabels';
 import { PauseOverlay } from './PauseOverlay';
+import { useCalloutVoice } from './useCalloutVoice';
 import { useHudState } from './useHudState';
 import { GameHud } from './GameHud';
 import { DebugOverlay } from './DebugOverlay';
@@ -18,6 +19,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../game/config';
 export function GameOverlay() {
   const { scale, offsetX, offsetY } = useCanvasScale();
   const s = useHudState();
+  useCalloutVoice(s.callout, s.calloutExpiry, s.paused);
 
   // Pointer events must be 'auto' for any overlay that needs clicks/taps.
   const needsPointerEvents =

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import { getGameConfig } from './config';
 import { resumeCtx, setPageHidden } from './audio/audioCtx';
+import { primeSpeech, stopSpeech } from './audio/Speech';
 
 export default function GameCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -11,8 +12,8 @@ export default function GameCanvas() {
     // Unlock/resume the shared AudioContext from real DOM gestures (autoplay policy).
     // Kept for every gesture, not just the first: iOS can re-suspend audio after
     // the app is backgrounded, and resumeCtx() is a no-op while running.
-    const unlock = () => { if (!document.hidden) resumeCtx(); };
-    const onVisibility = () => setPageHidden(document.hidden);
+    const unlock = () => { if (!document.hidden) { resumeCtx(); primeSpeech(); } };
+    const onVisibility = () => { setPageHidden(document.hidden); if (document.hidden) stopSpeech(); };
     document.addEventListener('click',      unlock);
     document.addEventListener('keydown',    unlock);
     document.addEventListener('touchstart', unlock);
