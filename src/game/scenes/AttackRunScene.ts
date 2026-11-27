@@ -16,6 +16,9 @@ import { MusicTrack } from '../audio/MusicTrack';
 import { VoiceCallout } from '../audio/VoiceCallout';
 import { playExplosion } from '../audio/ExplosionSound';
 import { PauseController } from '../PauseController';
+import { Effects } from '../effects/Effects';
+import { pts } from '../effects/points';
+import { ATTACK_RUN_PALETTE as BG, FX_PALETTE } from '../theme/coldFront';
 
 const W = 1280;
 const H = 720;
@@ -49,6 +52,12 @@ const MISSILE_W = 24; const MISSILE_H = 8;
 const HEATSEEK_W = 28; const HEATSEEK_H = 10;
 const BLDG_W = 90;   const BLDG_H = 140;
 
+/** Deterministic 0..1 hash for scenery placement (not gameplay; same every run). */
+function hash01(n: number): number {
+  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
 interface SceneData {
   launchIndex: number;
   sparesLaunched?: number;
@@ -62,7 +71,9 @@ interface GroundEnemy {
   type: 'tank' | 'sam';
   alive: boolean;
   fireTimer: number;
-  aim: number; // tank: turret angle, radians (0 = right, -PI/2 = up)
+  aim: number; // tank turret / SAM rail angle, radians (0 = right, -PI/2 = up)
+  /** Seconds left of the firing animation (tank recoil / SAM launch shake). */
+  fireAnim: number;
   // SAM only:
   missile: { x: number; y: number; vx: number; vy: number } | null;
 }
@@ -103,12 +114,6 @@ interface Bomb {
   alive:      boolean;
 }
 
-interface Explosion {
-  worldX:  number;
-  screenY: number;  // screen Y locked at creation
-  t:       number;  // 0 → 1; advances over 0.6s
-  size:    number;  // max radius px
-}
 
 export class AttackRunScene extends Phaser.Scene {
   private launchIndex   = 0;
@@ -145,7 +150,7 @@ export class AttackRunScene extends Phaser.Scene {
   // ── Bombs & explosions ────────────────────────────────────────────────────
   private bombs: Bomb[] = [];
   private bombReloadTimer = 0;
-  private explosions: Explosion[] = [];
+  private fx!: Effects;
 
   // ── Pre-run briefing & pause ───────────────────────────────────────────────
   private preRunActive = true;
@@ -209,7 +214,6 @@ export class AttackRunScene extends Phaser.Scene {
     this.prevAction    = false;
     this.bombs         = [];
     this.bombReloadTimer = 0;
-    this.explosions    = [];
     this.engineSound.stop();
     this.musicTrack.stop();
     this.firstInterceptorVoiced = false;
@@ -223,10 +227,6 @@ export class AttackRunScene extends Phaser.Scene {
     gameUi.mapActive   = false;
     gameUi.attackRunSecsLeft = this.stageTimer;
     missionState.hudCue = 'ATTACK RUN';
-    this.voice.setTextCallback((text) => {
-      gameUi.callout       = text;
-      gameUi.calloutExpiry = Date.now() + 2200;
-    });
     debugInfo.doorState = '—';
     debugInfo.speed     = 0;
 
@@ -266,13 +266,13 @@ export class AttackRunScene extends Phaser.Scene {
         this.groundEnemies.push({
           worldX: wx, type: 'tank', alive: true,
           fireTimer: (ATTACK_RUN.tankFireInterval / fireRateMult) * (0.8 + rng.next() * 0.4),
-          missile: null, aim: -Math.PI / 2,
+          missile: null, aim: -Math.PI / 2, fireAnim: 0,
         });
       } else if (rng.next() < 0.08 * density) {
         this.groundEnemies.push({
           worldX: wx, type: 'sam', alive: true,
           fireTimer: (3.0 / fireRateMult) * (0.8 + rng.next() * 0.4),
-          missile: null, aim: -Math.PI / 2,
+          missile: null, aim: -Math.PI / 4, fireAnim: 0,
         });
       }
 
@@ -297,10 +297,8 @@ export class AttackRunScene extends Phaser.Scene {
     this.heatSeekerSchedule.sort((a, b) => b - a);
 
     // ── Background ──────────────────────────────────────────────────────────
-    // Static sky base (depth 0); parallax layers redraw every frame on top.
-    const sky = this.add.graphics().setDepth(0);
-    sky.fillStyle(0x0a1828, 1); sky.fillRect(0, 0, W, H * 0.5);
-    sky.fillStyle(0x102030, 1); sky.fillRect(0, H * 0.5, W, H * 0.5);
+    // Static sky (depth 0): gradient, stars, moon. Parallax layers redraw every frame on top.
+    this.drawSky(this.add.graphics().setDepth(0));
 
     // Parallax layers — redrawn each frame in drawParallaxBg().
     this.bgFarGfx = this.add.graphics().setDepth(0.1); // far mountains
@@ -314,6 +312,12 @@ export class AttackRunScene extends Phaser.Scene {
     this.projGfx      = this.add.graphics().setDepth(4);
     this.bombGfx      = this.add.graphics().setDepth(4.5);
     this.planeGfx     = this.add.graphics().setDepth(5);
+    this.fx = new Effects(
+      this.explosionGfx,
+      (wx) => this.groundYAtWorldX(wx),
+      createRng(missionState.seed + this.launchIndex * 1000 + 777),
+      (wx, gy) => this.fallerImpact(wx, gy),
+    );
     this.preRunGfx    = this.add.graphics().setDepth(20);
     this.crashGfx     = this.add.graphics().setDepth(15);
 
@@ -394,6 +398,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.accumulator += delta * 0.001;
     while (this.accumulator >= FIXED_DT) {
       this.fixedStep(FIXED_DT, input.moveX, input.moveY, fireJust, actionJust);
+      this.fx.update(FIXED_DT, this.cameraX); // keeps burning after a crash too
       this.accumulator -= FIXED_DT;
     }
 
@@ -502,8 +507,8 @@ export class AttackRunScene extends Phaser.Scene {
         if (!ic.alive) continue;
         const dist = Math.sqrt((bombSX - ic.x) ** 2 + (bombSY - ic.y) ** 2);
         if (dist < airHitR) {
-          ic.alive = false; bomb.alive = false;
-          this.spawnExplosion(ic.x + this.cameraX, ic.y, 55);
+          bomb.alive = false;
+          this.killInterceptor(ic);
           missionState.addScore(SCORE.interceptor);
           missionState.hudCue = `+${SCORE.interceptor}`;
           break;
@@ -533,11 +538,6 @@ export class AttackRunScene extends Phaser.Scene {
       }
     }
 
-    // Advance explosions.
-    for (const ex of this.explosions) {
-      if (ex.t < 1) ex.t = Math.min(1, ex.t + dt / 0.6);
-    }
-
     // Update projectiles.
     for (const proj of this.projectiles) {
       if (!proj.alive) continue;
@@ -560,6 +560,7 @@ export class AttackRunScene extends Phaser.Scene {
     for (const enemy of this.activeEnemies) {
       if (!enemy.alive) continue;
       enemy.fireTimer -= dt;
+      enemy.fireAnim = Math.max(0, enemy.fireAnim - dt);
 
       if (enemy.type === 'tank') {
         // Turret swings toward the plane at a limited rate, never below the horizon.
@@ -568,33 +569,52 @@ export class AttackRunScene extends Phaser.Scene {
         if (target > 0) target = target > Math.PI / 2 ? -Math.PI : 0; // plane below: stay level on its side
         const maxTurn = Phaser.Math.DegToRad(ATTACK_RUN.tankTurretTurnRate) * dt;
         enemy.aim += Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(target - enemy.aim), -maxTurn, maxTurn);
+      } else {
+        // SAM launch rail swings up toward the plane (upward arc only).
+        const base   = this.samRailBase(enemy);
+        const target = Phaser.Math.Clamp(
+          Phaser.Math.Angle.Between(base.x, base.y, this.planeX, planeScreenY),
+          ATTACK_RUN.samRailAimMin, ATTACK_RUN.samRailAimMax);
+        const maxTurn = Phaser.Math.DegToRad(ATTACK_RUN.samRailTurnRate) * dt;
+        enemy.aim = Phaser.Math.Clamp(
+          enemy.aim + Phaser.Math.Clamp(target - enemy.aim, -maxTurn, maxTurn),
+          ATTACK_RUN.samRailAimMin, ATTACK_RUN.samRailAimMax);
       }
 
       if (enemy.fireTimer <= 0) {
-        const sx = enemy.worldX - this.cameraX;
         const gy = this.groundYAtWorldX(enemy.worldX);
 
         if (enemy.type === 'tank') {
           // One round out of the barrel, along wherever the turret is pointing.
           enemy.fireTimer = ATTACK_RUN.tankFireInterval / TUNING[missionState.difficulty].enemyFireRate;
           const pivot = this.tankPivot(enemy);
+          const mx = pivot.x + Math.cos(enemy.aim) * TANK_BARREL;
+          const my = pivot.y + Math.sin(enemy.aim) * TANK_BARREL;
           this.projectiles.push({
-            x: pivot.x + Math.cos(enemy.aim) * TANK_BARREL,
-            y: pivot.y + Math.sin(enemy.aim) * TANK_BARREL,
+            x: mx, y: my,
             vx: Math.cos(enemy.aim) * ATTACK_RUN.flakSpeed,
             vy: Math.sin(enemy.aim) * ATTACK_RUN.flakSpeed,
             alive: true, fromEnemy: true,
           });
+          enemy.fireAnim = ATTACK_RUN.tankRecoilTime;
+          this.fx.muzzleFlash(mx + this.cameraX, my, enemy.aim);
         } else { // sam
           enemy.fireTimer = 3.0 / TUNING[missionState.difficulty].enemyFireRate;
           if (!enemy.missile) {
-            const gy2 = gy - SAM_H;
-            const ang = Phaser.Math.Angle.Between(sx, gy2, this.planeX, planeScreenY);
+            // Missile leaves from the rail tip, along the rail.
+            const base = this.samRailBase(enemy);
+            const tipX = base.x + Math.cos(enemy.aim) * ATTACK_RUN.samRailLength;
+            const tipY = base.y + Math.sin(enemy.aim) * ATTACK_RUN.samRailLength;
             enemy.missile = {
-              x: sx, y: gy2,
-              vx: Math.cos(ang) * ATTACK_RUN.samMissileSpeed,
-              vy: Math.sin(ang) * ATTACK_RUN.samMissileSpeed,
+              x: tipX, y: tipY,
+              vx: Math.cos(enemy.aim) * ATTACK_RUN.samMissileSpeed,
+              vy: Math.sin(enemy.aim) * ATTACK_RUN.samMissileSpeed,
             };
+            enemy.fireAnim = ATTACK_RUN.samLaunchAnimTime;
+            this.fx.muzzleFlash(tipX + this.cameraX, tipY, enemy.aim + Math.PI); // back-blast
+            for (let i = 0; i < 4; i++) {
+              this.fx.smokePuff(enemy.worldX + (i - 1.5) * 12, gy - 6, 12);
+            }
           }
         }
       }
@@ -640,10 +660,7 @@ export class AttackRunScene extends Phaser.Scene {
           Math.abs(proj.y - (egy - eh / 2)) < eh / 2
         ) {
           proj.alive   = false;
-          enemy.alive  = false;
-          this.activeEnemies.delete(enemy);
-          const exGy = this.groundYAtWorldX(enemy.worldX);
-          this.spawnExplosion(enemy.worldX, exGy - (enemy.type === 'tank' ? TANK_H * 0.5 : SAM_H * 0.5), enemy.type === 'tank' ? 50 : 60);
+          this.killGroundEnemy(enemy);
           missionState.addScore(SCORE.tank);
           missionState.hudCue = `+${SCORE.tank}`;
         }
@@ -717,8 +734,8 @@ export class AttackRunScene extends Phaser.Scene {
       for (const proj of this.projectiles) {
         if (!proj.alive || proj.fromEnemy) continue;
         if (Math.abs(proj.x - ic.x) < INTERC_W / 2 && Math.abs(proj.y - ic.y) < INTERC_H) {
-          proj.alive = false; ic.alive = false;
-          this.spawnExplosion(ic.x + this.cameraX, ic.y, 45);
+          proj.alive = false;
+          this.killInterceptor(ic);
           missionState.addScore(SCORE.interceptor);
           missionState.hudCue = `+${SCORE.interceptor}`;
           break;
@@ -784,6 +801,7 @@ export class AttackRunScene extends Phaser.Scene {
           if (Math.abs(proj.x - hs.x) < HEATSEEK_W && Math.abs(proj.y - hs.lockedY) < HEATSEEK_H + 10) {
             proj.alive = false;
             this.heatSeeker = null;
+            this.spawnExplosion(hs.x + this.cameraX, hs.lockedY, 50);
             missionState.addScore(SCORE.heatSeekerFromBehind);
             missionState.hudCue = `HEAT-SEEKER DOWN! +${SCORE.heatSeekerFromBehind}`;
             gameUi.callout = `+${SCORE.heatSeekerFromBehind}  NICE SHOT`;
@@ -888,39 +906,82 @@ export class AttackRunScene extends Phaser.Scene {
       const gy = this.groundYAtWorldX(enemy.worldX);
 
       if (enemy.type === 'tank') {
+        // Recoil: the whole tank rocks back a touch and the barrel slides in, then recovers.
+        const rk = enemy.fireAnim / ATTACK_RUN.tankRecoilTime;        // 1 → 0
+        const rock = rk * 3 * -Math.sign(Math.cos(enemy.aim) || 1);
         // Body.
         this.enemyGfx.fillStyle(0x445533, 1);
-        this.enemyGfx.fillRect(sx - TANK_W / 2, gy - TANK_H, TANK_W, TANK_H);
+        this.enemyGfx.fillRect(sx - TANK_W / 2 + rock, gy - TANK_H, TANK_W, TANK_H);
         // Turret.
         this.enemyGfx.fillStyle(0x556644, 1);
-        this.enemyGfx.fillRect(sx - 15, gy - TANK_H - 12, 30, 12);
-        // Barrel (tracks the plane).
+        this.enemyGfx.fillRect(sx - 15 + rock, gy - TANK_H - 12, 30, 12);
+        // Barrel (tracks the plane, recoils on firing).
         const pivot = this.tankPivot(enemy);
+        const len = TANK_BARREL - rk * ATTACK_RUN.tankRecoilPx;
         this.enemyGfx.lineStyle(4, 0x667755, 1);
-        this.enemyGfx.lineBetween(pivot.x, pivot.y,
-          pivot.x + Math.cos(enemy.aim) * TANK_BARREL, pivot.y + Math.sin(enemy.aim) * TANK_BARREL);
-        // Treads.
+        this.enemyGfx.lineBetween(pivot.x + rock, pivot.y,
+          pivot.x + rock + Math.cos(enemy.aim) * len, pivot.y + Math.sin(enemy.aim) * len);
+        // Treads with rolling wheels.
         this.enemyGfx.fillStyle(0x334422, 1);
         this.enemyGfx.fillRect(sx - TANK_W / 2, gy - 10, TANK_W, 10);
+        this.enemyGfx.fillStyle(0x22301a, 1);
+        for (let k = 0; k < 5; k++) this.enemyGfx.fillCircle(sx - TANK_W / 2 + 8 + k * 11, gy - 5, 3.5);
       } else { // sam
+        // Launch: the box kicks and its warning light flares, then settles.
+        const lk = enemy.fireAnim / ATTACK_RUN.samLaunchAnimTime;      // 1 → 0
+        const shake = lk > 0 ? Math.sin(time * 0.09) * 3 * lk : 0;
+        const bx = sx + shake;
         this.enemyGfx.fillStyle(0x443322, 1);
-        this.enemyGfx.fillRect(sx - SAM_W / 2, gy - SAM_H, SAM_W, SAM_H);
-        // Launch rail.
-        this.enemyGfx.lineStyle(5, 0x556644, 1);
-        this.enemyGfx.lineBetween(sx, gy - SAM_H, sx + 30, gy - SAM_H - 40);
-        // Missile on rail.
-        this.enemyGfx.fillStyle(0xcc4422, 1);
-        this.enemyGfx.fillRect(sx + 5, gy - SAM_H - 42, 20, 8);
+        this.enemyGfx.fillRect(bx - SAM_W / 2, gy - SAM_H, SAM_W, SAM_H);
+        this.enemyGfx.fillStyle(0x2c2116, 1);
+        this.enemyGfx.fillRect(bx - SAM_W / 2 + 6, gy - SAM_H + 10, SAM_W - 12, 6);
+        // Warning light: slow blink while tracking, bright flare on launch.
+        const blink = 0.35 + 0.35 * Math.sin(time * 0.008 + enemy.worldX);
+        this.enemyGfx.fillStyle(0xff3322, Math.min(1, blink + lk));
+        this.enemyGfx.fillCircle(bx + SAM_W / 2 - 8, gy - SAM_H + 26, 3 + lk * 4);
+        if (lk > 0) {
+          this.enemyGfx.fillStyle(0xffaa33, 0.35 * lk);
+          this.enemyGfx.fillCircle(bx, gy - SAM_H, 30 * lk);
+        }
+        // Launch rail (tracks the plane).
+        const base = this.samRailBase(enemy);
+        const rl   = ATTACK_RUN.samRailLength;
+        const tipX = base.x + shake + Math.cos(enemy.aim) * rl;
+        const tipY = base.y + Math.sin(enemy.aim) * rl;
+        this.enemyGfx.lineStyle(6, 0x556644, 1);
+        this.enemyGfx.lineBetween(base.x + shake, base.y, tipX, tipY);
+        this.enemyGfx.fillStyle(0x667755, 1);
+        this.enemyGfx.fillCircle(base.x + shake, base.y, 6);
+        // Missile sits on the rail while reloaded (none in flight).
+        if (!enemy.missile) {
+          const c = Math.cos(enemy.aim), s = Math.sin(enemy.aim);
+          const mx = base.x + shake + c * rl * 0.55, my = base.y + s * rl * 0.55;
+          const hx = c * 13, hy = s * 13, px = -s * 4, py = c * 4;
+          this.enemyGfx.fillStyle(0xcc4422, 1);
+          this.enemyGfx.fillPoints(pts([
+            { x: mx - hx + px, y: my - hy + py }, { x: mx + hx + px, y: my + hy + py },
+            { x: mx + hx * 1.5, y: my + hy * 1.5 },
+            { x: mx + hx - px, y: my + hy - py }, { x: mx - hx - px, y: my - hy - py },
+          ]), true);
+        }
       }
 
       // SAM missile in flight.
       if (enemy.missile) {
         const m = enemy.missile;
+        const a = Math.atan2(m.vy, m.vx), c = Math.cos(a), s = Math.sin(a);
+        const hx = c * MISSILE_W / 2, hy = s * MISSILE_W / 2, px = -s * MISSILE_H / 2, py = c * MISSILE_H / 2;
+        // Exhaust flame behind the missile.
+        const fl = 0.7 + 0.3 * Math.sin(time * 0.05);
+        this.enemyGfx.fillStyle(0xff9900, 0.8);
+        this.enemyGfx.fillTriangle(m.x - hx + px, m.y - hy + py, m.x - hx - px, m.y - hy - py,
+          m.x - hx * (2 + fl), m.y - hy * (2 + fl));
         this.enemyGfx.fillStyle(0xff6633, 1);
-        this.enemyGfx.fillRect(m.x - MISSILE_W / 2, m.y - MISSILE_H / 2, MISSILE_W, MISSILE_H);
-        // Flame.
-        this.enemyGfx.fillStyle(0xff9900, 0.7);
-        this.enemyGfx.fillRect(m.x + MISSILE_W / 2 - 4, m.y - 4, 10, 8);
+        this.enemyGfx.fillPoints(pts([
+          { x: m.x - hx + px, y: m.y - hy + py }, { x: m.x + hx + px, y: m.y + hy + py },
+          { x: m.x + hx * 1.4, y: m.y + hy * 1.4 },
+          { x: m.x + hx - px, y: m.y + hy - py }, { x: m.x - hx - px, y: m.y - hy - py },
+        ]), true);
       }
     }
 
@@ -968,8 +1029,8 @@ export class AttackRunScene extends Phaser.Scene {
       }
     }
 
-    // ── Explosions ────────────────────────────────────────────────────────────
-    this.renderExplosions();
+    // ── Explosions, debris, smoke, wrecks, falling planes ───────────────────────
+    this.fx.render(this.cameraX, time);
 
     // ── Projectiles ────────────────────────────────────────────────────────────
     this.projGfx.clear();
@@ -986,6 +1047,11 @@ export class AttackRunScene extends Phaser.Scene {
 
     // ── Bombs ─────────────────────────────────────────────────────────────────
     this.bombGfx.clear();
+    // Red aim marker: always shows where a bomb dropped right now would land.
+    if (this.planeState === 'flying') {
+      const aimWX = this.cameraX + this.planeX + ATTACK_RUN.bombHorizOffset;
+      this.drawAimMarker(aimWX - this.cameraX, this.groundYAtWorldX(aimWX), time, this.bombReloadTimer <= 0);
+    }
     for (const bomb of this.bombs) {
       if (!bomb.alive) continue;
       const landSX  = bomb.landWorldX - this.cameraX;
@@ -993,23 +1059,17 @@ export class AttackRunScene extends Phaser.Scene {
       const curWX   = bomb.worldXDrop + (bomb.landWorldX - bomb.worldXDrop) * frac;
       const bombSX  = curWX - this.cameraX;
       const alt     = bomb.altAtDrop * (1 - frac * frac); // gravity: accelerates as it falls
-      const bombGroundY = this.groundYAtWorldX(curWX);
-      const bombSY  = bombGroundY - alt;
+      const bombSY  = this.groundYAtWorldX(curWX) - alt;
 
-      // Ground crosshair at landing point.
-      const crossY  = this.groundYAtWorldX(bomb.landWorldX);
-      const alpha   = 0.5 + 0.5 * Math.sin(time * 0.02); // subtle pulse
-      this.bombGfx.lineStyle(2, 0xffcc44, alpha);
-      this.bombGfx.strokeCircle(landSX, crossY, 18);
-      this.bombGfx.lineBetween(landSX - 24, crossY, landSX + 24, crossY);
-      this.bombGfx.lineBetween(landSX, crossY - 24, landSX, crossY + 24);
+      // Locked marker where this bomb will hit (solid, smaller).
+      const crossY = this.groundYAtWorldX(bomb.landWorldX);
+      this.bombGfx.fillStyle(FX_PALETTE.aimMarker, 0.35 + 0.25 * Math.sin(time * 0.03));
+      this.bombGfx.fillEllipse(landSX, crossY, 40, 10);
 
-      // Bomb body.
-      this.bombGfx.fillStyle(0xffcc44, 1);
-      this.bombGfx.fillRect(bombSX - 10, bombSY - 10, 20, 20);
-      // Fin detail.
-      this.bombGfx.fillStyle(0xcc9900, 1);
-      this.bombGfx.fillRect(bombSX - 10, bombSY - 10, 4, 20);
+      // Bomb, nose along its on-screen velocity (level at release, tips over as it falls).
+      const vx = (bomb.landWorldX - bomb.worldXDrop) / ATTACK_RUN.bombArcTime - ATTACK_RUN.scrollSpeed;
+      const vy = 2 * bomb.altAtDrop * frac / ATTACK_RUN.bombArcTime;
+      this.drawBomb(bombSX, bombSY, Math.atan2(vy, vx));
     }
 
     // ── Shadow ─────────────────────────────────────────────────────────────────
@@ -1100,15 +1160,15 @@ export class AttackRunScene extends Phaser.Scene {
 
   private bombExplode(landWorldX: number): void {
     const groundY = this.groundYAtWorldX(landWorldX);
-    this.spawnExplosion(landWorldX, groundY - 20, 80);
+    // Big ground blast: fireball, shockwave, dirt thrown up, crater scorch.
+    this.fx.explosion(landWorldX, groundY - 10, 85, 16, true, true);
+    this.fx.wreck(landWorldX, 'scorch', 60, 0);
+    playExplosion(90);
 
     for (const enemy of this.activeEnemies) {
       if (!enemy.alive) continue;
       if (Math.abs(enemy.worldX - landWorldX) <= ATTACK_RUN.bombBlastRadius) {
-        enemy.alive = false;
-        this.activeEnemies.delete(enemy);
-        const exEGy = this.groundYAtWorldX(enemy.worldX);
-        this.spawnExplosion(enemy.worldX, exEGy - (enemy.type === 'tank' ? TANK_H * 0.5 : SAM_H * 0.5), 55);
+        this.killGroundEnemy(enemy, false);
         const pts = enemy.type === 'sam' ? SCORE.bombSam : SCORE.tank;
         missionState.addScore(pts);
         missionState.hudCue = `+${pts}`;
@@ -1117,45 +1177,188 @@ export class AttackRunScene extends Phaser.Scene {
     this.cameras.main.shake(200, 0.008);
   }
 
-  /** Draw scrolling parallax mountain/hill layers behind the terrain. */
-  private drawParallaxBg(): void {
-    // Far layer — distant mountains (parallax factor 0.12).
-    this.bgFarGfx.clear();
-    this.bgFarGfx.fillStyle(0x0d1f2d, 1);
-    const farOff = this.cameraX * 0.12;
-    this.bgFarGfx.beginPath();
-    this.bgFarGfx.moveTo(0, H);
-    this.bgFarGfx.lineTo(0, 400);
-    for (let sx = 0; sx <= W; sx += 40) {
-      const wx = sx + farOff;
-      const y  = 400
-        + Math.sin(wx * 0.0030) * 60
-        + Math.cos(wx * 0.0051) * 40
-        + Math.sin(wx * 0.0011) * 25;
-      this.bgFarGfx.lineTo(sx, y);
+  /** Static night sky: vertical gradient, stars, moon. Drawn once. */
+  private drawSky(g: Phaser.GameObjects.Graphics): void {
+    const top = Phaser.Display.Color.IntegerToColor(BG.skyTop);
+    const bot = Phaser.Display.Color.IntegerToColor(BG.skyBottom);
+    const bands = 24;
+    for (let i = 0; i < bands; i++) {
+      const c = Phaser.Display.Color.Interpolate.ColorWithColor(top, bot, bands - 1, i);
+      g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
+      g.fillRect(0, (H * i) / bands, W, H / bands + 1);
     }
-    this.bgFarGfx.lineTo(W, H);
-    this.bgFarGfx.closePath();
-    this.bgFarGfx.fillPath();
+    for (let i = 0; i < 90; i++) {
+      const x = hash01(i * 3.1) * W, y = hash01(i * 7.7) * H * 0.55;
+      g.fillStyle(BG.stars, 0.25 + hash01(i * 1.3) * 0.6);
+      g.fillCircle(x, y, hash01(i * 5.9) < 0.15 ? 1.6 : 0.9);
+    }
+    g.fillStyle(BG.moon, 0.08); g.fillCircle(1030, 110, 70);
+    g.fillStyle(BG.moon, 0.15); g.fillCircle(1030, 110, 46);
+    g.fillStyle(BG.moon, 0.95); g.fillCircle(1030, 110, 30);
+    g.fillStyle(BG.skyTop, 0.25); g.fillCircle(1040, 104, 7); g.fillCircle(1022, 120, 5);
+  }
 
-    // Mid layer — nearer hills (parallax factor 0.35).
-    this.bgMidGfx.clear();
-    this.bgMidGfx.fillStyle(0x112218, 1);
-    const midOff = this.cameraX * 0.35;
-    this.bgMidGfx.beginPath();
-    this.bgMidGfx.moveTo(0, H);
-    this.bgMidGfx.lineTo(0, 500);
-    for (let sx = 0; sx <= W; sx += 40) {
-      const wx = sx + midOff;
-      const y  = 500
-        + Math.sin(wx * 0.0027) * 50
-        + Math.cos(wx * 0.0049) * 35
-        + Math.sin(wx * 0.0011) * 20;
-      this.bgMidGfx.lineTo(sx, y);
+  /** Scrolling parallax layers behind the playfield: far peaks, snowy mountains, hills with lakes, pine forest. */
+  private drawParallaxBg(): void {
+    const g = this.bgFarGfx;
+    g.clear();
+    // Far snowy peaks (slowest).
+    this.drawRidge(g, this.cameraX * 0.05, 330, 150, 380, BG.mountainFar, true, 1);
+    // Nearer mountains.
+    this.drawRidge(g, this.cameraX * 0.12, 400, 120, 260, BG.mountainMid, true, 2);
+
+    const m = this.bgMidGfx;
+    m.clear();
+    // Rolling hills.
+    const hillOff = this.cameraX * 0.25;
+    const hillY = (sx: number): number => {
+      const wx = sx + hillOff;
+      return 500 + Math.sin(wx * 0.0042) * 26 + Math.cos(wx * 0.0021) * 18;
+    };
+    m.fillStyle(BG.hills, 1);
+    m.beginPath(); m.moveTo(0, H);
+    for (let sx = 0; sx <= W; sx += 20) m.lineTo(sx, hillY(sx));
+    m.lineTo(W, H); m.closePath(); m.fillPath();
+
+    // Lakes sitting in the hills (one every ~700 world-px, some skipped).
+    const LAKE_GAP = 700;
+    for (let n = Math.floor(hillOff / LAKE_GAP) - 1; n <= Math.floor((hillOff + W) / LAKE_GAP) + 1; n++) {
+      if (hash01(n) < 0.35) continue;
+      const sx = n * LAKE_GAP + hash01(n + 0.5) * 300 - hillOff;
+      const w  = 160 + hash01(n + 0.25) * 160;
+      const y  = hillY(sx) + 22;
+      m.fillStyle(BG.lake, 1);      m.fillEllipse(sx, y, w, 20);
+      m.fillStyle(BG.lakeShine, 0.5);
+      m.fillRect(sx - w * 0.25, y - 3, w * 0.3, 1.5);
+      m.fillRect(sx + w * 0.05, y + 2, w * 0.18, 1.5);
     }
-    this.bgMidGfx.lineTo(W, H);
-    this.bgMidGfx.closePath();
-    this.bgMidGfx.fillPath();
+
+    // Pine forest ridge (fastest background layer).
+    const forOff = this.cameraX * 0.45;
+    const forY = (sx: number): number => {
+      const wx = sx + forOff;
+      return 568 + Math.sin(wx * 0.006) * 14 + Math.cos(wx * 0.0027) * 10;
+    };
+    m.fillStyle(BG.forestFloor, 1);
+    m.beginPath(); m.moveTo(0, H);
+    for (let sx = 0; sx <= W; sx += 20) m.lineTo(sx, forY(sx));
+    m.lineTo(W, H); m.closePath(); m.fillPath();
+    const TREE_GAP = 18;
+    for (let n = Math.floor(forOff / TREE_GAP) - 2; n <= Math.floor((forOff + W) / TREE_GAP) + 2; n++) {
+      if (hash01(n * 0.37) < 0.18) continue; // clearings
+      const sx = n * TREE_GAP + hash01(n * 1.7) * 10 - forOff;
+      const base = forY(sx) + 4;
+      const h = 26 + hash01(n * 2.3) * 30, w = h * 0.42;
+      m.fillStyle(hash01(n * 4.1) < 0.5 ? BG.forestDark : BG.forestLight, 1);
+      m.fillTriangle(sx - w, base - h * 0.25, sx + w, base - h * 0.25, sx, base - h);
+      m.fillTriangle(sx - w * 1.2, base, sx + w * 1.2, base, sx, base - h * 0.6);
+    }
+  }
+
+  /** Jagged mountain ridge built from summed sines plus hashed peaks; optional snow caps. */
+  private drawRidge(
+    g: Phaser.GameObjects.Graphics, off: number, baseY: number, amp: number, peakGap: number,
+    color: number, snow: boolean, seed: number,
+  ): void {
+    // Overlapping triangular peaks: each cell has one summit of hashed height, position and width.
+    const ridgeY = (sx: number): number => {
+      const wx = sx + off;
+      const n0 = Math.floor(wx / peakGap);
+      let top = 0;
+      for (let n = n0 - 1; n <= n0 + 1; n++) {
+        const cx = (n + 0.2 + hash01(n * 3.3 + seed) * 0.6) * peakGap;
+        const halfW = peakGap * (0.55 + hash01(n * 5.1 + seed) * 0.5);
+        const h = 0.35 + hash01(n * 1.9 + seed) * 0.65;
+        top = Math.max(top, h * (1 - Math.abs(wx - cx) / halfW));
+      }
+      return baseY - top * amp + Math.sin(wx * 0.031 + seed) * 4;
+    };
+    g.fillStyle(color, 1);
+    g.beginPath(); g.moveTo(0, H);
+    const start = -(((off % 12) + 12) % 12); // sample on world-aligned columns so edges don't shimmer
+    for (let sx = start; sx <= W + 12; sx += 12) g.lineTo(sx, ridgeY(sx));
+    g.lineTo(W, H); g.closePath(); g.fillPath();
+    if (!snow) return;
+    // Snow cap: fill between the ridge and a ragged snow line on every summit that pokes above it.
+    const snowLine = baseY - amp * 0.55;
+    g.fillStyle(BG.snow, 0.8);
+    for (let sx = start; sx < W; sx += 12) {
+      const y0 = ridgeY(sx), y1 = ridgeY(sx + 12);
+      if (y0 >= snowLine && y1 >= snowLine) continue;
+      const ragged = (x: number): number => snowLine + Math.sin((x + off) * 0.05 + seed) * 7 + Math.sin((x + off) * 0.17) * 3;
+      const b0 = Math.max(y0, Math.min(ragged(sx), y0 + 40)), b1 = Math.max(y1, Math.min(ragged(sx + 12), y1 + 40));
+      g.fillPoints(pts([{ x: sx, y: y0 }, { x: sx + 12, y: y1 }, { x: sx + 12, y: b1 }, { x: sx, y: b0 }]), true);
+    }
+  }
+
+  /** Pulsing red target marker on the ground. Dimmer while the bomb is reloading. */
+  private drawAimMarker(sx: number, gy: number, time: number, ready: boolean): void {
+    const g = this.bombGfx;
+    const pulse = 0.5 + 0.5 * Math.sin(time * 0.012);
+    const a = ready ? 0.65 + 0.35 * pulse : 0.3;
+    const r = 16 + pulse * 4;
+    g.lineStyle(2.5, FX_PALETTE.aimMarker, a);
+    g.strokeEllipse(sx, gy, r * 2.4, r * 0.7);
+    g.lineBetween(sx - r * 1.6, gy, sx - r * 0.6, gy);
+    g.lineBetween(sx + r * 0.6, gy, sx + r * 1.6, gy);
+    // Downward pointer above the spot.
+    g.fillStyle(FX_PALETTE.aimMarker, a);
+    const by = gy - 30 - pulse * 6;
+    g.fillTriangle(sx - 9, by - 14, sx + 9, by - 14, sx, by);
+    g.lineBetween(sx, by, sx, gy - 6);
+  }
+
+  /** Classic finned bomb, nose along `ang`. */
+  private drawBomb(x: number, y: number, ang: number): void {
+    const g = this.bombGfx;
+    const c = Math.cos(ang), s = Math.sin(ang);
+    const P = (lx: number, ly: number): { x: number; y: number } => ({ x: x + lx * c - ly * s, y: y + lx * s + ly * c });
+    // Fins (tail at -x).
+    g.fillStyle(FX_PALETTE.bombFin, 1);
+    g.fillPoints(pts([P(-10, 0), P(-20, -9), P(-22, -9), P(-18, 0), P(-22, 9), P(-20, 9)]), true);
+    // Body.
+    g.fillStyle(FX_PALETTE.bombBody, 1);
+    g.fillPoints(pts([P(-14, -4), P(6, -6), P(12, -4), P(16, 0), P(12, 4), P(6, 6), P(-14, 4)]), true);
+    // Nose cap + band.
+    g.fillStyle(FX_PALETTE.bombNose, 1);
+    g.fillPoints(pts([P(10, -4.5), P(14, -2.5), P(16, 0), P(14, 2.5), P(10, 4.5)]), true);
+    g.fillStyle(FX_PALETTE.bombBand, 1);
+    g.fillPoints(pts([P(-4, -5.5), P(-1, -5.8), P(-1, 5.8), P(-4, 5.5)]), true);
+  }
+
+  /** Destroy a tank or SAM: fireball, debris, burning wreck. */
+  private killGroundEnemy(enemy: GroundEnemy, withSound = true): void {
+    enemy.alive = false;
+    enemy.missile = null;
+    this.activeEnemies.delete(enemy);
+    const gy = this.groundYAtWorldX(enemy.worldX);
+    const isTank = enemy.type === 'tank';
+    const h = isTank ? TANK_H : SAM_H;
+    this.fx.explosion(enemy.worldX, gy - h * 0.5, isTank ? 55 : 65, 14, false);
+    this.fx.wreck(enemy.worldX, enemy.type, isTank ? TANK_W : SAM_W, h);
+    if (withSound) playExplosion(isTank ? 55 : 65);
+  }
+
+  /** Shoot down an interceptor: mid-air burst, then it tumbles to the ground. */
+  private killInterceptor(ic: Interceptor): void {
+    ic.alive = false;
+    const wx = ic.x + this.cameraX;
+    this.fx.explosion(wx, ic.y, 30, 6, false);
+    // Keep most of its world speed so it arcs down ahead of where it was hit.
+    this.fx.fallingPlane(wx, ic.y, ic.vx * 0.35 + ATTACK_RUN.scrollSpeed);
+    playExplosion(35);
+  }
+
+  /** A falling plane hits the ground. */
+  private fallerImpact(wx: number, gy: number): void {
+    this.fx.explosion(wx, gy - 12, 70, 14, true, true);
+    this.fx.wreck(wx, 'scorch', 50, 0);
+    playExplosion(70);
+  }
+
+  /** Screen-space pivot of a SAM's launch rail (top of the box). */
+  private samRailBase(enemy: GroundEnemy): { x: number; y: number } {
+    return { x: enemy.worldX - this.cameraX, y: this.groundYAtWorldX(enemy.worldX) - SAM_H };
   }
 
   /** Collect missile and heat-seeker screen positions for proximity beep. */
@@ -1193,6 +1396,8 @@ export class AttackRunScene extends Phaser.Scene {
     this.proximityBeep.stop();
     this.engineSound.stop();
     playExplosion(80);
+    const pwx = this.cameraX + this.planeX;
+    this.fx.explosion(pwx, this.groundYAtWorldX(pwx) - this.planeAlt, 75, 16, false);
     this.musicTrack.fadeOut(0.6);
     missionState.losePlane();
     if (missionState.planes > 0) {
@@ -1409,44 +1614,10 @@ export class AttackRunScene extends Phaser.Scene {
     return { x: enemy.worldX - this.cameraX, y: this.groundYAtWorldX(enemy.worldX) - TANK_H - 6 };
   }
 
+  /** Mid-air explosion with sound (heat-seeker kills etc.). */
   private spawnExplosion(worldX: number, screenY: number, size: number): void {
-    this.explosions.push({ worldX, screenY, t: 0, size });
+    this.fx.explosion(worldX, screenY, size, 8, false);
     playExplosion(size);
-  }
-
-  private renderExplosions(): void {
-    this.explosionGfx.clear();
-    for (const ex of this.explosions) {
-      if (ex.t >= 1) continue;
-      const sx    = ex.worldX - this.cameraX;
-      const sy    = ex.screenY;
-      const eased = 1 - (1 - ex.t) * (1 - ex.t); // ease-out
-      const radius = ex.size * eased;
-      const alpha  = 1 - eased;
-
-      // White flash core.
-      this.explosionGfx.fillStyle(0xffffff, alpha * 0.9);
-      this.explosionGfx.fillCircle(sx, sy, radius * 0.35);
-
-      // Outer orange ring.
-      this.explosionGfx.lineStyle(3, 0xff6600, alpha);
-      this.explosionGfx.strokeCircle(sx, sy, radius);
-
-      // Inner yellow ring (fades faster).
-      if (ex.t < 0.6) {
-        const innerAlpha = alpha * (1 - ex.t / 0.6);
-        this.explosionGfx.lineStyle(2, 0xffcc44, innerAlpha);
-        this.explosionGfx.strokeCircle(sx, sy, radius * 0.55);
-      }
-
-      // 6 debris dots orbiting outward.
-      for (let i = 0; i < 6; i++) {
-        const ang = (i / 6) * Math.PI * 2;
-        const dr  = radius * 1.1;
-        this.explosionGfx.fillStyle(0xffcc44, alpha * 0.8);
-        this.explosionGfx.fillCircle(sx + Math.cos(ang) * dr, sy + Math.sin(ang) * dr, 3);
-      }
-    }
   }
 
   private renderPreRun(time: number): void {

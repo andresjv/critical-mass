@@ -11,7 +11,9 @@ export function EventCallout({ callout, calloutExpiry, now }: Props) {
   // Determine colour by content
   const isWarning = callout.startsWith('CITY LOST') || callout.startsWith('LAUNCH SUCCEEDED');
   const isNeutral = callout.startsWith('+');
-  const color = isWarning ? '#ff6644' : isNeutral ? '#22ff88' : '#88ccff';
+  // Only warnings (red) and score pops (green) are shown; plain radio-style callouts are not.
+  if (!isWarning && !isNeutral) return null;
+  const color = isWarning ? '#ff6644' : '#22ff88';
 
   return (
     <div style={{
