@@ -217,6 +217,12 @@ export const ATTACK_RUN = {
   tankRecoilTime: 0.25,
   /** Barrel recoil distance, px. */
   tankRecoilPx: 9,
+  /** Tank driving speed, px/s (world). */
+  tankDriveSpeed: 35,
+  /** How far a tank strays from its spawn point, px. */
+  tankDriveRange: 120,
+  /** Minimum seconds between a tank's drive decisions (actual: 1–2×). */
+  tankDriveMinSecs: 1.5,
   /** Downward acceleration of a shot-down plane, px/s². */
   fallerGravity: 520,
 } as const;

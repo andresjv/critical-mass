@@ -21,6 +21,9 @@ import { pts } from '../effects/points';
 import { FX_PALETTE } from '../theme/coldFront';
 import { getBiome, type Biome } from '../theme/biomes';
 import { Backdrop, hash01 } from '../effects/Backdrop';
+import { drawJet, drawTank, TURRET_PIVOT_Y } from '../models/Vehicles';
+import { drawBuilding } from '../models/Buildings';
+import { PLAYER_JET } from '../theme/factions';
 import { settings, haptic } from '../../state/settings';
 
 const W = 1280;
@@ -36,10 +39,6 @@ const GROUND_VARIATION = 40;    // ±px random height variation
 const PLANE_SIDE_POLY: [number, number][] = [
   [-28,  -6], [-10, -10], [15,  -4], [30,  0],
   [ 15,   4], [-10,  10], [-28,  6],
-];
-// Wing (swept-back triangle below fuselage)
-const WING_POLY: [number, number][] = [
-  [12, 4], [-5, 4], [-2, 28],
 ];
 
 const PLANE_HIT_W = 28;  // half-width of hitbox
@@ -71,6 +70,12 @@ interface GroundEnemy {
   aim: number; // tank turret / SAM rail angle, radians (0 = right, -PI/2 = up)
   /** Seconds left of the firing animation (tank recoil / SAM launch shake). */
   fireAnim: number;
+  /** Tanks drive back and forth around their spawn point. */
+  homeX: number;
+  vx: number;
+  driveTimer: number;
+  /** Distance driven, px (spins the wheels). */
+  travel: number;
   // SAM only:
   missile: { x: number; y: number; vx: number; vy: number } | null;
 }
@@ -264,12 +269,14 @@ export class AttackRunScene extends Phaser.Scene {
           worldX: wx, type: 'tank', alive: true,
           fireTimer: (ATTACK_RUN.tankFireInterval / fireRateMult) * (0.8 + rng.next() * 0.4),
           missile: null, aim: -Math.PI / 2, fireAnim: 0,
+          homeX: wx, vx: 0, driveTimer: rng.next() * 2, travel: 0,
         });
       } else if (rng.next() < 0.08 * density) {
         this.groundEnemies.push({
           worldX: wx, type: 'sam', alive: true,
           fireTimer: (3.0 / fireRateMult) * (0.8 + rng.next() * 0.4),
           missile: null, aim: -Math.PI / 4, fireAnim: 0,
+          homeX: wx, vx: 0, driveTimer: 0, travel: 0,
         });
       }
 
@@ -317,6 +324,7 @@ export class AttackRunScene extends Phaser.Scene {
       (wx) => this.groundYAtWorldX(wx),
       createRng(missionState.seed + this.launchIndex * 1000 + 777),
       (wx, gy) => this.fallerImpact(wx, gy),
+      this.biome.enemyJet,
     );
     this.preRunGfx    = this.add.graphics().setDepth(20);
     this.crashGfx     = this.add.graphics().setDepth(15);
@@ -563,6 +571,16 @@ export class AttackRunScene extends Phaser.Scene {
       enemy.fireAnim = Math.max(0, enemy.fireAnim - dt);
 
       if (enemy.type === 'tank') {
+        // Drive: pick forward / back / stop every few seconds, stay near the spawn point.
+        enemy.driveTimer -= dt;
+        if (enemy.driveTimer <= 0) {
+          enemy.driveTimer = ATTACK_RUN.tankDriveMinSecs + this.rng.next() * ATTACK_RUN.tankDriveMinSecs;
+          const r = this.rng.next();
+          enemy.vx = r < 0.4 ? -ATTACK_RUN.tankDriveSpeed : r < 0.8 ? ATTACK_RUN.tankDriveSpeed : 0;
+        }
+        if (Math.abs(enemy.worldX + enemy.vx * dt - enemy.homeX) > ATTACK_RUN.tankDriveRange) enemy.vx = -enemy.vx;
+        enemy.worldX += enemy.vx * dt;
+        enemy.travel += enemy.vx * dt;
         // Turret swings toward the plane at a limited rate, never below the horizon.
         const pivot  = this.tankPivot(enemy);
         let target = Phaser.Math.Angle.Between(pivot.x, pivot.y, this.planeX, planeScreenY);
@@ -868,34 +886,19 @@ export class AttackRunScene extends Phaser.Scene {
       const gy = this.groundYAtWorldX(enemy.worldX);
 
       if (enemy.type === 'tank') {
-        // Recoil: the whole tank rocks back a touch and the barrel slides in, then recovers.
-        const rk = enemy.fireAnim / ATTACK_RUN.tankRecoilTime;        // 1 → 0
-        const rock = rk * 3 * -Math.sign(Math.cos(enemy.aim) || 1);
-        // Body.
-        this.enemyGfx.fillStyle(0x445533, 1);
-        this.enemyGfx.fillRect(sx - TANK_W / 2 + rock, gy - TANK_H, TANK_W, TANK_H);
-        // Turret.
-        this.enemyGfx.fillStyle(0x556644, 1);
-        this.enemyGfx.fillRect(sx - 15 + rock, gy - TANK_H - 12, 30, 12);
-        // Barrel (tracks the plane, recoils on firing).
-        const pivot = this.tankPivot(enemy);
-        const len = TANK_BARREL - rk * ATTACK_RUN.tankRecoilPx;
-        this.enemyGfx.lineStyle(4, 0x667755, 1);
-        this.enemyGfx.lineBetween(pivot.x + rock, pivot.y,
-          pivot.x + rock + Math.cos(enemy.aim) * len, pivot.y + Math.sin(enemy.aim) * len);
-        // Treads with rolling wheels.
-        this.enemyGfx.fillStyle(0x334422, 1);
-        this.enemyGfx.fillRect(sx - TANK_W / 2, gy - 10, TANK_W, 10);
-        this.enemyGfx.fillStyle(0x22301a, 1);
-        for (let k = 0; k < 5; k++) this.enemyGfx.fillCircle(sx - TANK_W / 2 + 8 + k * 11, gy - 5, 3.5);
+        drawTank(this.enemyGfx, sx, gy, this.biome.vehicle, {
+          tilt: this.slopeAt(enemy.worldX), aim: enemy.aim,
+          recoil: enemy.fireAnim / ATTACK_RUN.tankRecoilTime, travel: enemy.travel,
+          seed: Math.floor(enemy.homeX), barrelLen: TANK_BARREL, recoilPx: ATTACK_RUN.tankRecoilPx,
+        });
       } else { // sam
         // Launch: the box kicks and its warning light flares, then settles.
         const lk = enemy.fireAnim / ATTACK_RUN.samLaunchAnimTime;      // 1 → 0
         const shake = lk > 0 ? Math.sin(time * 0.09) * 3 * lk : 0;
         const bx = sx + shake;
-        this.enemyGfx.fillStyle(0x443322, 1);
+        this.enemyGfx.fillStyle(this.biome.sam.box, 1);
         this.enemyGfx.fillRect(bx - SAM_W / 2, gy - SAM_H, SAM_W, SAM_H);
-        this.enemyGfx.fillStyle(0x2c2116, 1);
+        this.enemyGfx.fillStyle(0x000000, 0.3);
         this.enemyGfx.fillRect(bx - SAM_W / 2 + 6, gy - SAM_H + 10, SAM_W - 12, 6);
         // Warning light: slow blink while tracking, bright flare on launch.
         const blink = 0.35 + 0.35 * Math.sin(time * 0.008 + enemy.worldX);
@@ -910,9 +913,9 @@ export class AttackRunScene extends Phaser.Scene {
         const rl   = ATTACK_RUN.samRailLength;
         const tipX = base.x + shake + Math.cos(enemy.aim) * rl;
         const tipY = base.y + Math.sin(enemy.aim) * rl;
-        this.enemyGfx.lineStyle(6, 0x556644, 1);
+        this.enemyGfx.lineStyle(6, this.biome.sam.rail, 1);
         this.enemyGfx.lineBetween(base.x + shake, base.y, tipX, tipY);
-        this.enemyGfx.fillStyle(0x667755, 1);
+        this.enemyGfx.fillStyle(this.biome.sam.rail, 1);
         this.enemyGfx.fillCircle(base.x + shake, base.y, 6);
         // Missile sits on the rail while reloaded (none in flight).
         if (!enemy.missile) {
@@ -947,23 +950,10 @@ export class AttackRunScene extends Phaser.Scene {
       }
     }
 
-    // Interceptors.
+    // Interceptors: red-marked fighter jets flying left, afterburners lit.
     for (const ic of this.interceptors) {
       if (!ic.alive) continue;
-      this.enemyGfx.fillStyle(0x556677, 1);
-      this.enemyGfx.fillRect(ic.x - INTERC_W / 2, ic.y - INTERC_H / 2, INTERC_W, INTERC_H);
-      // Nose pointing left.
-      this.enemyGfx.fillStyle(0x778899, 1);
-      this.enemyGfx.fillTriangle(
-        ic.x - INTERC_W / 2 - 15, ic.y,
-        ic.x - INTERC_W / 2, ic.y - 10,
-        ic.x - INTERC_W / 2, ic.y + 10,
-      );
-      // Wing.
-      this.enemyGfx.fillStyle(0x445566, 1);
-      this.enemyGfx.fillTriangle(
-        ic.x, ic.y + 5, ic.x - 20, ic.y + 5, ic.x - 5, ic.y + 30,
-      );
+      drawJet(this.enemyGfx, ic.x, ic.y, this.biome.enemyJet, { facing: -1, thrust: 0.8, time });
     }
 
     // Heat-seeker.
@@ -1062,48 +1052,7 @@ export class AttackRunScene extends Phaser.Scene {
   }
 
   private drawSidePlane(sy: number, time: number): void {
-    const px = this.planeX;
-
-    // Thrust flame (at tail, left side).
-    if (this.thrusting) {
-      const fl = 0.7 + 0.3 * Math.sin(time * 0.02);
-      this.planeGfx.fillStyle(0xff6600, 0.75 * fl);
-      this.planeGfx.fillTriangle(px - 28, sy - 6, px - 28, sy + 6, px - 28 - 36 * fl, sy);
-      this.planeGfx.fillStyle(0xffee88, 0.9 * fl);
-      this.planeGfx.fillTriangle(px - 28, sy - 3, px - 28, sy + 3, px - 28 - 22 * fl, sy);
-    }
-
-    // Body.
-    this.planeGfx.fillStyle(0x44aaff, 1);
-    this.planeGfx.beginPath();
-    this.planeGfx.moveTo(px + PLANE_SIDE_POLY[0][0], sy + PLANE_SIDE_POLY[0][1]);
-    for (let i = 1; i < PLANE_SIDE_POLY.length; i++) {
-      this.planeGfx.lineTo(px + PLANE_SIDE_POLY[i][0], sy + PLANE_SIDE_POLY[i][1]);
-    }
-    this.planeGfx.closePath();
-    this.planeGfx.fillPath();
-
-    // Wing.
-    this.planeGfx.fillStyle(0x2288cc, 1);
-    this.planeGfx.fillTriangle(
-      px + WING_POLY[0][0], sy + WING_POLY[0][1],
-      px + WING_POLY[1][0], sy + WING_POLY[1][1],
-      px + WING_POLY[2][0], sy + WING_POLY[2][1],
-    );
-
-    // Cockpit highlight.
-    this.planeGfx.fillStyle(0xcceeFF, 0.6);
-    this.planeGfx.fillEllipse(px + 10, sy - 7, 14, 7);
-
-    // Outline.
-    this.planeGfx.lineStyle(1, 0xaaddff, 0.7);
-    this.planeGfx.beginPath();
-    this.planeGfx.moveTo(px + PLANE_SIDE_POLY[0][0], sy + PLANE_SIDE_POLY[0][1]);
-    for (let i = 1; i < PLANE_SIDE_POLY.length; i++) {
-      this.planeGfx.lineTo(px + PLANE_SIDE_POLY[i][0], sy + PLANE_SIDE_POLY[i][1]);
-    }
-    this.planeGfx.closePath();
-    this.planeGfx.strokePath();
+    drawJet(this.planeGfx, this.planeX, sy, PLAYER_JET, { facing: 1, thrust: this.thrusting ? 1 : 0.15, time });
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -1184,7 +1133,7 @@ export class AttackRunScene extends Phaser.Scene {
 
   /** Buildings and pylons; their base reaches below the lowest ground under them. */
   private drawObstacles(): void {
-    const g = this.terrainGfx, bl = this.biome.building, py = this.biome.pylon;
+    const g = this.terrainGfx, py = this.biome.pylon;
     for (const obs of this.obstacles) {
       const sx = obs.worldX - this.cameraX;
       if (sx < -BLDG_W || sx > W + BLDG_W) continue;
@@ -1192,18 +1141,7 @@ export class AttackRunScene extends Phaser.Scene {
       const halfW = obs.type === 'building' ? BLDG_W / 2 : 10;
       const base = Math.max(this.groundYAtWorldX(obs.worldX - halfW), this.groundYAtWorldX(obs.worldX + halfW), gy) + 12;
       if (obs.type === 'building') {
-        const top = gy - BLDG_H;
-        g.fillStyle(bl.wall, 1);
-        g.fillRect(sx - halfW, top, BLDG_W, base - top);
-        g.lineStyle(1.5, bl.edge, 0.9);
-        g.strokeRect(sx - halfW, top, BLDG_W, base - top);
-        g.fillStyle(bl.edge, 1);
-        g.fillRect(sx - halfW - 3, top - 4, BLDG_W + 6, 6); // roof lip
-        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
-          const lit = hash01(obs.worldX + r * 3 + c) > 0.3;
-          g.fillStyle(bl.window, lit ? bl.windowAlpha : bl.windowAlpha * 0.25);
-          g.fillRect(sx - 30 + c * 24, top + 20 + r * 38, 14, 20);
-        }
+        drawBuilding(g, sx, gy - BLDG_H, base, BLDG_W, BLDG_H, this.biome, Math.floor(obs.worldX), this.time.now);
       } else {
         const top = gy - 180;
         g.fillStyle(py.body, 1);
@@ -1538,7 +1476,16 @@ export class AttackRunScene extends Phaser.Scene {
 
   /** Screen-space turret pivot (centre of the turret block). */
   private tankPivot(enemy: GroundEnemy): { x: number; y: number } {
-    return { x: enemy.worldX - this.cameraX, y: this.groundYAtWorldX(enemy.worldX) - TANK_H - 6 };
+    // Turret pivot follows the hull tilt on slopes.
+    const tilt = this.slopeAt(enemy.worldX);
+    const sx = enemy.worldX - this.cameraX, gy = this.groundYAtWorldX(enemy.worldX);
+    return { x: sx - Math.sin(tilt) * TURRET_PIVOT_Y, y: gy + Math.cos(tilt) * TURRET_PIVOT_Y };
+  }
+
+  /** Ground slope angle (radians) under a vehicle's footprint. */
+  private slopeAt(worldX: number): number {
+    const half = TANK_W / 2;
+    return Math.atan2(this.groundYAtWorldX(worldX + half) - this.groundYAtWorldX(worldX - half), TANK_W);
   }
 
   /** Mid-air explosion with sound (heat-seeker kills etc.). */

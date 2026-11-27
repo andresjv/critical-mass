@@ -7,6 +7,8 @@ import { FX_PALETTE as C } from '../theme/coldFront';
 import { ATTACK_RUN } from '../../state/tuning';
 import { pts } from './points';
 import { settings } from '../../state/settings';
+import { drawJet } from '../models/Vehicles';
+import type { JetPalette } from '../theme/factions';
 
 type PartKind = 'debris' | 'spark' | 'smoke' | 'fire';
 
@@ -35,6 +37,7 @@ export class Effects {
     private readonly groundY: (wx: number) => number,
     private readonly rng: Rng,
     private readonly onFallerImpact: (wx: number, groundY: number) => void,
+    private readonly fallerJet: JetPalette,
   ) {}
 
   private r(a: number, b: number): number { return a + this.rng.next() * (b - a); }
@@ -185,15 +188,9 @@ export class Effects {
       if (b.t < 0.18 && !settings.reducedFlashing) { g.fillStyle(C.flash, 1 - b.t / 0.18); g.fillCircle(sx, b.y, b.size * 0.9); }
     }
 
-    // Falling planes.
+    // Falling planes: the same jet model, tumbling nose-first (they flew left).
     for (const f of this.fallers) {
-      const sx = f.wx - cameraX;
-      const rot = (pts: [number, number][]): { x: number; y: number }[] => {
-        const c = Math.cos(f.rot), s = Math.sin(f.rot);
-        return pts.map(([x, y]) => ({ x: sx + x * c - y * s, y: f.y + x * s + y * c }));
-      };
-      g.fillStyle(C.planeHull, 1); g.fillPoints(pts(rot([[-35, -8], [20, -8], [36, 0], [20, 8], [-35, 8]])), true);
-      g.fillStyle(C.planeDark, 1); g.fillPoints(pts(rot([[0, 5], [-20, 5], [-5, 28]])), true);
+      drawJet(g, f.wx - cameraX, f.y, this.fallerJet, { facing: -1, rot: f.rot, thrust: 0, time });
     }
 
     // Fire, sparks, debris.
