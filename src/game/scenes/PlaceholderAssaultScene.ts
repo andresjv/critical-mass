@@ -71,12 +71,8 @@ export class PlaceholderAssaultScene extends Phaser.Scene {
     gameUi.showComingSoon = false;
     gameUi.showResults    = false;
 
-    missionState.startMission({
-      theme:      missionState.theme,
-      difficulty: missionState.difficulty,
-      seed:       Date.now(),
-    });
-    this.scene.start('MapScene', { launchIndex: 0 });
+    missionState.endMission();
+    this.scene.start('MenuScene');
   }
 
   shutdown(): void {

@@ -2,6 +2,7 @@
 // Pure TypeScript: NO Phaser imports. Unit-tested in tests/MissionState.test.ts.
 
 import { Difficulty, LIMITS, TUNING } from './tuning';
+import type { LevelId } from './levels';
 
 export type ThemeId = 'coldfront' | 'xenoworld';
 
@@ -9,6 +10,8 @@ export interface MissionConfig {
   theme: ThemeId;
   difficulty: Difficulty;
   seed: number;
+  /** World the mission is flown in (skin only). Defaults to Cold Front. */
+  level?: LevelId;
 }
 
 export class MissionState {
@@ -16,6 +19,9 @@ export class MissionState {
   theme: ThemeId = 'coldfront';
   difficulty: Difficulty = 'pilot';
   seed: number = 0;
+  level: LevelId = 'coldfront';
+  /** True once a mission has been started from the menu (or a challenge link). */
+  started = false;
 
   // ── Planes / men ─────────────────────────────────────────────────────────
   /** Planes currently available (also = men at Stage 5). */
@@ -58,6 +64,8 @@ export class MissionState {
     this.theme = config.theme;
     this.difficulty = config.difficulty;
     this.seed = config.seed;
+    this.level = config.level ?? 'coldfront';
+    this.started = true;
 
     this.planes = TUNING[config.difficulty].startingPlanes;
     this.discs = LIMITS.startingDiscs;
@@ -66,6 +74,13 @@ export class MissionState {
     this.score = 0;
     this.impactClock = 0;
     this.hudCue = '';
+  }
+
+  /** Mission over (game over or finished): the next scene shown is the menu. */
+  endMission(): void {
+    this.started = false;
+    this.planes = 0;
+    this.impactClock = 0;
   }
 
   // ── Planes ───────────────────────────────────────────────────────────────

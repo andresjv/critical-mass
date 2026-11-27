@@ -442,7 +442,8 @@ export class SiloScene extends Phaser.Scene {
 
     if (missionState.isGameOver) {
       gameUi.stageResult = null;
-      this.scene.start('MapScene');
+      missionState.endMission();
+      this.scene.start('MenuScene');
       return;
     }
 

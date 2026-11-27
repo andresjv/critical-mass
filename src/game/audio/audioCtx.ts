@@ -6,10 +6,36 @@
 // user-gesture handler (browser autoplay policy).
 
 import { AUDIO_MIX } from '../../state/tuning';
+import { settings, onSettingsChange } from '../../state/settings';
 
 export type Bus = 'music' | 'sfx' | 'radio';
 
 let _ctx: AudioContext | null = null;
+let _paused = false;
+/** Current music bus target: mix level × player volume × pause dip. */
+let _musicLevel: number = musicLevel();
+
+function musicLevel(): number {
+  return AUDIO_MIX.music * settings.musicVolume * (_paused ? AUDIO_MIX.musicWhenPaused : 1);
+}
+function sfxLevel(): number   { return AUDIO_MIX.sfx * settings.sfxVolume; }
+function radioLevel(): number { return AUDIO_MIX.radio * settings.sfxVolume; }
+
+function rampBus(name: Bus, level: number): void {
+  if (!_ctx || !_buses) return;
+  const g = _buses[name].gain;
+  const t = _ctx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(level, t + 0.25);
+}
+
+onSettingsChange(() => {
+  _musicLevel = musicLevel();
+  rampBus('music', _musicLevel);
+  rampBus('sfx', sfxLevel());
+  rampBus('radio', radioLevel());
+});
 let _buses: Record<Bus, GainNode> | null = null;
 
 function buildMixer(ctx: AudioContext): Record<Bus, GainNode> {
@@ -30,7 +56,7 @@ function buildMixer(ctx: AudioContext): Record<Bus, GainNode> {
     g.connect(limiter);
     return g;
   };
-  return { music: bus(AUDIO_MIX.music), sfx: bus(AUDIO_MIX.sfx), radio: bus(AUDIO_MIX.radio) };
+  return { music: bus(_musicLevel), sfx: bus(sfxLevel()), radio: bus(radioLevel()) };
 }
 
 /** Returns the running context, or null if not yet unlocked / still suspended. */
@@ -47,7 +73,6 @@ export function getBus(name: Bus): GainNode | null {
   return getAudioCtx() && _buses ? _buses[name] : null;
 }
 
-let _musicLevel: number = AUDIO_MIX.music;
 
 /** Briefly lowers the music channel so a big effect cuts through. */
 export function duckMusic(): void {
@@ -62,13 +87,9 @@ export function duckMusic(): void {
 
 /** Music keeps playing while paused, just quieter. */
 export function setMusicPaused(paused: boolean): void {
-  _musicLevel = AUDIO_MIX.music * (paused ? AUDIO_MIX.musicWhenPaused : 1);
-  if (!_ctx || !_buses) return;
-  const g = _buses.music.gain;
-  const t = _ctx.currentTime;
-  g.cancelScheduledValues(t);
-  g.setValueAtTime(g.value, t);
-  g.linearRampToValueAtTime(_musicLevel, t + 0.25);
+  _paused = paused;
+  _musicLevel = musicLevel();
+  rampBus('music', _musicLevel);
 }
 
 /** Silence everything while the tab/app is in the background. */

@@ -7,6 +7,7 @@ import { DebugOverlay } from './DebugOverlay';
 import { HowToPlayCard } from './HowToPlayCard';
 import { ResultsScreen } from './ResultsScreen';
 import { MissionBriefing } from './MissionBriefing';
+import { MainMenu } from './MainMenu';
 import { ProgressBar } from './ProgressBar';
 import { StageIntroCard } from './StageIntroCard';
 import { EventCallout } from './EventCallout';
@@ -20,7 +21,9 @@ export function GameOverlay() {
   const s = useHudState();
 
   // Pointer events must be 'auto' for any overlay that needs clicks/taps.
+  const inMenu = s.screen === 'menu';
   const needsPointerEvents =
+    inMenu ||
     s.showResults ||
     s.showBriefing ||
     !!s.stageIntro ||
@@ -53,8 +56,8 @@ export function GameOverlay() {
         transformOrigin: 'top left',
         transform: `scale(${scale})`,
       }}>
-        {/* Non-interactive HUD elements */}
-        <div style={{ pointerEvents: 'none' }}>
+        {/* Non-interactive HUD elements (hidden behind the title menu) */}
+        <div style={{ pointerEvents: 'none', display: inMenu ? 'none' : undefined }}>
           <GameHud s={s} />
           <DebugOverlay s={s} />
           <HowToPlayCard stage={s.howToPlayStage} />
@@ -129,7 +132,8 @@ export function GameOverlay() {
         )}
 
         <StageIntroCard intro={s.stageIntro} device={s.device} />
-        <MissionBriefing show={s.showBriefing} />
+        <MissionBriefing show={s.showBriefing && !inMenu} />
+        <MainMenu show={inMenu} device={s.device} />
       </div>
     </div>
   );

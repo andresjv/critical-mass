@@ -1,9 +1,12 @@
 // BootScene — runs first every session.
 // 1. Loads the real sprite atlas when it exists (commented out until art lands).
 // 2. Generates placeholder textures via Graphics.generateTexture() for all sprite keys.
-// 3. Routes to MapScene or DebugScene based on ?debug=1 URL param.
+// 3. Routes to the menu (or DebugScene with ?debug=1, or MapScene for a challenge link).
 
 import Phaser from 'phaser';
+import { parseChallengeFromURL } from '../../state/challengeLink';
+import { gameUi } from '../../state/gameUi';
+import { settings } from '../../state/settings';
 
 interface PlaceholderSpec {
   key:   string;
@@ -52,7 +55,10 @@ export class BootScene extends Phaser.Scene {
     const params = typeof window !== 'undefined'
       ? new URLSearchParams(window.location.search)
       : new URLSearchParams('');
-    const target = params.get('debug') === '1' ? 'DebugScene' : 'MapScene';
-    this.scene.start(target);
+    gameUi.menuPreview = settings.lastLevel;
+    if (params.get('debug') === '1') { gameUi.screen = 'game'; this.scene.start('DebugScene'); return; }
+    // A challenge link drops straight into the shared mission; otherwise show the menu.
+    if (parseChallengeFromURL()) { gameUi.screen = 'game'; this.scene.start('MapScene'); return; }
+    this.scene.start('MenuScene');
   }
 }

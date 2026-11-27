@@ -63,7 +63,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   create(): void {
-    if (missionState.planes === 0) {
+    if (!missionState.started) {
       // On first load, check for a challenge URL and apply it.
       const challenge = parseChallengeFromURL();
       if (challenge) {
@@ -75,14 +75,14 @@ export class MapScene extends Phaser.Scene {
           seed:       challenge.seed,
         });
       } else {
-        missionState.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: Date.now() });
+        missionState.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: Date.now(), level: 'coldfront' });
       }
+    }
 
-      // Show mission briefing on very first load.
-      if (!briefingShown) {
-        briefingShown = true;
-        gameUi.showBriefing = true;
-      }
+    // Mission briefing before the first launch of the session.
+    if (!briefingShown && this.launchIndex === 0) {
+      briefingShown = true;
+      gameUi.showBriefing = true;
     }
 
     // Write to gameUi so the React overlay can render the map panel.

@@ -1,22 +1,5 @@
-// Cold Front palette for the Attack Run backdrop and effects.
-// Seed of the T12 ThemePack: stage code reads colours from here, not literals.
-
-export const ATTACK_RUN_PALETTE = {
-  skyTop:        0x07111f,
-  skyBottom:     0x16304a,
-  stars:         0xc8d8ff,
-  moon:          0xe8eef8,
-  mountainFar:   0x1f3550,
-  mountainMid:   0x172a3e,
-  snow:          0x9fb4cc,
-  hills:         0x12291f,
-  lake:          0x1f4466,
-  lakeShine:     0x6f9cc4,
-  forestFloor:   0x0d2017,
-  forestDark:    0x0a1a12,
-  forestLight:   0x163a26,
-  trunk:         0x2a1d12,
-} as const;
+// Shared effect colours (fire, smoke, debris, bombs, aim marker).
+// Scenery colours per level live in biomes.ts.
 
 export const FX_PALETTE = {
   flash:     0xffffff,

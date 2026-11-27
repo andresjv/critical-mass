@@ -4,6 +4,8 @@
 
 import type { ChallengerData } from './challengeLink';
 import type { HowToPlayStage } from './howToPlay';
+import type { LevelId } from './levels';
+import type { Difficulty } from './tuning';
 
 export type DeviceHint = 'keyboard' | 'touch' | 'gamepad';
 export type ProgressStep = 'map' | 'hangar' | 'attack_run' | 'silos';
@@ -28,7 +30,18 @@ export interface TouchLabels {
   action: string; // '' hides the label
 }
 
+export type UiScreen = 'menu' | 'game';
+
+export interface MenuRequest { level: LevelId; difficulty: Difficulty }
+
 export const gameUi = {
+  /** Which top-level screen React shows: the title menu, or the in-game HUD. */
+  screen: 'menu' as UiScreen,
+  /** Set by the React menu when the player presses Play; MenuScene consumes it. */
+  menuRequest: null as MenuRequest | null,
+  /** Level whose scenery scrolls behind the menu (follows the highlighted card). */
+  menuPreview: 'coldfront' as LevelId,
+
   /** Last active input device — drives key-hint labels in the HUD. */
   device: 'keyboard' as DeviceHint,
 

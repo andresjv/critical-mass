@@ -1,4 +1,6 @@
 import { gameUi } from '../state/gameUi';
+import { missionState } from '../state/MissionState';
+import { levelInfo } from '../state/levels';
 
 interface Props {
   show: boolean;
@@ -39,7 +41,7 @@ export function MissionBriefing({ show }: Props) {
           textTransform: 'uppercase',
           marginBottom: 12,
         }}>
-          COLD FRONT OPERATION
+          {levelInfo(missionState.level).name} OPERATION
         </div>
 
         <div style={{
