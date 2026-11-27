@@ -305,3 +305,49 @@ export const AUDIO_MIX = {
   musicWhenPaused: 0.3,      // music level multiplier while the game is paused
   duckRecoverSecs: 0.6,
 };
+
+// ─── Background battle (attack run, visual only) ─────────────────────────────
+
+export const BATTLE = {
+  /** Width of one battle sector on the tree-line layer, px. Each has a blue and a red line. */
+  sectorWidth: 1500,
+  /** Soldiers per side per sector (min..max). */
+  soldiersMin: 5,
+  soldiersMax: 8,
+  /** Soldier height at the far / near edge of the strip, px (plane is ~74 px long). */
+  soldierHeightFar: 14,
+  soldierHeightNear: 22,
+  /** Depth of the strip below the tree-line floor, px. */
+  stripDepth: 18,
+  /** Seconds between shots per soldier (min..max). */
+  fireMin: 0.9,
+  fireMax: 2.8,
+  /** Chance a soldier's shot drops its target. */
+  hitChance: 0.07,
+  /** Seconds before a fallen soldier is replaced by a reinforcement running in. */
+  reinforceDelay: 4,
+  /** Soldier walk speed when advancing / reinforcing, px/s. */
+  walkSpeed: 22,
+  /** Tank gunner: seconds between bursts, chance each burst kills, kills before he is shot. */
+  gunnerFireInterval: 1.1,
+  gunnerHitChance: 0.55,
+  gunnerKillsMin: 3,
+  gunnerKillsMax: 5,
+  /** Far-layer dogfights: pairs in the sky at once, jet scale, speed px/s, turn rate rad/s. */
+  dogfightPairs: 2,
+  farJetScale: 0.3,
+  farJetSpeed: 120,
+  farJetTurn: 1.3,
+  /** Chance per burst that a chasing jet shoots its target down; seconds before a new pair arrives. */
+  farKillChance: 0.12,
+  farRespawn: 5,
+} as const;
+
+// ─── Game over screen ────────────────────────────────────────────────────────
+
+export const GAME_OVER = {
+  /** Seconds before FIRE / tap can dismiss it (avoids skipping it by accident). */
+  minShowSecs: 1.2,
+  /** Seconds before it returns to the menu on its own. */
+  autoReturnSecs: 9,
+} as const;

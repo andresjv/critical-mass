@@ -55,7 +55,7 @@ export function GameOverlay() {
         transform: `scale(${scale})`,
       }}>
         {/* Non-interactive HUD elements (hidden behind the title menu) */}
-        <div style={{ pointerEvents: 'none', display: inMenu ? 'none' : undefined }}>
+        <div style={{ pointerEvents: 'none', display: s.screen !== 'game' ? 'none' : undefined }}>
           <GameHud s={s} />
           <DebugOverlay s={s} />
           <HowToPlayCard stage={s.howToPlayStage} />

@@ -12,6 +12,7 @@ import { PlaceholderAssaultScene } from './scenes/PlaceholderAssaultScene';
 import { HudScene } from './scenes/HudScene';
 import { InputScene } from './scenes/InputScene';
 import { DebugOverlayScene } from './scenes/DebugOverlayScene';
+import { GameOverScene } from './scenes/GameOverScene';
 
 export const CANVAS_WIDTH = 1280;
 export const CANVAS_HEIGHT = 720;
@@ -55,6 +56,7 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
       PlaceholderAttackRunScene,
       PlaceholderSiloScene,
       PlaceholderAssaultScene,
+      GameOverScene,
       // Persistent parallel scenes (launched once, never stopped by scene.start).
       HudScene,
       InputScene,

@@ -492,30 +492,8 @@ export class HangarScene extends Phaser.Scene {
 
   private showGameOver(): void {
     this.planeState = 'gameover';
-    missionState.hudCue = 'GAME OVER';
-
-    // Overlay panel (canvas side — covers whole screen, full opacity).
-    this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.82).setDepth(10);
-
-    const goGfx = this.add.graphics().setDepth(11);
-    // "GAME OVER" in large vector text simulation: just use Phaser text at high resolution.
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
-    this.add.text(W / 2, H / 2 - 48, 'GAME OVER', {
-      fontSize: '80px', color: '#ff4444',
-      fontFamily: "'Space Grotesk', sans-serif",
-      resolution: dpr,
-    }).setOrigin(0.5).setDepth(12);
-    this.add.text(W / 2, H / 2 + 36, `SCORE: ${missionState.score}`, {
-      fontSize: '40px', color: '#ffffff',
-      fontFamily: "'JetBrains Mono', monospace",
-      resolution: dpr,
-    }).setOrigin(0.5).setDepth(12);
-    goGfx.destroy(); // unused, just kept to satisfy lint
-
-    this.time.delayedCall(4000, () => {
-      missionState.endMission();
-      this.scene.start('MenuScene');
-    });
+    this.engine.stop();
+    this.scene.start('GameOverScene');
   }
 
   // ── Visual sync ──────────────────────────────────────────────────────────

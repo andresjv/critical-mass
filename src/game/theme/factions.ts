@@ -28,3 +28,10 @@ export const PLAYER_JET: JetPalette = {
 };
 
 export const RED = 0xd8322a;
+
+/** Infantry colours for the background battle (blue = us, red = enemy). */
+export interface SoldierPalette { uniform: number; dark: number; helmet: number; skin: number; gun: number }
+export const SOLDIER_BLUE: SoldierPalette = { uniform: 0x3468b8, dark: 0x22457e, helmet: 0x1f3d6e, skin: 0xd9a77c, gun: 0x1a1a1a };
+export const SOLDIER_RED: SoldierPalette  = { uniform: 0xb8352a, dark: 0x7e241c, helmet: 0x5e1a14, skin: 0xd9a77c, gun: 0x1a1a1a };
+export const TRACER_BLUE = 0x9fd0ff;
+export const TRACER_RED = 0xffa070;
