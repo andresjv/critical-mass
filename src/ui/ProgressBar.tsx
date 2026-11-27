@@ -9,7 +9,6 @@ interface Props {
 type StepDef = { key: ProgressStep; label: string };
 
 const STEPS: StepDef[] = [
-  { key: 'map',        label: 'MAP' },
   { key: 'hangar',     label: 'HANGAR' },
   { key: 'attack_run', label: 'ATTACK RUN' },
   { key: 'silos',      label: 'SILOS' },

@@ -77,6 +77,17 @@ export class MapScene extends Phaser.Scene {
       }
     }
 
+    // The launch-site map screen is no longer shown: this scene just routes each launch
+    // straight to the hangar (or to the final stage once every site is down).
+    if (this.launchIndex < LIMITS.launchSiteCount) {
+      if (!this.scene.isActive('HudScene')) this.scene.launch('HudScene');
+      gameUi.mapActive = false;
+      gameUi.launchIndex = this.launchIndex;
+      gameUi.targetCity = CITIES[this.launchIndex % CITIES.length] ?? '';
+      this.scramble();
+      return;
+    }
+
 
     // Write to gameUi so the React overlay can render the map panel.
     gameUi.mapActive          = true;
