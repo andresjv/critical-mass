@@ -203,6 +203,22 @@ export const ATTACK_RUN = {
   bombBlastRadius: 80,
   /** World-px ahead of drop point where bomb lands. */
   bombHorizOffset: 600,
+  // ── Visual feedback (effects pass) ─────────────────────────────────────────
+  /** SAM launch-rail length, px. */
+  samRailLength: 46,
+  /** SAM rail aim limits, radians (upward arc only). */
+  samRailAimMin: -Math.PI * 0.85,
+  samRailAimMax: -Math.PI * 0.15,
+  /** SAM rail turn speed while tracking, degrees/s. */
+  samRailTurnRate: 70,
+  /** Seconds of SAM launch shake/glow after firing. */
+  samLaunchAnimTime: 0.5,
+  /** Seconds of tank barrel recoil after a shot. */
+  tankRecoilTime: 0.25,
+  /** Barrel recoil distance, px. */
+  tankRecoilPx: 9,
+  /** Downward acceleration of a shot-down plane, px/s². */
+  fallerGravity: 520,
 } as const;
 
 // ─── Stage 4 — Silo Strike ───────────────────────────────────────────────────
