@@ -32,6 +32,9 @@ export const gameUi = {
   /** Last active input device — drives key-hint labels in the HUD. */
   device: 'keyboard' as DeviceHint,
 
+  /** True while the current stage is paused (drives the React pause overlay). */
+  paused: false,
+
   /** What each on-screen touch control does in the current scene; null = no touch controls. */
   touchLabels: null as TouchLabels | null,
 

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { InputRouter } from '../../input/InputRouter';
+import { PauseController } from '../PauseController';
 import { TouchControls } from '../../input/TouchControls';
 import { missionState } from '../../state/MissionState';
 import { debugInfo } from '../../state/debugInfo';
@@ -94,6 +95,7 @@ export class HangarScene extends Phaser.Scene {
   private rightDoor!:       Phaser.GameObjects.Rectangle;
   private doorGfx!:         Phaser.GameObjects.Graphics; // door trim + lights
   private touchControls!:   TouchControls;
+  private pauseCtl!: PauseController;
 
   private visibilityHandler!: () => void;
 
@@ -190,6 +192,7 @@ export class HangarScene extends Phaser.Scene {
 
     // ── Touch controls ───────────────────────────────────────────────────────
     this.touchControls = new TouchControls(this, { move: 'FLY', fire: 'SKIP', action: 'OPEN / LAUNCH' });
+    this.pauseCtl = new PauseController(this);
 
     // ── Pause on visibility ──────────────────────────────────────────────────
     this.visibilityHandler = () => {
@@ -204,6 +207,7 @@ export class HangarScene extends Phaser.Scene {
     this.touchControls.update();
 
     const input = InputRouter.read();
+    if (this.pauseCtl.update(input.pause)) return;
     const actionJustPressed = input.action && !this.prevAction;
     const fireJustPressed   = input.fire   && !this.prevFire;
     this.prevAction = input.action;

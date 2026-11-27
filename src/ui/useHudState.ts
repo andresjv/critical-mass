@@ -24,6 +24,7 @@ export interface HudState {
   debugVisible: boolean;
   device: 'keyboard' | 'touch' | 'gamepad';
   touchLabels: TouchLabels | null;
+  paused: boolean;
   // Map overlay
   mapActive: boolean;
   launchSite: string;
@@ -69,6 +70,7 @@ function snapshot(): HudState {
     debugVisible: gameUi.debugVisible,
     device:       gameUi.device,
     touchLabels:  gameUi.touchLabels,
+    paused:       gameUi.paused,
     mapActive:    gameUi.mapActive,
     launchSite:   gameUi.launchSite,
     targetCity:   gameUi.targetCity,

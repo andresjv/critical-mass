@@ -1,5 +1,6 @@
 import { useCanvasScale } from './useCanvasScale';
 import { TouchControlLabels } from './TouchControlLabels';
+import { PauseOverlay } from './PauseOverlay';
 import { useHudState } from './useHudState';
 import { GameHud } from './GameHud';
 import { DebugOverlay } from './DebugOverlay';
@@ -69,6 +70,7 @@ export function GameOverlay() {
           />
           <ContextualHint hint={s.contextualHint} />
           <TouchControlLabels labels={s.touchLabels} />
+          <PauseOverlay paused={s.paused} device={s.device} />
           <StageResultCard result={s.stageResult} />
         </div>
 

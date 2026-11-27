@@ -15,7 +15,7 @@ import { EngineSound } from '../audio/EngineSound';
 import { MusicTrack } from '../audio/MusicTrack';
 import { VoiceCallout } from '../audio/VoiceCallout';
 import { playExplosion } from '../audio/ExplosionSound';
-import { setMusicPaused } from '../audio/audioCtx';
+import { PauseController } from '../PauseController';
 
 const W = 1280;
 const H = 720;
@@ -149,18 +149,17 @@ export class AttackRunScene extends Phaser.Scene {
   // ── Pre-run briefing & pause ───────────────────────────────────────────────
   private preRunActive = true;
   private preRunTimer  = 0;
-  private paused       = false;
 
   // ── Input ─────────────────────────────────────────────────────────────────
   private prevFire   = false;
   private prevAction = false;
-  private prevPause  = false;
   private accumulator = 0;
 
   // ── Audio ─────────────────────────────────────────────────────────────────
   private proximityBeep = new ProximityBeep();
   private engineSound   = new EngineSound();
   private musicTrack    = new MusicTrack();
+  private pauseCtl!: PauseController;
   private voice         = new VoiceCallout();
   private firstInterceptorVoiced = false;
 
@@ -175,12 +174,10 @@ export class AttackRunScene extends Phaser.Scene {
   private planeGfx!:     Phaser.GameObjects.Graphics;
   private shadowGfx!:    Phaser.GameObjects.Graphics;
   private preRunGfx!:    Phaser.GameObjects.Graphics;
-  private pauseGfx!:     Phaser.GameObjects.Graphics;
   private crashGfx!:     Phaser.GameObjects.Graphics;
   private preRunTitleText!:  Phaser.GameObjects.Text;
   private preRunBodyText!:   Phaser.GameObjects.Text;
   private preRunPromptText!: Phaser.GameObjects.Text;
-  private pauseLabel!:       Phaser.GameObjects.Text;
   private touchControls!: TouchControls;
   private visibilityHandler!: () => void;
 
@@ -216,7 +213,6 @@ export class AttackRunScene extends Phaser.Scene {
     this.firstInterceptorVoiced = false;
     this.preRunActive  = true;
     this.preRunTimer   = 0;
-    this.paused        = false;
     this.hintTimer     = 0;
   }
 
@@ -316,7 +312,6 @@ export class AttackRunScene extends Phaser.Scene {
     this.bombGfx      = this.add.graphics().setDepth(4.5);
     this.planeGfx     = this.add.graphics().setDepth(5);
     this.preRunGfx    = this.add.graphics().setDepth(20);
-    this.pauseGfx     = this.add.graphics().setDepth(22).setVisible(false);
     this.crashGfx     = this.add.graphics().setDepth(15);
 
     const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
@@ -339,10 +334,7 @@ export class AttackRunScene extends Phaser.Scene {
         fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
       }).setOrigin(0.5).setDepth(21);
 
-    this.pauseLabel = this.add.text(W / 2, H / 2, 'PAUSED', {
-      fontSize: '72px', color: '#ffffff',
-      fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
-    }).setOrigin(0.5).setDepth(23).setVisible(false);
+    this.pauseCtl = new PauseController(this);
 
     // ── Touch / pause ────────────────────────────────────────────────────────
     this.touchControls = new TouchControls(this, { move: 'FLY', fire: 'SHOOT', action: 'BOMB' });
@@ -366,10 +358,8 @@ export class AttackRunScene extends Phaser.Scene {
     const input = InputRouter.read();
     const fireJust   = input.fire   && !this.prevFire;
     const actionJust = input.action && !this.prevAction;
-    const pauseJust  = input.pause  && !this.prevPause;
     this.prevFire   = input.fire;
     this.prevAction = input.action;
-    this.prevPause  = input.pause;
 
     // ── Pre-run briefing ──────────────────────────────────────────────────────
     if (this.preRunActive) {
@@ -390,23 +380,9 @@ export class AttackRunScene extends Phaser.Scene {
     }
 
     // ── Pause toggle ──────────────────────────────────────────────────────────
-    if (pauseJust) {
-      this.paused = !this.paused;
-      setMusicPaused(this.paused);
-      if (this.paused) this.engineSound.stop();
-      if (this.paused) {
-        // Draw semi-transparent overlay once when entering pause.
-        this.pauseGfx.clear();
-        this.pauseGfx.fillStyle(0x000000, 0.6);
-        this.pauseGfx.fillRect(0, 0, W, H);
-        this.pauseGfx.setVisible(true);
-        this.pauseLabel.setVisible(true);
-      } else {
-        this.pauseGfx.setVisible(false);
-        this.pauseLabel.setVisible(false);
-      }
-    }
-    if (this.paused) {
+    const wasPaused = this.pauseCtl.paused;
+    if (this.pauseCtl.update(input.pause)) {
+      if (!wasPaused) { this.engineSound.stop(); this.proximityBeep.stop(); }
       debugInfo.fps = Math.round(this.game.loop.actualFps);
       return;
     }
@@ -1476,7 +1452,6 @@ export class AttackRunScene extends Phaser.Scene {
     this.proximityBeep.dispose();
     this.engineSound.dispose();
     this.musicTrack.dispose();
-    setMusicPaused(false);
     this.voice.stop();
     gameUi.attackRunSecsLeft = 0;
   }
