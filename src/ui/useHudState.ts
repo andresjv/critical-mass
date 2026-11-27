@@ -9,9 +9,11 @@ import {
   type StageIntroData,
   type StageResultData,
   type TouchLabels,
+  type UiScreen,
 } from '../state/gameUi';
 
 export interface HudState {
+  screen: UiScreen;
   score: number;
   clock: number;
   planes: number;
@@ -58,6 +60,7 @@ export interface HudState {
 
 function snapshot(): HudState {
   return {
+    screen:       gameUi.screen,
     score:        missionState.score,
     clock:        missionState.impactClock,
     planes:       missionState.planes,

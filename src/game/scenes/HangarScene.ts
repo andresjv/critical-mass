@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { settings, haptic } from '../../state/settings';
 import { InputRouter } from '../../input/InputRouter';
 import { PauseController } from '../PauseController';
 import { HangarAmbience } from '../audio/HangarAmbience';
@@ -487,7 +488,8 @@ export class HangarScene extends Phaser.Scene {
         }
       },
     });
-    this.cameras.main.shake(300, 0.008);
+    if (!settings.reducedFlashing) this.cameras.main.shake(300, 0.008);
+    haptic(200);
   }
 
   private onImpactExpired(): void {
@@ -536,8 +538,8 @@ export class HangarScene extends Phaser.Scene {
     goGfx.destroy(); // unused, just kept to satisfy lint
 
     this.time.delayedCall(4000, () => {
-      missionState.startMission({ theme: 'coldfront', difficulty: missionState.difficulty, seed: Date.now() });
-      this.scene.start('MapScene', { launchIndex: 0 });
+      missionState.endMission();
+      this.scene.start('MenuScene');
     });
   }
 

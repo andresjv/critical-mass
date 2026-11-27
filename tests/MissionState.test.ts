@@ -117,3 +117,25 @@ describe('MissionState — startMission resets all state', () => {
     expect(s.theme).toBe('xenoworld');
   });
 });
+
+describe('MissionState — level and menu lifecycle', () => {
+  it('defaults to the Cold Front level and is not started until a mission begins', () => {
+    const s = new MissionState();
+    expect(s.started).toBe(false);
+    expect(s.level).toBe('coldfront');
+  });
+
+  it('stores the chosen level when a mission starts', () => {
+    const s = new MissionState();
+    s.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 5, level: 'moon' });
+    expect(s.started).toBe(true);
+    expect(s.level).toBe('moon');
+  });
+
+  it('endMission sends the player back to the menu state', () => {
+    const s = startedState();
+    s.endMission();
+    expect(s.started).toBe(false);
+    expect(s.planes).toBe(0);
+  });
+});

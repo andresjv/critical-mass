@@ -6,6 +6,7 @@ import type { Rng } from '../../state/rng';
 import { FX_PALETTE as C } from '../theme/coldFront';
 import { ATTACK_RUN } from '../../state/tuning';
 import { pts } from './points';
+import { settings } from '../../state/settings';
 
 type PartKind = 'debris' | 'spark' | 'smoke' | 'fire';
 
@@ -181,7 +182,7 @@ export class Effects {
       g.fillStyle(C.fireOuter, fade * 0.85); g.fillCircle(sx, b.y - b.size * 0.3 * e, b.size * (0.5 + 0.6 * e));
       g.fillStyle(C.fire, fade);              g.fillCircle(sx, b.y - b.size * 0.25 * e, b.size * (0.4 + 0.4 * e));
       g.fillStyle(C.fireCore, fade);          g.fillCircle(sx, b.y - b.size * 0.2 * e, b.size * 0.35 * (1 - b.t * 0.6));
-      if (b.t < 0.18) { g.fillStyle(C.flash, 1 - b.t / 0.18); g.fillCircle(sx, b.y, b.size * 0.9); }
+      if (b.t < 0.18 && !settings.reducedFlashing) { g.fillStyle(C.flash, 1 - b.t / 0.18); g.fillCircle(sx, b.y, b.size * 0.9); }
     }
 
     // Falling planes.

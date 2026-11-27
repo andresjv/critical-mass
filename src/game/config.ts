@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { DebugScene } from './scenes/DebugScene';
+import { MenuScene } from './scenes/MenuScene';
 import { MapScene } from './scenes/MapScene';
 import { HangarScene } from './scenes/HangarScene';
 import { AttackRunScene } from './scenes/AttackRunScene';
@@ -45,6 +46,7 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
       // BootScene auto-starts first; it generates placeholder textures then
       // routes to MapScene or DebugScene (?debug=1).
       BootScene,
+      MenuScene,
       MapScene,
       DebugScene,
       HangarScene,

@@ -18,7 +18,10 @@ import { playExplosion } from '../audio/ExplosionSound';
 import { PauseController } from '../PauseController';
 import { Effects } from '../effects/Effects';
 import { pts } from '../effects/points';
-import { ATTACK_RUN_PALETTE as BG, FX_PALETTE } from '../theme/coldFront';
+import { FX_PALETTE } from '../theme/coldFront';
+import { getBiome, type Biome } from '../theme/biomes';
+import { Backdrop, hash01 } from '../effects/Backdrop';
+import { settings, haptic } from '../../state/settings';
 
 const W = 1280;
 const H = 720;
@@ -51,12 +54,6 @@ const FLAK_SIZE = 10;
 const MISSILE_W = 24; const MISSILE_H = 8;
 const HEATSEEK_W = 28; const HEATSEEK_H = 10;
 const BLDG_W = 90;   const BLDG_H = 140;
-
-/** Deterministic 0..1 hash for scenery placement (not gameplay; same every run). */
-function hash01(n: number): number {
-  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-  return s - Math.floor(s);
-}
 
 interface SceneData {
   launchIndex: number;
@@ -171,8 +168,8 @@ export class AttackRunScene extends Phaser.Scene {
   private firstInterceptorVoiced = false;
 
   // ── Visuals ───────────────────────────────────────────────────────────────
-  private bgFarGfx!:     Phaser.GameObjects.Graphics;
-  private bgMidGfx!:     Phaser.GameObjects.Graphics;
+  private backdrop!:     Backdrop;
+  private biome!:        Biome;
   private terrainGfx!:   Phaser.GameObjects.Graphics;
   private enemyGfx!:     Phaser.GameObjects.Graphics;
   private projGfx!:      Phaser.GameObjects.Graphics;
@@ -297,12 +294,15 @@ export class AttackRunScene extends Phaser.Scene {
     this.heatSeekerSchedule.sort((a, b) => b - a);
 
     // ── Background ──────────────────────────────────────────────────────────
-    // Static sky (depth 0): gradient, stars, moon. Parallax layers redraw every frame on top.
-    this.drawSky(this.add.graphics().setDepth(0));
-
-    // Parallax layers — redrawn each frame in drawParallaxBg().
-    this.bgFarGfx = this.add.graphics().setDepth(0.1); // far mountains
-    this.bgMidGfx = this.add.graphics().setDepth(0.5); // mid hills
+    // Sky (static, depth 0) + parallax scenery for this level; each launch gets its own layout.
+    this.biome = getBiome(missionState.level);
+    this.backdrop = new Backdrop(
+      this.add.graphics().setDepth(0),
+      this.add.graphics().setDepth(0.1), // far ridges
+      this.add.graphics().setDepth(0.5), // hills, pools, tree line
+      this.biome,
+      (missionState.seed % 1000) + this.launchIndex * 7,
+    );
 
     // ── Graphics layers ──────────────────────────────────────────────────────
     this.terrainGfx   = this.add.graphics().setDepth(1);
@@ -851,52 +851,14 @@ export class AttackRunScene extends Phaser.Scene {
     const planeScreenY = groundY - this.planeAlt;
 
     // ── Parallax background ──────────────────────────────────────────────────
-    this.drawParallaxBg();
+    this.backdrop.draw(this.cameraX);
 
     // ── Terrain ──────────────────────────────────────────────────────────────
     this.terrainGfx.clear();
-    // Draw ground segments.
-    this.terrainGfx.fillStyle(0x1a3020, 1);
-    const startSeg = Math.max(0, Math.floor(this.cameraX / SEGMENT_W) - 1);
-    const endSeg   = Math.min(this.totalSegments - 1, Math.ceil((this.cameraX + W) / SEGMENT_W) + 1);
-    for (let i = startSeg; i <= endSeg; i++) {
-      const sx = i * SEGMENT_W - this.cameraX;
-      const gy = this.groundHeights[i] ?? GROUND_BASE_Y;
-      this.terrainGfx.fillRect(sx, gy, SEGMENT_W + 1, H - gy);
-    }
-    // Ground surface highlight.
-    this.terrainGfx.lineStyle(2, 0x2a5030, 0.8);
-    this.terrainGfx.beginPath();
-    for (let i = startSeg; i <= endSeg; i++) {
-      const sx = i * SEGMENT_W - this.cameraX;
-      const gy = this.groundHeights[i] ?? GROUND_BASE_Y;
-      if (i === startSeg) this.terrainGfx.moveTo(sx, gy);
-      else this.terrainGfx.lineTo(sx, gy);
-    }
-    this.terrainGfx.strokePath();
-
-    // Obstacles.
-    for (const obs of this.obstacles) {
-      const sx = obs.worldX - this.cameraX;
-      if (sx < -BLDG_W || sx > W + BLDG_W) continue;
-      const gy = this.groundYAtWorldX(obs.worldX);
-      if (obs.type === 'building') {
-        this.terrainGfx.fillStyle(0x334455, 1);
-        this.terrainGfx.fillRect(sx - BLDG_W / 2, gy - BLDG_H, BLDG_W, BLDG_H);
-        this.terrainGfx.lineStyle(1, 0x446688, 0.8);
-        this.terrainGfx.strokeRect(sx - BLDG_W / 2, gy - BLDG_H, BLDG_W, BLDG_H);
-        // Windows.
-        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
-          this.terrainGfx.fillStyle(0x88aacc, 0.5);
-          this.terrainGfx.fillRect(sx - 30 + c * 24, gy - BLDG_H + 20 + r * 38, 14, 20);
-        }
-      } else { // pylon
-        this.terrainGfx.fillStyle(0x445566, 1);
-        this.terrainGfx.fillRect(sx - 10, gy - 180, 20, 180);
-        this.terrainGfx.fillStyle(0xffaa00, 0.9);
-        this.terrainGfx.fillRect(sx - 8, gy - 180, 16, 10); // top beacon
-      }
-    }
+    // Buildings and pylons first, so the ground drawn over them buries their base:
+    // they always stand up out of the ground, even on a slope.
+    this.drawObstacles();
+    this.drawGround();
 
     // ── Enemies ───────────────────────────────────────────────────────────────
     this.enemyGfx.clear();
@@ -1174,120 +1136,83 @@ export class AttackRunScene extends Phaser.Scene {
         missionState.hudCue = `+${pts}`;
       }
     }
-    this.cameras.main.shake(200, 0.008);
+    if (!settings.reducedFlashing) this.cameras.main.shake(200, 0.008);
+    haptic(60);
   }
 
-  /** Static night sky: vertical gradient, stars, moon. Drawn once. */
-  private drawSky(g: Phaser.GameObjects.Graphics): void {
-    const top = Phaser.Display.Color.IntegerToColor(BG.skyTop);
-    const bot = Phaser.Display.Color.IntegerToColor(BG.skyBottom);
-    const bands = 24;
-    for (let i = 0; i < bands; i++) {
-      const c = Phaser.Display.Color.Interpolate.ColorWithColor(top, bot, bands - 1, i);
-      g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
-      g.fillRect(0, (H * i) / bands, W, H / bands + 1);
-    }
-    for (let i = 0; i < 90; i++) {
-      const x = hash01(i * 3.1) * W, y = hash01(i * 7.7) * H * 0.55;
-      g.fillStyle(BG.stars, 0.25 + hash01(i * 1.3) * 0.6);
-      g.fillCircle(x, y, hash01(i * 5.9) < 0.15 ? 1.6 : 0.9);
-    }
-    g.fillStyle(BG.moon, 0.08); g.fillCircle(1030, 110, 70);
-    g.fillStyle(BG.moon, 0.15); g.fillCircle(1030, 110, 46);
-    g.fillStyle(BG.moon, 0.95); g.fillCircle(1030, 110, 30);
-    g.fillStyle(BG.skyTop, 0.25); g.fillCircle(1040, 104, 7); g.fillCircle(1022, 120, 5);
-  }
+  /** Smooth ground surface for the visible span, with a darker sub-band and biome decor. */
+  private drawGround(): void {
+    const g = this.terrainGfx, gr = this.biome.ground;
+    const STEP = 16;
+    const x0 = -(((this.cameraX % STEP) + STEP) % STEP);
+    const surface: { x: number; y: number }[] = [];
+    for (let sx = x0 - STEP; sx <= W + STEP; sx += STEP) surface.push({ x: sx, y: this.groundYAtWorldX(sx + this.cameraX) });
 
-  /** Scrolling parallax layers behind the playfield: far peaks, snowy mountains, hills with lakes, pine forest. */
-  private drawParallaxBg(): void {
-    const g = this.bgFarGfx;
-    g.clear();
-    // Far snowy peaks (slowest).
-    this.drawRidge(g, this.cameraX * 0.05, 330, 150, 380, BG.mountainFar, true, 1);
-    // Nearer mountains.
-    this.drawRidge(g, this.cameraX * 0.12, 400, 120, 260, BG.mountainMid, true, 2);
-
-    const m = this.bgMidGfx;
-    m.clear();
-    // Rolling hills.
-    const hillOff = this.cameraX * 0.25;
-    const hillY = (sx: number): number => {
-      const wx = sx + hillOff;
-      return 500 + Math.sin(wx * 0.0042) * 26 + Math.cos(wx * 0.0021) * 18;
+    const fillBelow = (dy: number, color: number): void => {
+      g.fillStyle(color, 1);
+      g.fillPoints(pts([...surface.map(p => ({ x: p.x, y: p.y + dy })), { x: W + STEP, y: H }, { x: x0 - STEP, y: H }]), true);
     };
-    m.fillStyle(BG.hills, 1);
-    m.beginPath(); m.moveTo(0, H);
-    for (let sx = 0; sx <= W; sx += 20) m.lineTo(sx, hillY(sx));
-    m.lineTo(W, H); m.closePath(); m.fillPath();
+    fillBelow(0, gr.fill);
+    fillBelow(26, gr.band);
 
-    // Lakes sitting in the hills (one every ~700 world-px, some skipped).
-    const LAKE_GAP = 700;
-    for (let n = Math.floor(hillOff / LAKE_GAP) - 1; n <= Math.floor((hillOff + W) / LAKE_GAP) + 1; n++) {
-      if (hash01(n) < 0.35) continue;
-      const sx = n * LAKE_GAP + hash01(n + 0.5) * 300 - hillOff;
-      const w  = 160 + hash01(n + 0.25) * 160;
-      const y  = hillY(sx) + 22;
-      m.fillStyle(BG.lake, 1);      m.fillEllipse(sx, y, w, 20);
-      m.fillStyle(BG.lakeShine, 0.5);
-      m.fillRect(sx - w * 0.25, y - 3, w * 0.3, 1.5);
-      m.fillRect(sx + w * 0.05, y + 2, w * 0.18, 1.5);
-    }
+    g.lineStyle(3, gr.surface, 1);
+    g.beginPath();
+    surface.forEach((p, i) => (i === 0 ? g.moveTo(p.x, p.y) : g.lineTo(p.x, p.y)));
+    g.strokePath();
 
-    // Pine forest ridge (fastest background layer).
-    const forOff = this.cameraX * 0.45;
-    const forY = (sx: number): number => {
-      const wx = sx + forOff;
-      return 568 + Math.sin(wx * 0.006) * 14 + Math.cos(wx * 0.0027) * 10;
-    };
-    m.fillStyle(BG.forestFloor, 1);
-    m.beginPath(); m.moveTo(0, H);
-    for (let sx = 0; sx <= W; sx += 20) m.lineTo(sx, forY(sx));
-    m.lineTo(W, H); m.closePath(); m.fillPath();
-    const TREE_GAP = 18;
-    for (let n = Math.floor(forOff / TREE_GAP) - 2; n <= Math.floor((forOff + W) / TREE_GAP) + 2; n++) {
-      if (hash01(n * 0.37) < 0.18) continue; // clearings
-      const sx = n * TREE_GAP + hash01(n * 1.7) * 10 - forOff;
-      const base = forY(sx) + 4;
-      const h = 26 + hash01(n * 2.3) * 30, w = h * 0.42;
-      m.fillStyle(hash01(n * 4.1) < 0.5 ? BG.forestDark : BG.forestLight, 1);
-      m.fillTriangle(sx - w, base - h * 0.25, sx + w, base - h * 0.25, sx, base - h);
-      m.fillTriangle(sx - w * 1.2, base, sx + w * 1.2, base, sx, base - h * 0.6);
-    }
-  }
-
-  /** Jagged mountain ridge built from summed sines plus hashed peaks; optional snow caps. */
-  private drawRidge(
-    g: Phaser.GameObjects.Graphics, off: number, baseY: number, amp: number, peakGap: number,
-    color: number, snow: boolean, seed: number,
-  ): void {
-    // Overlapping triangular peaks: each cell has one summit of hashed height, position and width.
-    const ridgeY = (sx: number): number => {
-      const wx = sx + off;
-      const n0 = Math.floor(wx / peakGap);
-      let top = 0;
-      for (let n = n0 - 1; n <= n0 + 1; n++) {
-        const cx = (n + 0.2 + hash01(n * 3.3 + seed) * 0.6) * peakGap;
-        const halfW = peakGap * (0.55 + hash01(n * 5.1 + seed) * 0.5);
-        const h = 0.35 + hash01(n * 1.9 + seed) * 0.65;
-        top = Math.max(top, h * (1 - Math.abs(wx - cx) / halfW));
+    // Decor on world-fixed spots so it scrolls with the ground.
+    const GAP = 46;
+    for (let n = Math.floor(this.cameraX / GAP) - 1; n <= Math.floor((this.cameraX + W) / GAP) + 1; n++) {
+      const r = hash01(n * 1.37 + 5);
+      if (r < 0.35) continue;
+      const wx = n * GAP + hash01(n * 2.9) * GAP;
+      const sx = wx - this.cameraX, gy = this.groundYAtWorldX(wx);
+      g.fillStyle(gr.decorColor, 1);
+      g.lineStyle(2, gr.decorColor, 1);
+      switch (gr.decor) {
+        case 'grass':  g.fillTriangle(sx - 4, gy + 1, sx + 4, gy + 1, sx + (r - 0.6) * 10, gy - 6 - r * 6); break;
+        case 'reeds':  for (let k = -1; k <= 1; k++) g.lineBetween(sx + k * 3, gy + 1, sx + k * 5, gy - 10 - r * 10); break;
+        case 'stones': g.fillEllipse(sx, gy + 2, 6 + r * 8, 4 + r * 3); break;
+        case 'snow':   g.fillEllipse(sx, gy + 10 + r * 20, 18 + r * 20, 3); break;
+        case 'craters':
+          g.fillEllipse(sx, gy + 14 + r * 22, 18 + r * 26, 5 + r * 4);
+          g.fillStyle(gr.surface, 0.5); g.fillEllipse(sx, gy + 12 + r * 22, 18 + r * 26, 2);
+          break;
       }
-      return baseY - top * amp + Math.sin(wx * 0.031 + seed) * 4;
-    };
-    g.fillStyle(color, 1);
-    g.beginPath(); g.moveTo(0, H);
-    const start = -(((off % 12) + 12) % 12); // sample on world-aligned columns so edges don't shimmer
-    for (let sx = start; sx <= W + 12; sx += 12) g.lineTo(sx, ridgeY(sx));
-    g.lineTo(W, H); g.closePath(); g.fillPath();
-    if (!snow) return;
-    // Snow cap: fill between the ridge and a ragged snow line on every summit that pokes above it.
-    const snowLine = baseY - amp * 0.55;
-    g.fillStyle(BG.snow, 0.8);
-    for (let sx = start; sx < W; sx += 12) {
-      const y0 = ridgeY(sx), y1 = ridgeY(sx + 12);
-      if (y0 >= snowLine && y1 >= snowLine) continue;
-      const ragged = (x: number): number => snowLine + Math.sin((x + off) * 0.05 + seed) * 7 + Math.sin((x + off) * 0.17) * 3;
-      const b0 = Math.max(y0, Math.min(ragged(sx), y0 + 40)), b1 = Math.max(y1, Math.min(ragged(sx + 12), y1 + 40));
-      g.fillPoints(pts([{ x: sx, y: y0 }, { x: sx + 12, y: y1 }, { x: sx + 12, y: b1 }, { x: sx, y: b0 }]), true);
+    }
+  }
+
+  /** Buildings and pylons; their base reaches below the lowest ground under them. */
+  private drawObstacles(): void {
+    const g = this.terrainGfx, bl = this.biome.building, py = this.biome.pylon;
+    for (const obs of this.obstacles) {
+      const sx = obs.worldX - this.cameraX;
+      if (sx < -BLDG_W || sx > W + BLDG_W) continue;
+      const gy = this.groundYAtWorldX(obs.worldX);
+      const halfW = obs.type === 'building' ? BLDG_W / 2 : 10;
+      const base = Math.max(this.groundYAtWorldX(obs.worldX - halfW), this.groundYAtWorldX(obs.worldX + halfW), gy) + 12;
+      if (obs.type === 'building') {
+        const top = gy - BLDG_H;
+        g.fillStyle(bl.wall, 1);
+        g.fillRect(sx - halfW, top, BLDG_W, base - top);
+        g.lineStyle(1.5, bl.edge, 0.9);
+        g.strokeRect(sx - halfW, top, BLDG_W, base - top);
+        g.fillStyle(bl.edge, 1);
+        g.fillRect(sx - halfW - 3, top - 4, BLDG_W + 6, 6); // roof lip
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+          const lit = hash01(obs.worldX + r * 3 + c) > 0.3;
+          g.fillStyle(bl.window, lit ? bl.windowAlpha : bl.windowAlpha * 0.25);
+          g.fillRect(sx - 30 + c * 24, top + 20 + r * 38, 14, 20);
+        }
+      } else {
+        const top = gy - 180;
+        g.fillStyle(py.body, 1);
+        g.fillRect(sx - 6, top, 12, base - top);
+        g.lineStyle(2, py.body, 1);
+        for (let y = top + 20; y < gy - 10; y += 26) { g.lineBetween(sx - 14, y, sx + 14, y); }
+        g.fillStyle(py.beacon, 0.9);
+        g.fillRect(sx - 8, top - 4, 16, 8);
+      }
     }
   }
 
@@ -1382,7 +1307,8 @@ export class AttackRunScene extends Phaser.Scene {
   private groundYAtWorldX(worldX: number): number {
     const idx = Math.floor(worldX / SEGMENT_W);
     if (idx < 0 || idx >= this.groundHeights.length) return GROUND_BASE_Y;
-    const t   = (worldX % SEGMENT_W) / SEGMENT_W;
+    const f   = (worldX % SEGMENT_W) / SEGMENT_W;
+    const t   = f * f * (3 - 2 * f); // smoothstep: rounded hills instead of sharp kinks
     const h0  = this.groundHeights[idx];
     const h1  = this.groundHeights[Math.min(idx + 1, this.groundHeights.length - 1)];
     return Phaser.Math.Linear(h0, h1, t);
@@ -1408,7 +1334,8 @@ export class AttackRunScene extends Phaser.Scene {
     missionState.hudCue = `CRASHED: ${reason}`;
     gameUi.attackRunSecsLeft = 0;
 
-    this.cameras.main.shake(300, 0.01);
+    if (!settings.reducedFlashing) this.cameras.main.shake(300, 0.01);
+    haptic(200);
     this.time.delayedCall(1200, () => {
       if (missionState.planes <= 0) {
         this.showGameOver();
@@ -1604,8 +1531,8 @@ export class AttackRunScene extends Phaser.Scene {
     this.time.addEvent({ delay: 60, loop: true, callback: drawScene });
 
     this.time.delayedCall(5000, () => {
-      missionState.startMission({ theme: 'coldfront', difficulty: missionState.difficulty, seed: Date.now() });
-      this.scene.start('MapScene', { launchIndex: 0 });
+      missionState.endMission();
+      this.scene.start('MenuScene');
     });
   }
 

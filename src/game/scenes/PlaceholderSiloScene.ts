@@ -79,8 +79,8 @@ export class PlaceholderSiloScene extends Phaser.Scene {
 
     this.time.delayedCall(1200, () => {
       if (missionState.isGameOver) {
-        missionState.startMission({ theme: 'coldfront', difficulty: missionState.difficulty, seed: Date.now() });
-        this.scene.start('MapScene', { launchIndex: 0 });
+        missionState.endMission();
+        this.scene.start('MenuScene');
       } else {
         this.scene.start('MapScene', { launchIndex: this.launchIndex + 1 });
       }
