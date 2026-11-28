@@ -25,6 +25,8 @@ export interface HudState {
   creditsEarned: number;
   endlessStage: number;
   interactPrompt: string | null;
+  item: typeof gameUi.item;
+  inCover: boolean;
   hudCue: string;
   fps: number;
   speed: number;
@@ -44,8 +46,6 @@ export interface HudState {
   // How-to-play
   howToPlayStage: HowToPlayStage | null;
   // Results
-  showResults: boolean;
-  finalScore: number;
   challengerData: ChallengerData | null;
   playerName: string;
   // Attack run
@@ -59,7 +59,6 @@ export interface HudState {
   callout: string | null;
   calloutExpiry: number;
   stageResult: StageResultData | null;
-  showComingSoon: boolean;
 }
 
 function snapshot(): HudState {
@@ -76,6 +75,8 @@ function snapshot(): HudState {
     creditsEarned: gameUi.creditsEarned,
     endlessStage: gameUi.endlessStage,
     interactPrompt: gameUi.interactPrompt,
+    item:         gameUi.item,
+    inCover:      gameUi.inCover,
     hudCue:       missionState.hudCue,
     fps:          debugInfo.fps,
     speed:        debugInfo.speed,
@@ -92,8 +93,6 @@ function snapshot(): HudState {
     timeToImpactSecs:        gameUi.timeToImpactSecs,
     autoScrambleRemaining:   gameUi.autoScrambleRemaining,
     howToPlayStage: gameUi.howToPlayStage,
-    showResults:  gameUi.showResults,
-    finalScore:   gameUi.finalScore,
     challengerData: gameUi.challengerData,
     playerName:   gameUi.playerName,
     attackRunSecsLeft: gameUi.attackRunSecsLeft,
@@ -106,7 +105,6 @@ function snapshot(): HudState {
     callout:         gameUi.callout,
     calloutExpiry:   gameUi.calloutExpiry,
     stageResult:     gameUi.stageResult,
-    showComingSoon:  gameUi.showComingSoon,
   };
 }
 

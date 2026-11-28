@@ -7,3 +7,6 @@ export const JOYSTICK_ZONE_X = 640; // joystick zone is the left half of the can
 /** Weapon-wheel (bag) button, only in scenes that have one. */
 export const INVENTORY_CENTER = { x: 1190, y: 405 } as const;
 export const INVENTORY_VISUAL_RADIUS = 46;
+/** Side-item (grenade) button, only in scenes that have one. */
+export const ITEM_CENTER = { x: 950, y: 628 } as const;
+export const ITEM_VISUAL_RADIUS = 46;

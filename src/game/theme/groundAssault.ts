@@ -11,6 +11,12 @@ export const GROUND_FX = {
   playerBullet: 0xfff0a0, enemyBullet: 0xff8a5a, laser: 0x66f0ff, rocket: 0x5a6048, rocketFlame: 0xff8a2a,
   muzzle: 0xfff2a8, blood: 0x7a1a14, chute: 0xe8e2d0, chuteStripe: 0x3a8fe0, chuteLine: 0xc8c4b4,
   shadow: 0x000000, nestBag: 0x8a7a56, nestBagDark: 0x6a5c3e, gunMetal: 0x1e2226,
+  // Side items, sniper sight and the enemy "!" mark.
+  grenade: 0x3e4a2c, grenadeBand: 0x9a9a7a, bottle: 0x6a8a4a, bottleRag: 0xe8d8b0,
+  fireCore: 0xffe27a, fireMid: 0xff9a2a, fireOuter: 0xe0441a, ember: 0xffc040, scorch: 0x1a1410,
+  medkit: 0xf2f2f2, medkitCross: 0xe0302a, healGlow: 0x5fd17a,
+  foeGun: 0x0e0f11, foeGunAccent: 0x24262a, fuseLight: 0xff3a2a,
+  alertMark: 0xffd23a, alertEdge: 0x1a1406,
 } as const;
 
 /** Rarity colours (store cards, weapon wheel, HUD). */

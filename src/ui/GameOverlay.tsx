@@ -5,14 +5,12 @@ import { useHudState } from './useHudState';
 import { GameHud } from './GameHud';
 import { DebugOverlay } from './DebugOverlay';
 import { HowToPlayCard } from './HowToPlayCard';
-import { ResultsScreen } from './ResultsScreen';
 import { MainMenu } from './MainMenu';
 import { ProgressBar } from './ProgressBar';
 import { StageIntroCard } from './StageIntroCard';
 import { EventCallout } from './EventCallout';
 import { ContextualHint } from './ContextualHint';
 import { StageResultCard } from './StageResultCard';
-import { gameUi } from '../state/gameUi';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../game/config';
 
 export function GameOverlay() {
@@ -23,9 +21,7 @@ export function GameOverlay() {
   const inMenu = s.screen === 'menu';
   const needsPointerEvents =
     inMenu ||
-    s.showResults ||
-    !!s.stageIntro ||
-    s.showComingSoon;
+    !!s.stageIntro;
 
   const now = Date.now();
 
@@ -76,59 +72,6 @@ export function GameOverlay() {
           <StageResultCard result={s.stageResult} />
         </div>
 
-        {/* Interactive overlays — order matters: later = higher z-index */}
-        <ResultsScreen s={s} />
-
-        {/* Coming soon (shown after results disappear) */}
-        {s.showComingSoon && !s.showResults && (
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.85)',
-            pointerEvents: 'auto',
-            zIndex: 80,
-          }}
-            onClick={() => { gameUi.showComingSoon = false; }}
-          >
-            <div style={{
-              background: 'rgba(0,0,0,0.85)',
-              border: '1px solid rgba(80,160,255,0.35)',
-              borderRadius: 6,
-              padding: '48px 64px',
-              textAlign: 'center',
-            }}>
-              <div style={{
-                fontFamily: "'Space Grotesk', sans-serif",
-                fontSize: 36,
-                fontWeight: 700,
-                color: '#88ccff',
-                letterSpacing: 3,
-                marginBottom: 12,
-              }}>
-                VOSTGRAD ASSAULT
-              </div>
-              <div style={{
-                fontFamily: "'Space Grotesk', sans-serif",
-                fontSize: 24,
-                color: '#aaaaaa',
-                marginBottom: 32,
-              }}>
-                Coming soon
-              </div>
-              <div style={{
-                fontFamily: "'Space Grotesk', sans-serif",
-                fontSize: 15,
-                color: '#556677',
-                letterSpacing: 2,
-              }}>
-                SPACE OR FIRE TO SKIP
-              </div>
-            </div>
-          </div>
-        )}
 
         <StageIntroCard intro={s.stageIntro} device={s.device} />
         <MainMenu show={inMenu} device={s.device} />
