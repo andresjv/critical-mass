@@ -1,17 +1,17 @@
 // MainMenu — title screen, level select and settings (PRD F-01, F-23, T-01).
 // React only writes plain-TS state (gameUi.menuRequest / menuPreview, settings);
 // MenuScene picks the request up and starts the mission.
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { gameUi } from '../state/gameUi';
 import { LEVELS, levelInfo, type LevelId } from '../state/levels';
 import { settings, updateSettings, type Settings } from '../state/settings';
 import type { Difficulty } from '../state/tuning';
+import type { PartSlot } from '../state/progress';
+import { ACCENT, FONT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
+import { AchievementsPage, InventoryPage, PartsPage } from './LoadoutPages';
 
-type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'achievements';
+type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements';
 
-const ACCENT = '#88ccff';
-const FONT = "'Space Grotesk', sans-serif";
-const MONO = "'JetBrains Mono', monospace";
 
 const DIFFICULTIES: { id: Difficulty; label: string; note: string }[] = [
   { id: 'cadet',    label: 'Cadet',    note: 'More planes, slower enemies' },
@@ -26,6 +26,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
   const [browse, setBrowse] = useState<LevelId>(settings.lastLevel);
   const [diff, setDiff]   = useState<Difficulty>(settings.lastDifficulty);
   const [prefs, setPrefs] = useState<Settings>({ ...settings });
+  const [slot, setSlot]   = useState<PartSlot>('jet');
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Scenery behind the menu shows the chosen level, or the one being browsed.
@@ -66,7 +67,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       } else if (e.key === 'Enter' || e.key === ' ') {
         if (i >= 0 && items[i].tagName === 'BUTTON') { e.preventDefault(); items[i].click(); }
       } else if (e.key === 'Escape' && page !== 'title') {
-        e.preventDefault(); setPage('title');
+        e.preventDefault(); setPage(page === 'parts' ? 'inventory' : 'title');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -197,76 +198,18 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       )}
 
       {page === 'inventory' && (
-        <Panel title="Inventory" onBack={() => setPage('title')}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
-            <Slot name="Falcon" detail="Fighter jet · Equipped" equipped icon={<JetIcon />} />
-            <Slot name="Cannon" detail="Forward guns · Standard" icon={<GunIcon />} />
-            <Slot name="Iron bomb" detail="Ground strike · Standard" icon={<BombIcon />} />
-            {Array.from({ length: 5 }, (_, i) => <Slot key={i} name="Locked" detail="Coming soon" locked />)}
-          </div>
-          <MenuButton onClick={() => setPage('title')} style={{ width: 240 }}>Back</MenuButton>
-        </Panel>
+        <InventoryPage onBack={() => setPage('title')} onOpenSlot={sl => { setSlot(sl); setPage('parts'); }} />
       )}
 
-      {page === 'achievements' && (
-        <Panel title="Achievements" onBack={() => setPage('title')} narrow>
-          <div style={{ fontSize: 24, color: '#b9cad8', marginBottom: 20 }}>Achievements are coming soon.</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
-            {Array.from({ length: 8 }, (_, i) => (
-              <div key={i} style={{
-                aspectRatio: '1', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(8,14,22,0.9)', border: '2px dashed rgba(136,204,255,0.2)',
-                fontFamily: MONO, fontSize: 32, color: '#3f5468',
-              }}>?</div>
-            ))}
-          </div>
-          <MenuButton onClick={() => setPage('title')}>Back</MenuButton>
-        </Panel>
-      )}
+      {page === 'parts' && <PartsPage slot={slot} onBack={() => setPage('inventory')} />}
+
+      {page === 'achievements' && <AchievementsPage onBack={() => setPage('title')} />}
 
       {page === 'title' && device !== 'touch' && (
         <div style={{ position: 'absolute', bottom: 18, right: 72, fontSize: 20, color: '#8ea3b6', letterSpacing: 2 }}>
           ARROWS / TAB TO MOVE · ENTER TO SELECT
         </div>
       )}
-    </div>
-  );
-}
-
-const resetBtn: CSSProperties = {
-  font: 'inherit', color: 'inherit', cursor: 'pointer', padding: 0, margin: 0, outlineOffset: 3,
-};
-
-function MenuButton({ children, onClick, primary, autoFocus, style }: {
-  children: ReactNode; onClick: () => void; primary?: boolean; autoFocus?: boolean; style?: CSSProperties;
-}) {
-  return (
-    <button data-nav data-autofocus={autoFocus ? '' : undefined} onClick={onClick} style={{
-      ...resetBtn, fontSize: 28, fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase',
-      padding: '13px 24px', borderRadius: 6,
-      color: primary ? '#06121e' : '#dde8f2',
-      background: primary ? ACCENT : 'rgba(8,14,22,0.85)',
-      border: `2px solid ${primary ? ACCENT : 'rgba(136,204,255,0.35)'}`,
-      ...style,
-    }}>
-      {children}
-    </button>
-  );
-}
-
-function Panel({ title, children, onBack, narrow }: { title: string; children: ReactNode; onBack: () => void; narrow?: boolean }) {
-  return (
-    <div style={{
-      width: narrow ? 760 : 1200, maxHeight: 680, padding: '30px 36px', borderRadius: 10,
-      background: 'rgba(4,8,14,0.82)', border: '1px solid rgba(136,204,255,0.25)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: 3, color: '#fff' }}>{title}</div>
-        <button onClick={onBack} style={{ ...resetBtn, background: 'none', border: 'none', fontSize: 22, color: '#7f97ad', letterSpacing: 2 }}>
-          ESC · BACK
-        </button>
-      </div>
-      {children}
     </div>
   );
 }
@@ -310,59 +253,3 @@ function Toggle({ label, note, value, onChange }: { label: string; note: string;
   );
 }
 
-function Slot({ name, detail, icon, equipped, locked }: {
-  name: string; detail: string; icon?: ReactNode; equipped?: boolean; locked?: boolean;
-}) {
-  return (
-    <div style={{
-      borderRadius: 8, padding: '14px 16px', minHeight: 150, display: 'flex', flexDirection: 'column', gap: 6,
-      background: locked ? 'rgba(8,14,22,0.6)' : 'rgba(8,14,22,0.92)',
-      border: `2px ${locked ? 'dashed' : 'solid'} ${equipped ? ACCENT : 'rgba(136,204,255,0.2)'}`,
-      opacity: locked ? 0.6 : 1,
-    }}>
-      <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3f5468', fontFamily: MONO, fontSize: 32 }}>
-        {icon ?? '?'}
-      </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: '#fff' }}>{name}</div>
-      <div style={{ fontSize: 18, color: equipped ? ACCENT : '#9fb2c3' }}>{detail}</div>
-    </div>
-  );
-}
-
-/** Side view of the player's blue fighter, matching the in-game model. */
-function JetIcon() {
-  return (
-    <svg viewBox="-44 -26 92 40" width="150" height="64" aria-hidden="true">
-      <polygon points="-16,-5 -30,-5 -37,-23 -30,-23" fill="#3a8fe0" />
-      <polygon points="-27,-14 -33,-14 -35.5,-21 -30.5,-21" fill="#ffffff" />
-      <polygon points="38,0.5 28,-2 16,-5 0,-6.5 -22,-6.5 -32,-5 -37,-3.5 -37,3.5 -30,5.5 -6,6.5 12,6 26,3" fill="#3a8fe0" />
-      <polygon points="38,0.5 30,-1.6 30,3.4" fill="#1f5ea8" />
-      <polygon points="22,-4.5 16,-9.5 8,-10.5 2,-6.5" fill="#bfe6ff" />
-      <polygon points="6,2.5 -9,2.5 -19,10.5 -13,10.5" fill="#1f5ea8" />
-      <polygon points="-25,2 -34,2 -39,8 -33,8" fill="#1f5ea8" />
-      <circle cx="-8" cy="-0.5" r="3.6" fill="#fff" /><circle cx="-8" cy="-0.5" r="1.8" fill="#1f5ea8" />
-      <rect x="-40" y="-3.5" width="3.5" height="7" fill="#2a2e33" />
-    </svg>
-  );
-}
-
-function GunIcon() {
-  return (
-    <svg viewBox="0 0 60 30" width="110" height="56" aria-hidden="true">
-      <rect x="4" y="12" width="34" height="8" rx="2" fill="#8ea3b6" />
-      <rect x="36" y="13" width="20" height="3" fill="#cfd8e0" /><rect x="36" y="17" width="20" height="2" fill="#cfd8e0" />
-      <rect x="40" y="6" width="10" height="3" rx="1" fill="#ffd060" /><rect x="40" y="22" width="10" height="3" rx="1" fill="#ffd060" />
-    </svg>
-  );
-}
-
-function BombIcon() {
-  return (
-    <svg viewBox="-24 -10 44 20" width="110" height="52" aria-hidden="true">
-      <polygon points="-10,0 -20,-9 -22,-9 -18,0 -22,9 -20,9" fill="#6b7660" />
-      <polygon points="-14,-4 6,-6 12,-4 16,0 12,4 6,6 -14,4" fill="#4a5444" />
-      <polygon points="10,-4.5 14,-2.5 16,0 14,2.5 10,4.5" fill="#2f362b" />
-      <rect x="-4" y="-5.6" width="3" height="11.2" fill="#d8c040" />
-    </svg>
-  );
-}

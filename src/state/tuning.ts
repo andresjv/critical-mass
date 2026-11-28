@@ -201,6 +201,12 @@ export const ATTACK_RUN = {
   bombHomingSpeed: 420,
   /** Seconds between smoke puffs left behind a missile in flight. */
   missileTrailInterval: 0.045,
+  /** Fly-in after the takeoff cutscene: seconds, start X (px, off-screen) and start altitude. */
+  entryTime: 1.2,
+  entryStartX: -80 * WORLD_SCALE,
+  entryStartAlt: 30 * WORLD_SCALE,
+  /** Camera fade-in when the run starts (ms). */
+  entryFadeMs: 450,
   /** Seconds bomb travels to ground. */
   bombArcTime: 1.4,
   /** Max simultaneous bombs in flight. */
@@ -350,4 +356,18 @@ export const GAME_OVER = {
   minShowSecs: 1.2,
   /** Seconds before it returns to the menu on its own. */
   autoReturnSecs: 9,
+} as const;
+
+// ─── Loadout parts (inventory) ───────────────────────────────────────────────
+
+export const LOADOUT = {
+  /** Max player rounds in the air with the standard cannon. */
+  cannonMaxInAir: 4,
+  /** Twin cannon: max rounds in the air, vertical spread speed px/s, muzzle offset px. */
+  twinMaxInAir: 6,
+  twinSpreadVy: 45,
+  twinOffsetY: 5,
+  /** Cluster bomb: blast radius multiplier and extra reload seconds. */
+  clusterBlastMult: 1.6,
+  clusterReloadAdd: 0.3,
 } as const;

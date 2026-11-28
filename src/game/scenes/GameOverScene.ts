@@ -8,7 +8,7 @@ import { missionState } from '../../state/MissionState';
 import { gameUi } from '../../state/gameUi';
 import { GAME_OVER } from '../../state/tuning';
 import { getBiome, type Biome } from '../theme/biomes';
-import { PLAYER_JET } from '../theme/factions';
+import { playerJet } from '../theme/loadoutTheme';
 import { FX_PALETTE } from '../theme/coldFront';
 import { hash01 } from '../effects/Backdrop';
 
@@ -221,12 +221,13 @@ export class GameOverScene extends Phaser.Scene {
     const k = FX_PALETTE;
     for (let x = 40; x < 100; x++) if (hash01(x) > 0.25) this.px(g, x, GROUND + (x > 70 ? 1 : 0), k.scorch);
     for (let x = 84; x < 112; x++) for (let y = GROUND - 1; y < GROUND + 3; y++) if (hash01(x * 9 + y) > 0.3) this.px(g, x, y, y === GROUND - 1 ? b.ground.surface : k.scorch);
-    const jetMap = { B: PLAYER_JET.body, D: PLAYER_JET.dark, C: PLAYER_JET.canopy, W: PLAYER_JET.marking, K: k.wreck };
+    const pj = playerJet();
+    const jetMap = { B: pj.body, D: pj.dark, C: pj.canopy, W: pj.marking, K: k.wreck };
     this.sprite(g, JET, 76, GROUND - 14, jetMap);
     // Dirt mound piled over the buried nose.
     for (let x = 95; x < 106; x++) { const hgt = 3 - Math.abs(x - 100) / 2; for (let y = 0; y < hgt; y++) this.px(g, x, GROUND - 1 - y, hash01(x + y) > 0.5 ? b.ground.fill : b.ground.band); }
     this.sprite(g, WING, 52, GROUND - 3, jetMap);
-    for (let i = 0; i < 14; i++) this.px(g, 46 + hash01(i * 3.9) * 70, GROUND - hash01(i * 2.2) * 2, i % 3 ? k.wreck : PLAYER_JET.dark);
+    for (let i = 0; i < 14; i++) this.px(g, 46 + hash01(i * 3.9) * 70, GROUND - hash01(i * 2.2) * 2, i % 3 ? k.wreck : pj.dark);
 
     // Title and score.
     this.text(g, 'GAME OVER', GW / 2, 10, 2, 0xff4a3a, 0x3a0a08);
