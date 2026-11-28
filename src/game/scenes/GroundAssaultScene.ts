@@ -26,8 +26,6 @@ import { MusicTrack } from '../audio/MusicTrack';
 import { playExplosion } from '../audio/ExplosionSound';
 import { playReload, playShot } from '../audio/GunSound';
 import { captureFrame, fadeFromCapture } from '../crossfade';
-import { drawJet } from '../models/Vehicles';
-import { playerJet } from '../theme/loadoutTheme';
 import type { SoldierPalette } from '../theme/factions';
 
 const W = 1280, H = 720;
@@ -750,7 +748,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     }
   }
 
-  /** Endless goal: an open hangar with your plane waiting inside. */
+  /** Endless goal: an open, lit hangar. */
   private drawHangar(g: Phaser.GameObjects.Graphics, x: number, time: number): void {
     if (x > W + 50 || x < -500) return;
     const gy = this.groundY(this.bunkerX + 150), top = gy - 220;
@@ -763,7 +761,6 @@ export class GroundAssaultScene extends Phaser.Scene {
     g.fillStyle(C.doorDark, 1); g.fillRect(dx, dt, dw, gy - dt);
     g.fillStyle(C.lamp, 0.12); g.fillTriangle(dx + dw / 2, dt + 6, dx, gy, dx + dw, gy);
     for (let i = 0; i < 3; i++) { g.fillStyle(C.lamp, 1); g.fillRect(dx + 40 + i * 100, dt + 4, 24, 5); }
-    drawJet(g, dx + dw / 2 + 30, gy - 62, playerJet(), { facing: -1, rot: 0, thrust: 0, time, scale: 1.7 });
     for (let i = 0; i < 12; i++) { g.fillStyle(i % 2 ? C.hazard : C.hazardDark, 1); g.fillRect(x + i * 33, top + 52, 33, 10); }
     if (this.state !== 'won') {
       const ay = dt - 40 + Math.sin(time * 0.006) * 6;
