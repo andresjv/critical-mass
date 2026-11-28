@@ -30,6 +30,12 @@ export const PLAYER_JET: JetPalette = {
   body: 0x3a8fe0, dark: 0x1f5ea8, camo: [], canopy: 0xbfe6ff, marking: 0xffffff, markingCore: 0x1f5ea8,
 };
 
+/** Blue-side fighters in the background dogfights: a normal grey fighter jet with a little blue
+ *  (fin, nose stripe, roundel). The player's own plane keeps PLAYER_JET. */
+export const ALLY_JET: JetPalette = {
+  body: 0x8d98a3, dark: 0x5d6873, camo: [], canopy: 0xbfe6ff, marking: 0x3a8fe0, markingCore: 0xffffff,
+};
+
 export const RED = 0xd8322a;
 
 /** Tiny team patch colours on uniforms (blue = us; RED above = enemy). */

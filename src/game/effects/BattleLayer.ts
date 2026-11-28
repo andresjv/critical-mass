@@ -10,7 +10,7 @@ import Phaser from 'phaser';
 import { BATTLE } from '../../state/tuning';
 import type { Rng } from '../../state/rng';
 import {
-  TRACER_BLUE, TRACER_RED, PLAYER_JET, type SoldierPalette, type JetPalette,
+  TRACER_BLUE, TRACER_RED, ALLY_JET, type SoldierPalette, type JetPalette,
 } from '../theme/factions';
 import { soldierLook, type Troops } from '../theme/troops';
 import { trooperHead, trooperPack, trooperTorso } from '../models/Trooper';
@@ -161,7 +161,7 @@ export class BattleLayer {
     for (const pr of this.pairs) for (const j of [pr.target, pr.chaser]) {
       if (j.y > 470) continue;
       const left = Math.cos(j.ang) < 0;
-      drawJet(g, j.x, j.y, j.side === 'blue' ? PLAYER_JET : this.redJet, {
+      drawJet(g, j.x, j.y, j.side === 'blue' ? ALLY_JET : this.redJet, {
         facing: left ? -1 : 1, rot: left ? j.ang - Math.PI : j.ang,
         scale: BATTLE.farJetScale, thrust: j.alive ? 0.7 : 0, time,
       });
