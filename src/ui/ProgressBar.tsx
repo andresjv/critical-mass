@@ -20,70 +20,53 @@ function stepColor(key: ProgressStep, current: ProgressStep): string {
   const ci = STEP_ORDER.indexOf(current);
   const ki = STEP_ORDER.indexOf(key);
   if (ki === ci) return '#ffcc44'; // current — amber
-  if (ki < ci) return '#556677';   // completed — dim
-  return '#334455';                // future — very dim
+  if (ki < ci) return '#7f95ab';   // completed — dim
+  return '#4a5c70';                // future — very dim
 }
 
 export function ProgressBar({ progressStep, launchNumber, launchSite }: Props) {
   if (!progressStep) return null;
+  const SANS = "'Space Grotesk', sans-serif";
 
   return (
     <div style={{
-      position: 'absolute',
-      top: 64,
-      left: 0,
-      right: 0,
-      pointerEvents: 'none',
+      position: 'absolute', top: 80, left: 0, right: 0, pointerEvents: 'none',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
     }}>
-      {/* Breadcrumb row */}
+      {/* Breadcrumb pill: stage dots with the current stage lit */}
       <div style={{
-        background: 'rgba(0,0,0,0.65)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 0,
-        padding: '6px 24px',
-        borderBottom: '1px solid rgba(80,160,255,0.15)',
+        display: 'flex', alignItems: 'center', gap: 10, padding: '5px 16px', borderRadius: 999,
+        background: 'linear-gradient(180deg, rgba(14,22,34,0.78), rgba(8,13,20,0.66))',
+        border: '1px solid rgba(140,180,220,0.16)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
       }}>
-        {STEPS.map((step, i) => (
-          <span key={step.key} style={{ display: 'flex', alignItems: 'center' }}>
-            {i > 0 && (
-              <span style={{
-                fontFamily: "'Space Grotesk', sans-serif",
-                fontSize: 13,
-                color: '#334455',
-                margin: '0 8px',
-              }}>›</span>
-            )}
-            <span style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: 13,
-              letterSpacing: 1.5,
-              color: stepColor(step.key, progressStep),
-              fontWeight: step.key === progressStep ? 700 : 400,
-            }}>
-              {step.label}
+        {STEPS.map((step, i) => {
+          const c = stepColor(step.key, progressStep);
+          const cur = step.key === progressStep;
+          return (
+            <span key={step.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {i > 0 && <span style={{ width: 18, height: 1, background: 'rgba(140,170,200,0.3)' }} />}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%', background: c,
+                  boxShadow: cur ? `0 0 8px ${c}` : 'none',
+                }} />
+                <span style={{ fontFamily: SANS, fontSize: 12, letterSpacing: 1.5, color: c, fontWeight: cur ? 700 : 500 }}>
+                  {step.label}
+                </span>
+              </span>
             </span>
-          </span>
-        ))}
+          );
+        })}
       </div>
 
       {/* Sub-line: launch N of 4 — site name */}
       {launchSite && (
-        <div style={{
-          background: 'rgba(0,0,0,0.5)',
-          textAlign: 'center',
-          padding: '3px 24px',
+        <span style={{
+          fontFamily: SANS, fontSize: 12, color: 'rgba(200,215,230,0.7)', letterSpacing: 1,
+          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
         }}>
-          <span style={{
-            fontFamily: "'Space Grotesk', sans-serif",
-            fontSize: 12,
-            color: '#556677',
-            letterSpacing: 1,
-          }}>
-            Launch {launchNumber} of 4  —  {launchSite}
-          </span>
-        </div>
+          Launch {launchNumber} of 4  ·  {launchSite}
+        </span>
       )}
     </div>
   );

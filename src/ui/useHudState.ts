@@ -17,6 +17,8 @@ export interface HudState {
   score: number;
   clock: number;
   planes: number;
+  hull: number;
+  hullMax: number;
   hudCue: string;
   fps: number;
   speed: number;
@@ -63,6 +65,8 @@ function snapshot(): HudState {
     score:        missionState.score,
     clock:        missionState.impactClock,
     planes:       missionState.planes,
+    hull:         gameUi.hull,
+    hullMax:      gameUi.hullMax,
     hudCue:       missionState.hudCue,
     fps:          debugInfo.fps,
     speed:        debugInfo.speed,

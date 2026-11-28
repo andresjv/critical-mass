@@ -33,7 +33,7 @@ const PATCH = 0x3a8fe0;
 export const HANGAR_LOCAL: Record<LevelId, HangarLocal> = {
   coldfront: {
     style: 'base',
-    crew: { uniform: 0x2c4f7c, uniformDark: 0x1d3656, camo: null, headgear: 'helmet', hat: 0x213a5c, hatTrim: 0x16283f,
+    crew: { uniform: 0x4a5634, uniformDark: 0x323a22, camo: 0x2a301c, headgear: 'helmet', hat: 0x3c4630, hatTrim: 0x2a301c,
       skin: 0xd9a77c, vest: 0xff8a1e, vestStripe: 0xfff2a0, pack: 0x3a4a3a, patch: PATCH },
     kit: { crate: 0x6b5a36, crateDark: 0x4c3f24, strap: 0x2e2616, barrel: 0x3e5a3a, barrelRed: 0x8a2a22, barrelTop: 0x5c7a56,
       truck: 0x4a5a36, truckTank: 0x8c9496, sandbag: 0x9a8a62, sandbagDark: 0x7a6c48, table: 0x5a4a34, map: 0xd8d0b0,

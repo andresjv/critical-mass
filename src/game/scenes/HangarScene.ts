@@ -16,6 +16,7 @@ import { drawJetTopDown } from '../models/Vehicles';
 import { drawHangarStatic, HangarCrew } from '../hangar/HangarDecor';
 import { HangarChatter } from '../hangar/HangarChatter';
 import { TakeoffCutscene } from '../hangar/TakeoffCutscene';
+import { captureFrame, fadeFromCapture, setJetHandoff } from '../crossfade';
 import { EngineSound } from '../audio/EngineSound';
 import type { Biome } from '../theme/biomes';
 
@@ -444,10 +445,14 @@ export class HangarScene extends Phaser.Scene {
 
   private onPlaneExited(): void {
     this.planeState = 'exited';
-    this.planeContainer.setVisible(false);
-    // Cut to the side-view takeoff animation (drawn above everything in this scene).
-    this.takeoff = new TakeoffCutscene(this, this.biome, this.seed, 20);
     gameUi.contextualHint = null;
+    // Cross-dissolve (no black) from the top-down hangar into the side-view takeoff.
+    captureFrame(this, () => {
+      if (!this.sys.isActive() && !this.sys.isPaused()) return;
+      this.planeContainer.setVisible(false);
+      this.takeoff = new TakeoffCutscene(this, this.biome, this.seed, 20);
+      fadeFromCapture(this, 30, HANGAR.takeoffCrossfadeMs);
+    });
   }
 
   private crashPlane(reason: string): void {
@@ -492,8 +497,12 @@ export class HangarScene extends Phaser.Scene {
   }
 
   private transitionToAttackRun(): void {
-    this.engine.stop();
-    this.scene.start('AttackRunScene', { launchIndex: this.launchIndex });
+    // Hand the jet's screen position to the attack run and dissolve straight into it.
+    if (this.takeoff) setJetHandoff(this.takeoff.jetScreen());
+    captureFrame(this, () => {
+      this.engine.stop();
+      this.scene.start('AttackRunScene', { launchIndex: this.launchIndex });
+    });
   }
 
   private showGameOver(): void {

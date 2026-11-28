@@ -17,16 +17,15 @@ const ROLL_ACCEL = 430;
 const LIFTOFF_T = 1.55;
 const CLIMB_ACCEL = 270;
 const MAX_PITCH = 0.36;
-const FADE_IN = 0.3;
-const FADE_OUT = 0.45;
-/** Jet drawn larger than in the attack run so it reads next to the hangar. */
+/** Jet drawn larger than in the attack run so it reads next to the hangar; over the last
+ *  SHRINK_SECS the camera pulls back so it ends at attack-run size for a seamless handoff. */
 const JET_SCALE = 1.7;
+const SHRINK_SECS = 1.1;
 
 export class TakeoffCutscene {
   private t = 0;
   private backdrop: Backdrop;
   private fg: Phaser.GameObjects.Graphics;
-  private fade: Phaser.GameObjects.Graphics;
   private layers: Phaser.GameObjects.Graphics[];
 
   constructor(scene: Phaser.Scene, private readonly biome: Biome, seed: number, depth: number) {
@@ -34,8 +33,7 @@ export class TakeoffCutscene {
     const far = scene.add.graphics().setDepth(depth + 0.1);
     const mid = scene.add.graphics().setDepth(depth + 0.2);
     this.fg = scene.add.graphics().setDepth(depth + 0.3);
-    this.fade = scene.add.graphics().setDepth(depth + 0.4);
-    this.layers = [sky, far, mid, this.fg, this.fade];
+    this.layers = [sky, far, mid, this.fg];
     this.backdrop = new Backdrop(sky, far, mid, biome, seed);
   }
 
@@ -45,9 +43,13 @@ export class TakeoffCutscene {
 
   update(dt: number): void { this.t += dt; }
 
-  destroy(): void { for (const g of this.layers) g.destroy(); }
+  /** Where the jet is on screen right now, for handing it to the attack run. */
+  jetScreen(): { x: number; y: number; pitch: number } {
+    const m = this.motion();
+    return { x: m.x - m.camX, y: GROUND_Y - 22 * m.k - m.climb, pitch: m.pitch };
+  }
 
-  render(time: number): void {
+  private motion(): { x: number; camX: number; climb: number; air: number; pitch: number; k: number } {
     const t = this.t;
     const x = START_X + 0.5 * ROLL_ACCEL * t * t;
     const vx = ROLL_ACCEL * t;
@@ -56,6 +58,16 @@ export class TakeoffCutscene {
     const vy = CLIMB_ACCEL * air;
     const pitch = Math.min(MAX_PITCH, Math.atan2(vy, Math.max(vx, 1)) + (air > 0 ? 0.12 : 0));
     const camX = Math.max(0, x - 520);
+    const sh = Phaser.Math.Clamp((t - (HANGAR.takeoffTime - SHRINK_SECS)) / SHRINK_SECS, 0, 1);
+    const k = Phaser.Math.Linear(JET_SCALE, 1, sh * sh * (3 - 2 * sh));
+    return { x, camX, climb, air, pitch, k };
+  }
+
+  destroy(): void { for (const g of this.layers) g.destroy(); }
+
+  render(time: number): void {
+    const t = this.t;
+    const { x, camX, climb, air, pitch, k } = this.motion();
 
     this.backdrop.draw(camX, time);
     const g = this.fg;
@@ -64,7 +76,7 @@ export class TakeoffCutscene {
     this.drawHangar(g, -camX);
 
     // The jet: wheels down on the runway, tucked away shortly after liftoff.
-    const k = JET_SCALE, jx = x - camX, jy = GROUND_Y - 22 * k - climb;
+    const jx = x - camX, jy = GROUND_Y - 22 * k - climb;
     if (air < 0.35) {
       g.lineStyle(3 * k, 0x1a1a1a, 1);
       g.lineBetween(jx - 18 * k, jy + 6 * k, jx - 18 * k, jy + 15 * k); g.lineBetween(jx + 20 * k, jy + 6 * k, jx + 20 * k, jy + 15 * k);
@@ -72,18 +84,12 @@ export class TakeoffCutscene {
     }
     if (air === 0 && t > 0.2) {
       // Jet wash kicking up dust behind the plane.
-      for (let k = 0; k < 4; k++) {
-        g.fillStyle(this.biome.ground.surface, 0.18 - k * 0.035);
-        g.fillEllipse(jx - 60 - k * 34, GROUND_Y - 4 - k * 3, 50 + k * 26, 12 + k * 5);
+      for (let d = 0; d < 4; d++) {
+        g.fillStyle(this.biome.ground.surface, 0.18 - d * 0.035);
+        g.fillEllipse(jx - 60 - d * 34, GROUND_Y - 4 - d * 3, 50 + d * 26, 12 + d * 5);
       }
     }
     drawJet(g, jx, jy, playerJet(), { facing: 1, rot: -pitch, thrust: 1, time, scale: k });
-
-    // Fade in from the top-down hangar, fade out into the attack run.
-    this.fade.clear();
-    const a = t < FADE_IN ? 1 - t / FADE_IN
-      : t > HANGAR.takeoffTime - FADE_OUT ? (t - (HANGAR.takeoffTime - FADE_OUT)) / FADE_OUT : 0;
-    if (a > 0) { this.fade.fillStyle(0x000000, Math.min(1, a)); this.fade.fillRect(0, 0, W, H); }
   }
 
   private drawGround(g: Phaser.GameObjects.Graphics, camX: number): void {

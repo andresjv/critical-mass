@@ -38,8 +38,8 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
   {
     art: 'danger', title: 'Watch out',
     lines: [
-      'Buildings and towers are solid: fly over them.',
-      'Heat-seeking missiles chase you. Shoot them, or duck low to shake them off.',
+      'Your plane can take 3 hits; the hull gauge (top right) shows what is left. The 3rd hit downs it.',
+      'Buildings and towers are solid: fly over them. Heat-seekers chase you: duck low to shake them.',
       'Run out of planes and the mission is over.',
     ],
   },
@@ -64,7 +64,7 @@ export const TUTORIAL_HINTS: readonly [number, string][] = [
   [1.5, '{move} to fly'],
   [8, '{fire} to shoot enemy jets'],
   [15, '{action} to drop a bomb on a tank'],
-  [22, 'Fly over buildings and towers'],
+  [22, 'Fly over buildings and towers. You can take 3 hits'],
   [29, 'Reach the end of the run to strike the silo'],
 ];
 /** Seconds each practice hint stays up. */

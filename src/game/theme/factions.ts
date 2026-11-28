@@ -11,10 +11,13 @@ export interface JetPalette {
   marking: number;
   /** Roundel centre colour. */
   markingCore: number;
+  /** Draw as a flying saucer instead of a jet (Moon enemies). `canopy` = dome, `marking` = lights. */
+  ufo?: boolean;
 }
 
 export interface VehiclePalette {
-  kind: 'tank' | 'rover';
+  /** tank, moon rover, desert humvee with roof gunner, swamp armoured truck on flotation tyres. */
+  kind: 'tank' | 'rover' | 'humvee' | 'hauler';
   hull: number;
   dark: number;
   camo: readonly number[];
@@ -29,9 +32,22 @@ export const PLAYER_JET: JetPalette = {
 
 export const RED = 0xd8322a;
 
-/** Infantry colours for the background battle (blue = us, red = enemy). */
-export interface SoldierPalette { uniform: number; dark: number; helmet: number; skin: number; gun: number }
-export const SOLDIER_BLUE: SoldierPalette = { uniform: 0x3468b8, dark: 0x22457e, helmet: 0x1f3d6e, skin: 0xd9a77c, gun: 0x1a1a1a };
-export const SOLDIER_RED: SoldierPalette  = { uniform: 0xb8352a, dark: 0x7e241c, helmet: 0x5e1a14, skin: 0xd9a77c, gun: 0x1a1a1a };
+/** Tiny team patch colours on uniforms (blue = us; RED above = enemy). */
+export const BLUE_PATCH = 0x3a8fe0;
+
+/** Infantry / vehicle crew kit (region-specific sets live in troops.ts). */
+export interface SoldierPalette {
+  uniform: number; dark: number;
+  /** Camo blotch colour on the uniform; null = plain. */
+  camo: number | null;
+  /** Helmet / hat / hood / visor colour, depending on headgear. */
+  helmet: number;
+  headgear: 'helmet' | 'boonie' | 'shemagh' | 'hood' | 'spacesuit';
+  /** Webbing / vest / life-support pack. */
+  gear: number;
+  /** Tiny team patch. */
+  patch: number;
+  skin: number; gun: number;
+}
 export const TRACER_BLUE = 0x9fd0ff;
 export const TRACER_RED = 0xffa070;

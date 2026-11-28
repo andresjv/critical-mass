@@ -42,6 +42,10 @@ export const gameUi = {
   /** Level whose scenery scrolls behind the menu (follows the highlighted card). */
   menuPreview: 'coldfront' as LevelId,
 
+  /** Attack run hull: hits left on the current plane, and the maximum. */
+  hull: 3,
+  hullMax: 0,
+
   /** Last active input device — drives key-hint labels in the HUD. */
   device: 'keyboard' as DeviceHint,
 
