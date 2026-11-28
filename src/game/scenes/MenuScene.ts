@@ -3,6 +3,7 @@
 // scenery behind it and starts the mission when React posts gameUi.menuRequest.
 import Phaser from 'phaser';
 import { gameUi } from '../../state/gameUi';
+import { addCredits } from '../../state/armory';
 import { missionState } from '../../state/MissionState';
 import { updateSettings } from '../../state/settings';
 import type { LevelId } from '../../state/levels';
@@ -62,6 +63,13 @@ export class MenuScene extends Phaser.Scene {
         seed: Date.now(), endless: req.endless,
       });
       gameUi.creditsEarned = 0;
+      // Endless pays store credits from score (MissionState.payCredits).
+      missionState.onCredits = (n) => {
+        addCredits(n);
+        gameUi.creditsEarned += n;
+        gameUi.callout = `+${n} CREDITS`;
+        gameUi.calloutExpiry = Date.now() + 1400;
+      };
       gameUi.endlessStage = req.endless ? 1 : 0;
       gameUi.screen = 'game';
       this.scene.start('MapScene', { launchIndex: 0 });

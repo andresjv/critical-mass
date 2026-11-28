@@ -33,7 +33,7 @@ const INTRO_DATA: Record<StageKey, StageIntroData> = {
   },
   ground_endless: {
     stageName: 'ENDLESS · ON FOOT',
-    goal: 'Fight through to the hangar and board your plane (T). You can take 8 hits. Every kill earns credits',
+    goal: 'Fight through to the hangar and board your plane (T). You can take 8 hits. Every enemy is 100 points; 1000 points = 5 credits',
     keyboard: ['← → — move, ↓ — crouch', '↑ or Shift K X — jump', 'Space — shoot', 'Hold H — pick a gun (1–4 also swap)', 'T — board plane'],
     touch: ['Stick — move / crouch', 'JUMP — jump', 'SHOOT — fire', 'Hold GUNS — pick a gun', 'Tap the pop-up — board'],
   },

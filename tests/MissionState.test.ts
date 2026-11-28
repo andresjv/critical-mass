@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MissionState } from '../src/state/MissionState';
-import { LIMITS, TUNING } from '../src/state/tuning';
+import { ENDLESS, LIMITS, TUNING } from '../src/state/tuning';
 
 function startedState(difficulty: 'cadet' | 'pilot' | 'suicidal' = 'pilot') {
   const s = new MissionState();
@@ -164,5 +164,35 @@ describe('MissionState — endless', () => {
 
   it('a normal mission is not endless', () => {
     expect(startedState().endless).toBe(false);
+  });
+});
+
+describe('MissionState — endless scoring and credits', () => {
+  it('every enemy is worth a flat 100 in endless, normal points otherwise', () => {
+    const e = new MissionState();
+    e.startMission({ theme: 'coldfront', difficulty: 'suicidal', seed: 1, endless: true });
+    expect(e.addKill(250)).toBe(ENDLESS.pointsPerKill);
+    expect(e.score).toBe(100);
+    const n = startedState();
+    expect(n.addKill(250)).toBe(250 * TUNING.pilot.scoreMultiplier);
+  });
+
+  it('pays 5 credits per 1000 points in endless only', () => {
+    const e = new MissionState();
+    const paid: number[] = [];
+    e.onCredits = c => paid.push(c);
+    e.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 1, endless: true });
+    for (let i = 0; i < 9; i++) e.addKill(0);
+    expect(paid).toEqual([]);
+    e.addKill(0); // 1000 points
+    expect(paid).toEqual([5]);
+    for (let i = 0; i < 20; i++) e.addKill(0); // 3000 points
+    expect(paid.reduce((a, b) => a + b, 0)).toBe(15);
+    expect(e.creditsEarned).toBe(15);
+    const n = startedState();
+    n.onCredits = c => paid.push(c);
+    n.addScore(5000);
+    expect(e.creditsEarned).toBe(15);
+    expect(paid.reduce((a, b) => a + b, 0)).toBe(15);
   });
 });

@@ -189,7 +189,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
             <span style={{ fontSize: 44, fontWeight: 700, color: '#ffd76a', lineHeight: 1 }}>∞</span>
             <span style={{ flex: 1 }}>
               <span style={{ display: 'block', fontSize: 28, fontWeight: 700, color: '#fff' }}>Endless</span>
-              <span style={{ display: 'block', fontSize: 19, color: '#c9b98a' }}>Random biomes back to back. More health, no missile clock. Reach the hangar to fly again. Earns credits for the store.</span>
+              <span style={{ display: 'block', fontSize: 19, color: '#c9b98a' }}>Random biomes back to back. More health, no missile clock. Reach the hangar to fly again. Every enemy is 100 points; each 1000 points earns 5 store credits.</span>
             </span>
             <span style={{ fontSize: 22, color: '#ffd76a', letterSpacing: 2 }}>PLAY ›</span>
           </button>

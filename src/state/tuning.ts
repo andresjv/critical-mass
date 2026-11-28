@@ -431,10 +431,6 @@ export const GROUND = {
   /** Auto-aim: max vertical angle toward a target in front, rad. */
   autoAimAngle: 0.42,
   /** Credits: per enemy soldier, per nest, for pressing the button. */
-  creditsPerKill: 5,
-  creditsPerNest: 15,
-  /** Endless: credits for clearing a stage (reaching the hangar). Credits are only earned in Endless. */
-  creditsStage: 40,
   /** Endless: soldier health, and how much harder each stage gets (enemy count ×, capped). */
   endlessHits: 8,
   endlessStageScale: 0.12,
@@ -488,4 +484,13 @@ export const STORE = {
   weight: { common: 40, uncommon: 30, rare: 18, epic: 9, legendary: 3 },
   price:  { common: 80, uncommon: 150, rare: 260, epic: 450, legendary: 800 },
   startingCredits: 150,
+} as const;
+
+/** Endless mode scoring: every enemy is worth the same, and points turn into store credits. */
+export const ENDLESS = {
+  /** Points for any enemy destroyed (soldier, nest, tank, SAM, jet, heat-seeker). No difficulty multiplier. */
+  pointsPerKill: 100,
+  /** Every this many points earns `creditsPerStep` store credits. */
+  pointsPerStep: 1000,
+  creditsPerStep: 5,
 } as const;

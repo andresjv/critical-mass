@@ -1,7 +1,7 @@
 // MissionState — single source of truth for a running mission.
 // Pure TypeScript: NO Phaser imports. Unit-tested in tests/MissionState.test.ts.
 
-import { Difficulty, LIMITS, TUNING } from './tuning';
+import { Difficulty, ENDLESS, LIMITS, TUNING } from './tuning';
 import { LEVELS, type LevelId } from './levels';
 import { createRng } from './rng';
 
@@ -29,6 +29,10 @@ export class MissionState {
   endless = false;
   /** Endless: stages cleared so far (0 on the first). */
   endlessStage = 0;
+  /** Endless: store credits earned from score so far this run. */
+  creditsEarned = 0;
+  /** Called with newly earned store credits (Endless only). Wired up by game code to the armory. */
+  onCredits: ((n: number) => void) | null = null;
 
   // ── Planes / men ─────────────────────────────────────────────────────────
   /** Planes currently available (also = men at Stage 5). */
@@ -73,6 +77,7 @@ export class MissionState {
     this.seed = config.seed;
     this.endless = config.endless ?? false;
     this.endlessStage = 0;
+    this.creditsEarned = 0;
     this.level = config.level ?? (this.endless ? this.endlessLevel(0, null) : 'coldfront');
     this.started = true;
 
@@ -147,6 +152,32 @@ export class MissionState {
   addScore(points: number): void {
     const mult = TUNING[this.difficulty].scoreMultiplier;
     this.score += Math.round(points * mult);
+    this.payCredits();
+  }
+
+  /**
+   * An enemy was destroyed. Normal missions score `normalPoints` (× difficulty); Endless scores a flat
+   * ENDLESS.pointsPerKill for every enemy. Returns the points actually added (for the HUD cue).
+   */
+  addKill(normalPoints: number): number {
+    if (!this.endless) {
+      const before = this.score;
+      this.addScore(normalPoints);
+      return this.score - before;
+    }
+    this.score += ENDLESS.pointsPerKill;
+    this.payCredits();
+    return ENDLESS.pointsPerKill;
+  }
+
+  /** Endless: every ENDLESS.pointsPerStep points earns ENDLESS.creditsPerStep credits. */
+  private payCredits(): void {
+    if (!this.endless) return;
+    const due = Math.floor(this.score / ENDLESS.pointsPerStep) * ENDLESS.creditsPerStep;
+    const n = due - this.creditsEarned;
+    if (n <= 0) return;
+    this.creditsEarned = due;
+    this.onCredits?.(n);
   }
 }
 

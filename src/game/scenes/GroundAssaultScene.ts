@@ -12,7 +12,7 @@ import { debugInfo } from '../../state/debugInfo';
 import { gameUi } from '../../state/gameUi';
 import { GROUND, SCORE, TUNING, type GunStats } from '../../state/tuning';
 import { createRng, type Rng } from '../../state/rng';
-import { armory, addCredits, gunDef, gunStats, SLOT_COUNT, type GunId } from '../../state/armory';
+import { armory, gunDef, gunStats, SLOT_COUNT, type GunId } from '../../state/armory';
 import { settings, haptic } from '../../state/settings';
 import { showStageIntro } from '../../state/stageIntros';
 import { getBiome, type Biome } from '../theme/biomes';
@@ -516,17 +516,8 @@ export class GroundAssaultScene extends Phaser.Scene {
     if (e.hp > 0) return;
     e.deadT = 0;
     const nest = e.kind === 'nest';
-    missionState.addScore(nest ? GROUND.scoreNest : GROUND.scoreKill);
-    const pts = nest ? GROUND.scoreNest : GROUND.scoreKill;
-    if (missionState.endless) {
-      // Credits are only earned in Endless.
-      const cr = nest ? GROUND.creditsPerNest : GROUND.creditsPerKill;
-      addCredits(cr);
-      gameUi.creditsEarned += cr;
-      missionState.hudCue = `+${pts}  ·  +${cr} CREDITS`;
-    } else {
-      missionState.hudCue = `+${pts}`;
-    }
+    const pts = missionState.addKill(nest ? GROUND.scoreNest : GROUND.scoreKill);
+    missionState.hudCue = `+${pts}`;
     if (nest) { this.fx.explosion(e.x, e.y - 30, 50, 10, false, true); playExplosion(45); }
   }
 
@@ -620,11 +611,9 @@ export class GroundAssaultScene extends Phaser.Scene {
 
   /** Endless: stage cleared at the hangar. Credits, then on to the next random biome's hangar. */
   private boardPlane(): void {
-    addCredits(GROUND.creditsStage);
-    gameUi.creditsEarned += GROUND.creditsStage;
     const cleared = missionState.endlessStage + 1;
     missionState.hudCue = '';
-    gameUi.callout = `STAGE ${cleared} CLEARED  ·  +${GROUND.creditsStage} CREDITS`;
+    gameUi.callout = `STAGE ${cleared} CLEARED`;
     gameUi.calloutExpiry = Date.now() + 1800;
     haptic(150);
     this.music.fadeOut(1);

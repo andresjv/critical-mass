@@ -398,7 +398,8 @@ Finish by running tests and opening a Vercel preview.
 - Guns: 4 carried slots (`src/state/armory.ts`). **Hold H** (pad Y, touch GUNS) opens the weapon wheel
   (time slows to 0.25×), stick/arrows pick, release equips; keys 1–4 swap directly. Auto-aim within
   `GROUND.autoAimAngle`; auto-reload on empty. Stats in `GUN_STATS`.
-- Credits: earned only in **Endless** (per kill / nest / stage cleared), saved in localStorage (`cm_armory_v1`).
+- Credits: earned only in **Endless**: every enemy is 100 points (`ENDLESS.pointsPerKill`) and each
+  1000 points pays 5 credits (`MissionState.payCredits` → `onCredits`), saved in localStorage (`cm_armory_v1`).
 - **Daily store**: 4 offers per player per day (player id + local date seeded), rarity-weighted
   (`STORE.weight`); chance % is shown. Level medals also unlock specific guns for free.
 - The Silo Strike (`SiloScene`, its placeholder, `SILO` tuning, pseudo3d) has been deleted.

@@ -591,8 +591,8 @@ export class AttackRunScene extends Phaser.Scene {
         if (dist < airHitR) {
           bomb.alive = false;
           this.killInterceptor(ic);
-          missionState.addScore(SCORE.interceptor);
-          missionState.hudCue = `+${SCORE.interceptor}`;
+          const pts = missionState.addKill(SCORE.interceptor);
+          missionState.hudCue = `+${pts}`;
           break;
         }
       }
@@ -605,9 +605,9 @@ export class AttackRunScene extends Phaser.Scene {
         if (dist < airHitR) {
           this.heatSeeker = null; bomb.alive = false;
           this.spawnExplosion(hs.x + this.cameraX, hs.lockedY, 60);
-          missionState.addScore(SCORE.heatSeekerFromBehind);
-          missionState.hudCue = `HEAT-SEEKER DOWN! +${SCORE.heatSeekerFromBehind}`;
-          gameUi.callout = `+${SCORE.heatSeekerFromBehind}  NICE SHOT`;
+          const pts = missionState.addKill(SCORE.heatSeekerFromBehind);
+          missionState.hudCue = `HEAT-SEEKER DOWN! +${pts}`;
+          gameUi.callout = `+${pts}  NICE SHOT`;
           gameUi.calloutExpiry = Date.now() + 1500;
           continue;
         }
@@ -766,8 +766,8 @@ export class AttackRunScene extends Phaser.Scene {
         ) {
           proj.alive   = false;
           this.killGroundEnemy(enemy);
-          missionState.addScore(SCORE.tank);
-          missionState.hudCue = `+${SCORE.tank}`;
+          const pts = missionState.addKill(SCORE.tank);
+          missionState.hudCue = `+${pts}`;
         }
       }
     }
@@ -844,8 +844,8 @@ export class AttackRunScene extends Phaser.Scene {
         if (Math.abs(proj.x - ic.x) < INTERC_W / 2 && Math.abs(proj.y - ic.y) < INTERC_H) {
           proj.alive = false;
           this.killInterceptor(ic);
-          missionState.addScore(SCORE.interceptor);
-          missionState.hudCue = `+${SCORE.interceptor}`;
+          const pts = missionState.addKill(SCORE.interceptor);
+          missionState.hudCue = `+${pts}`;
           break;
         }
       }
@@ -908,9 +908,9 @@ export class AttackRunScene extends Phaser.Scene {
             proj.alive = false;
             this.heatSeeker = null;
             this.spawnExplosion(hs.x + this.cameraX, hs.lockedY, 50);
-            missionState.addScore(SCORE.heatSeekerFromBehind);
-            missionState.hudCue = `HEAT-SEEKER DOWN! +${SCORE.heatSeekerFromBehind}`;
-            gameUi.callout = `+${SCORE.heatSeekerFromBehind}  NICE SHOT`;
+            const pts = missionState.addKill(SCORE.heatSeekerFromBehind);
+            missionState.hudCue = `HEAT-SEEKER DOWN! +${pts}`;
+            gameUi.callout = `+${pts}  NICE SHOT`;
             gameUi.calloutExpiry = Date.now() + 1500;
             break;
           }
@@ -1267,8 +1267,7 @@ export class AttackRunScene extends Phaser.Scene {
       if (!enemy.alive) continue;
       if (Math.abs(enemy.worldX - landWorldX) <= this.bombRadius()) {
         this.killGroundEnemy(enemy, false);
-        const pts = enemy.type === 'sam' ? SCORE.bombSam : SCORE.tank;
-        missionState.addScore(pts);
+        const pts = missionState.addKill(enemy.type === 'sam' ? SCORE.bombSam : SCORE.tank);
         missionState.hudCue = `+${pts}`;
       }
     }
