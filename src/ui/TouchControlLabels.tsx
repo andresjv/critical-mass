@@ -1,6 +1,7 @@
 import type { TouchLabels } from '../state/gameUi';
 import {
   FIRE_CENTER, ACTION_CENTER, FIRE_VISUAL_RADIUS, ACTION_VISUAL_RADIUS, JOYSTICK_ZONE_X,
+  INVENTORY_CENTER, INVENTORY_VISUAL_RADIUS,
 } from '../input/touchLayout';
 
 const LABEL_FONT = "'Space Grotesk', system-ui, sans-serif";
@@ -41,6 +42,9 @@ export function TouchControlLabels({ labels }: { labels: TouchLabels | null }) {
       <ButtonLabel x={FIRE_CENTER.x} y={FIRE_CENTER.y} r={FIRE_VISUAL_RADIUS} text={labels.fire} />
       {labels.action && (
         <ButtonLabel x={ACTION_CENTER.x} y={ACTION_CENTER.y} r={ACTION_VISUAL_RADIUS} text={labels.action} />
+      )}
+      {labels.inventory && (
+        <ButtonLabel x={INVENTORY_CENTER.x} y={INVENTORY_CENTER.y} r={INVENTORY_VISUAL_RADIUS} text={labels.inventory} />
       )}
     </>
   );

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MissionState } from '../src/state/MissionState';
-import { LIMITS, TUNING } from '../src/state/tuning';
+import { ENDLESS, LIMITS, TUNING } from '../src/state/tuning';
 
 function startedState(difficulty: 'cadet' | 'pilot' | 'suicidal' = 'pilot') {
   const s = new MissionState();
@@ -137,5 +137,62 @@ describe('MissionState — level and menu lifecycle', () => {
     s.endMission();
     expect(s.started).toBe(false);
     expect(s.planes).toBe(0);
+  });
+});
+
+describe('MissionState — endless', () => {
+  it('starts in a seeded random biome with no missile clock', () => {
+    const a = new MissionState(), b = new MissionState();
+    a.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 42, endless: true });
+    b.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 42, endless: true });
+    expect(a.endless).toBe(true);
+    expect(a.level).toBe(b.level);
+    expect(a.impactClock).toBe(0);
+  });
+
+  it('moves to a different biome each stage, the same way for the same seed', () => {
+    const a = new MissionState(), b = new MissionState();
+    a.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 7, endless: true });
+    b.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 7, endless: true });
+    for (let i = 0; i < 10; i++) {
+      const prev = a.level;
+      expect(a.nextEndlessStage()).not.toBe(prev);
+      expect(b.nextEndlessStage()).toBe(a.level);
+    }
+    expect(a.endlessStage).toBe(10);
+  });
+
+  it('a normal mission is not endless', () => {
+    expect(startedState().endless).toBe(false);
+  });
+});
+
+describe('MissionState — endless scoring and credits', () => {
+  it('every enemy is worth a flat 100 in endless, normal points otherwise', () => {
+    const e = new MissionState();
+    e.startMission({ theme: 'coldfront', difficulty: 'suicidal', seed: 1, endless: true });
+    expect(e.addKill(250)).toBe(ENDLESS.pointsPerKill);
+    expect(e.score).toBe(100);
+    const n = startedState();
+    expect(n.addKill(250)).toBe(250 * TUNING.pilot.scoreMultiplier);
+  });
+
+  it('pays 5 credits per 1000 points in endless only', () => {
+    const e = new MissionState();
+    const paid: number[] = [];
+    e.onCredits = c => paid.push(c);
+    e.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 1, endless: true });
+    for (let i = 0; i < 9; i++) e.addKill(0);
+    expect(paid).toEqual([]);
+    e.addKill(0); // 1000 points
+    expect(paid).toEqual([5]);
+    for (let i = 0; i < 20; i++) e.addKill(0); // 3000 points
+    expect(paid.reduce((a, b) => a + b, 0)).toBe(15);
+    expect(e.creditsEarned).toBe(15);
+    const n = startedState();
+    n.onCredits = c => paid.push(c);
+    n.addScore(5000);
+    expect(e.creditsEarned).toBe(15);
+    expect(paid.reduce((a, b) => a + b, 0)).toBe(15);
   });
 });

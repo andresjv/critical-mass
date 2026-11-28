@@ -63,6 +63,7 @@ export function GameOverlay() {
             progressStep={s.progressStep}
             launchNumber={s.launchNumber}
             launchSite={s.launchSite}
+            endlessStage={s.endlessStage}
           />
           <EventCallout
             callout={s.callout}

@@ -10,9 +10,12 @@ import type { PartSlot } from '../state/progress';
 import { ACCENT, FONT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
 import { AchievementsPage, InventoryPage, PartsPage } from './LoadoutPages';
 import { TutorialPage } from './TutorialPage';
+import { GunsPage, StorePage } from './ArmoryPages';
+import { syncUnlocks } from '../state/armory';
+import { progress } from '../state/progress';
 import { isTutorialDone, markTutorialDone } from '../state/tutorial';
 
-type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial';
+type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial' | 'guns' | 'store';
 
 
 const DIFFICULTIES: { id: Difficulty; label: string; note: string }[] = [
@@ -37,7 +40,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
   useEffect(() => { gameUi.menuPreview = page === 'levels' ? browse : level; }, [level, browse, page]);
 
   // Back to the title page whenever the menu reappears (e.g. after game over).
-  useEffect(() => { if (show) setPage('title'); }, [show]);
+  useEffect(() => { if (show) { setPage('title'); syncUnlocks(progress.achieved); } }, [show]);
 
   // Focus the first item on each page so keyboard players can start right away.
   useEffect(() => {
@@ -71,7 +74,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       } else if (e.key === 'Enter' || e.key === ' ') {
         if (i >= 0 && items[i].tagName === 'BUTTON') { e.preventDefault(); items[i].click(); }
       } else if (e.key === 'Escape' && page !== 'title') {
-        e.preventDefault(); setPage(page === 'parts' ? 'inventory' : page === 'tutorial' && replay ? 'settings' : 'title');
+        e.preventDefault(); setPage(page === 'parts' ? 'inventory' : page === 'store' ? 'guns' : page === 'tutorial' && replay ? 'settings' : 'title');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -89,6 +92,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
     if (!isTutorialDone()) { setReplay(false); setPage('tutorial'); return; }
     gameUi.menuRequest = { level, difficulty: diff };
   };
+  const playEndless = () => { gameUi.menuRequest = { level, difficulty: diff, endless: true }; };
   const finishTutorial = (practice: boolean) => {
     markTutorialDone();
     if (replay) { setPage('settings'); return; }
@@ -115,7 +119,6 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       {page === 'title' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', padding: '0 72px', gap: 56 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 22, letterSpacing: 8, color: '#9fb3c6', marginBottom: 8 }}>FOUR LAUNCHES · ONE PILOT</div>
             <div style={{
               fontSize: 96, fontWeight: 700, letterSpacing: 8, color: '#ffffff', lineHeight: 1,
               textShadow: `0 0 40px ${ACCENT}66`, marginBottom: 36,
@@ -138,6 +141,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
             <MenuButton primary autoFocus onClick={play}>Play</MenuButton>
             <MenuButton onClick={openLevels}>Select level</MenuButton>
             <MenuButton onClick={() => setPage('inventory')}>Inventory</MenuButton>
+            <MenuButton onClick={() => setPage('guns')}>Guns &amp; store</MenuButton>
             <MenuButton onClick={() => setPage('achievements')}>Achievements</MenuButton>
             <MenuButton onClick={() => setPage('settings')}>Settings</MenuButton>
           </div>
@@ -146,7 +150,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
 
       {page === 'levels' && (
         <Panel title="Select level" onBack={() => setPage('title')}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 14 }}>
             {LEVELS.map((l, i) => {
               const selected = l.id === browse;
               return (
@@ -166,8 +170,8 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
                     transition: 'transform 120ms, box-shadow 120ms, border-color 120ms',
                   }}
                 >
-                  <div style={{ height: 96, background: `linear-gradient(180deg, ${l.preview[0]} 0%, ${l.preview[0]} 55%, ${l.preview[1]} 55%, ${l.preview[1]} 100%)` }} />
-                  <div style={{ padding: '12px 14px 16px' }}>
+                  <div style={{ height: 56, background: `linear-gradient(180deg, ${l.preview[0]} 0%, ${l.preview[0]} 55%, ${l.preview[1]} 55%, ${l.preview[1]} 100%)` }} />
+                  <div style={{ padding: '10px 14px 12px' }}>
                     <div style={{ fontFamily: MONO, fontSize: 20, color: '#6f879c', marginBottom: 2 }}>LEVEL {i + 1}</div>
                     <div style={{ fontSize: 28, fontWeight: 700, color: '#fff', lineHeight: 1.1 }}>{l.name}</div>
                     {l.id === level && <div style={{ fontSize: 18, color: ACCENT, marginTop: 4 }}>CURRENT</div>}
@@ -176,9 +180,22 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
               );
             })}
           </div>
-          <div style={{ fontSize: 24, color: '#b9cad8', minHeight: 34, marginBottom: 18 }}>{levelInfo(browse).premise} <span style={{ color: '#6f879c' }}>· Tap a level to choose it</span></div>
+          <button data-nav onClick={playEndless} style={{
+            ...resetBtn, width: '100%', textAlign: 'left', borderRadius: 8, padding: '8px 18px', marginBottom: 12,
+            display: 'flex', alignItems: 'center', gap: 18,
+            border: '2px solid rgba(255,215,106,0.55)',
+            background: 'linear-gradient(90deg, rgba(255,215,106,0.16), rgba(8,14,22,0.92) 60%)',
+          }}>
+            <span style={{ fontSize: 44, fontWeight: 700, color: '#ffd76a', lineHeight: 1 }}>∞</span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: 'block', fontSize: 28, fontWeight: 700, color: '#fff' }}>Endless</span>
+              <span style={{ display: 'block', fontSize: 19, color: '#c9b98a' }}>Random biomes back to back. More health, no missile clock. Reach the hangar to fly again. Every enemy is 100 points; each 1000 points earns 5 store credits.</span>
+            </span>
+            <span style={{ fontSize: 22, color: '#ffd76a', letterSpacing: 2 }}>PLAY ›</span>
+          </button>
+          <div style={{ fontSize: 22, color: '#b9cad8', minHeight: 30, marginBottom: 12 }}>{levelInfo(browse).premise} <span style={{ color: '#6f879c' }}>· Tap a level to choose it</span></div>
           <div style={{ fontSize: 20, letterSpacing: 3, color: '#7f97ad', marginBottom: 10 }}>DIFFICULTY</div>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
             {DIFFICULTIES.map(d => (
               <button key={d.id} data-nav onClick={() => { setDiff(d.id); updateSettings({ lastDifficulty: d.id }); }} style={{
                 ...resetBtn, flex: 1, padding: '10px 16px', borderRadius: 6, textAlign: 'left',
@@ -230,6 +247,10 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       {page === 'parts' && <PartsPage slot={slot} onBack={() => setPage('inventory')} />}
 
       {page === 'achievements' && <AchievementsPage onBack={() => setPage('title')} />}
+
+      {page === 'guns' && <GunsPage onBack={() => setPage('title')} onStore={() => setPage('store')} />}
+
+      {page === 'store' && <StorePage onBack={() => setPage('guns')} />}
 
       {page === 'title' && device !== 'touch' && (
         <div style={{ position: 'absolute', bottom: 18, right: 72, fontSize: 20, color: '#8ea3b6', letterSpacing: 2 }}>

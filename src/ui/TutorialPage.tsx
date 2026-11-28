@@ -160,17 +160,19 @@ function Art({ kind }: { kind: TutorialSlide['art'] }) {
         <polygon points="118,132 98,128 100,140" fill="#cc4422" />
       </>;
       break;
-    case 'silo':
+    case 'ground':
       body = <>
-        {[130, 230, 330].map((x, k) => <g key={x}>
-          <rect x={x - 22} y={150} width="44" height="40" fill="#3a4250" /><ellipse cx={x} cy={150} rx="22" ry="7" fill={k === 1 ? '#7a2a22' : '#5a6474'} />
-        </g>)}
-        <g stroke={ACCENT} strokeWidth="3" fill="none">
-          <circle cx="230" cy="146" r="26" /><line x1="230" y1="110" x2="230" y2="128" /><line x1="230" y1="164" x2="230" y2="182" />
-          <line x1="194" y1="146" x2="212" y2="146" /><line x1="248" y1="146" x2="266" y2="146" />
-        </g>
-        <text x="130" y="230" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontSize="18" fill="#cfdde9">+1 plane</text>
-        <text x="330" y="230" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontSize="18" fill="#cfdde9">+1 plane</text>
+        <rect x="0" y="210" width="460" height="90" fill="#4a5a3a" />
+        <rect x="300" y="110" width="140" height="100" fill="#8a8d90" /><polygon points="292,114 370,84 448,114" fill="#a9adb0" />
+        <rect x="336" y="140" width="60" height="70" fill="#0e1114" />
+        <rect x="352" y="176" width="28" height="34" fill="#2c3238" /><ellipse cx="366" cy="172" rx="10" ry="4" fill="#e0302a" />
+        <path d="M70 80 A46 46 0 0 1 162 80 Z" fill="#e8e2d0" />
+        <line x1="74" y1="80" x2="110" y2="128" stroke="#2a2a2a" strokeWidth="2" /><line x1="158" y1="80" x2="122" y2="128" stroke="#2a2a2a" strokeWidth="2" />
+        <rect x="108" y="126" width="16" height="24" rx="3" fill="#4a5634" /><circle cx="116" cy="120" r="7" fill="#3a4428" />
+        <rect x="190" y="178" width="14" height="22" rx="3" fill="#4a5634" /><circle cx="197" cy="172" r="6" fill="#3a4428" />
+        <rect x="200" y="184" width="22" height="4" fill="#1e2226" /><line x1="226" y1="186" x2="270" y2="186" stroke="#fff0a0" strokeWidth="3" />
+        <Arrow x1={240} y1={150} x2={330} y2={160} />
+        <text x="230" y="260" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontSize="18" fill="#cfdde9">5 hits · reach the button</text>
       </>;
       break;
     case 'loadout':

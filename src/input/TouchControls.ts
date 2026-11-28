@@ -6,6 +6,7 @@ const DEFAULT_LABELS: TouchLabels = { move: 'STEER', fire: 'FIRE', action: 'ACTI
 
 import {
   FIRE_CENTER, ACTION_CENTER, FIRE_VISUAL_RADIUS, ACTION_VISUAL_RADIUS, JOYSTICK_ZONE_X,
+  INVENTORY_CENTER, INVENTORY_VISUAL_RADIUS,
 } from './touchLayout';
 
 const FIRE_TOUCH_RADIUS = 120;   // px — touch hit zone
@@ -34,6 +35,9 @@ export class TouchControls {
   // Fixed button objects
   private readonly fireArc: Phaser.GameObjects.Arc;
   private readonly actionArc: Phaser.GameObjects.Arc;
+  /** Weapon-wheel button (only when the labels name one). */
+  private readonly invArc: Phaser.GameObjects.Arc;
+  private invPointerId = -1;
 
   // Per-pointer tracking (pointer.id == -1 means unassigned)
   private joystickPointerId = -1;
@@ -46,13 +50,20 @@ export class TouchControls {
   private lastTouchMs = 0;
   private destroyed = false;
   private labels: TouchLabels;
+  /** Controls are drawn only while touch is the device in use (phones/tablets, or after a real touch). */
+  private shown = false;
+  private lastDevice = gameUi.device;
 
   constructor(scene: Phaser.Scene, labels: TouchLabels = DEFAULT_LABELS) {
     this.scene = scene;
-    // Show only on actual touch devices.
+    // Listen on anything with a touchscreen, but only show the buttons on phones/tablets
+    // (coarse primary pointer) or once the player actually touches the screen. A laptop with a
+    // touchscreen played with keyboard/mouse never sees them.
     this.isTouchDevice = navigator.maxTouchPoints > 0;
     this.labels = labels;
-    if (this.isTouchDevice) gameUi.touchLabels = labels;
+    const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    this.shown = this.isTouchDevice && (gameUi.device === 'touch' || (coarse && gameUi.device !== 'gamepad'));
+    if (this.shown) gameUi.touchLabels = labels;
     scene.events.once('shutdown', () => this.destroy());
 
     // Build visuals regardless of device so references are always valid;
@@ -69,12 +80,17 @@ export class TouchControls {
 
     this.fireArc = scene.add
       .arc(FIRE_CENTER.x, FIRE_CENTER.y, FIRE_VISUAL_RADIUS, 0, 360, false, 0xcc4444, 0.7)
-      .setVisible(this.isTouchDevice)
+      .setVisible(this.shown)
       .setDepth(10);
 
     this.actionArc = scene.add
       .arc(ACTION_CENTER.x, ACTION_CENTER.y, ACTION_VISUAL_RADIUS, 0, 360, false, 0x44cc88, 0.7)
-      .setVisible(this.isTouchDevice)
+      .setVisible(this.shown)
+      .setDepth(10);
+
+    this.invArc = scene.add
+      .arc(INVENTORY_CENTER.x, INVENTORY_CENTER.y, INVENTORY_VISUAL_RADIUS, 0, 360, false, 0xd8a838, 0.7)
+      .setVisible(this.shown && !!labels.inventory)
       .setDepth(10);
 
     if (this.isTouchDevice) {
@@ -86,7 +102,11 @@ export class TouchControls {
   }
 
   private readonly onPointerDown = (pointer: Phaser.Input.Pointer): void => {
+    // Mouse clicks never drive the touch controls.
+    if (!pointer.wasTouch) return;
     this.lastTouchMs = this.scene.time.now;
+    gameUi.device = 'touch';
+    this.setShown(true);
 
     // Fire button takes priority over joystick in its zone.
     if (
@@ -94,6 +114,14 @@ export class TouchControls {
       dist2d(pointer.x, pointer.y, FIRE_CENTER.x, FIRE_CENTER.y) <= FIRE_TOUCH_RADIUS
     ) {
       this.firePointerId = pointer.id;
+      return;
+    }
+
+    if (
+      this.labels.inventory && this.invPointerId === -1 &&
+      dist2d(pointer.x, pointer.y, INVENTORY_CENTER.x, INVENTORY_CENTER.y) <= INVENTORY_VISUAL_RADIUS + 20
+    ) {
+      this.invPointerId = pointer.id;
       return;
     }
 
@@ -146,10 +174,28 @@ export class TouchControls {
     }
     if (pointer.id === this.firePointerId) this.firePointerId = -1;
     if (pointer.id === this.actionPointerId) this.actionPointerId = -1;
+    if (pointer.id === this.invPointerId) this.invPointerId = -1;
   };
+
+  /** Show or hide the on-screen buttons and their labels. */
+  private setShown(on: boolean): void {
+    if (on === this.shown || this.destroyed) return;
+    this.shown = on;
+    this.fireArc.setVisible(on);
+    this.actionArc.setVisible(on);
+    this.invArc.setVisible(on && !!this.labels.inventory);
+    if (!on) { this.baseArc.setVisible(false); this.thumbArc.setVisible(false); }
+    if (on) gameUi.touchLabels = this.labels;
+    else if (gameUi.touchLabels === this.labels) gameUi.touchLabels = null;
+  }
 
   update(): void {
     if (!this.isTouchDevice) return;
+    // Switching to the keyboard or a gamepad hides the buttons; touching the screen brings them back.
+    if (gameUi.device !== this.lastDevice) {
+      this.lastDevice = gameUi.device;
+      this.setShown(gameUi.device === 'touch');
+    }
 
     const moveX =
       this.joystickPointerId !== -1 ? this.joystickDelta.x / JOYSTICK_MAX_DELTA : 0;
@@ -168,6 +214,7 @@ export class TouchControls {
       fire: touchFire,
       action: touchAction,
       pause: false,
+      inventory: this.invPointerId !== -1,
     });
 
     // Fade idle controls.
@@ -175,12 +222,14 @@ export class TouchControls {
     const alpha = elapsed > FADE_DELAY_MS ? IDLE_ALPHA : ACTIVE_ALPHA;
     this.fireArc.setAlpha(alpha);
     this.actionArc.setAlpha(alpha);
+    this.invArc.setAlpha(alpha);
   }
 
   /** Change button labels mid-scene (e.g. hangar: OPEN DOORS → LAUNCH). */
   setLabels(labels: TouchLabels): void {
     this.labels = labels;
-    if (this.isTouchDevice && !this.destroyed) gameUi.touchLabels = labels;
+    if (this.shown && !this.destroyed) gameUi.touchLabels = labels;
+    this.invArc.setVisible(this.shown && !!labels.inventory);
   }
 
   destroy(): void {
@@ -197,5 +246,6 @@ export class TouchControls {
     this.thumbArc.destroy();
     this.fireArc.destroy();
     this.actionArc.destroy();
+    this.invArc.destroy();
   }
 }
