@@ -10,9 +10,12 @@ import type { PartSlot } from '../state/progress';
 import { ACCENT, FONT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
 import { AchievementsPage, InventoryPage, PartsPage } from './LoadoutPages';
 import { TutorialPage } from './TutorialPage';
+import { GunsPage, StorePage } from './ArmoryPages';
+import { syncUnlocks } from '../state/armory';
+import { progress } from '../state/progress';
 import { isTutorialDone, markTutorialDone } from '../state/tutorial';
 
-type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial';
+type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial' | 'guns' | 'store';
 
 
 const DIFFICULTIES: { id: Difficulty; label: string; note: string }[] = [
@@ -37,7 +40,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
   useEffect(() => { gameUi.menuPreview = page === 'levels' ? browse : level; }, [level, browse, page]);
 
   // Back to the title page whenever the menu reappears (e.g. after game over).
-  useEffect(() => { if (show) setPage('title'); }, [show]);
+  useEffect(() => { if (show) { setPage('title'); syncUnlocks(progress.achieved); } }, [show]);
 
   // Focus the first item on each page so keyboard players can start right away.
   useEffect(() => {
@@ -71,7 +74,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       } else if (e.key === 'Enter' || e.key === ' ') {
         if (i >= 0 && items[i].tagName === 'BUTTON') { e.preventDefault(); items[i].click(); }
       } else if (e.key === 'Escape' && page !== 'title') {
-        e.preventDefault(); setPage(page === 'parts' ? 'inventory' : page === 'tutorial' && replay ? 'settings' : 'title');
+        e.preventDefault(); setPage(page === 'parts' ? 'inventory' : page === 'store' ? 'guns' : page === 'tutorial' && replay ? 'settings' : 'title');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -115,7 +118,6 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       {page === 'title' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', padding: '0 72px', gap: 56 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 22, letterSpacing: 8, color: '#9fb3c6', marginBottom: 8 }}>FOUR LAUNCHES · ONE PILOT</div>
             <div style={{
               fontSize: 96, fontWeight: 700, letterSpacing: 8, color: '#ffffff', lineHeight: 1,
               textShadow: `0 0 40px ${ACCENT}66`, marginBottom: 36,
@@ -138,6 +140,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
             <MenuButton primary autoFocus onClick={play}>Play</MenuButton>
             <MenuButton onClick={openLevels}>Select level</MenuButton>
             <MenuButton onClick={() => setPage('inventory')}>Inventory</MenuButton>
+            <MenuButton onClick={() => setPage('guns')}>Guns &amp; store</MenuButton>
             <MenuButton onClick={() => setPage('achievements')}>Achievements</MenuButton>
             <MenuButton onClick={() => setPage('settings')}>Settings</MenuButton>
           </div>
@@ -230,6 +233,10 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       {page === 'parts' && <PartsPage slot={slot} onBack={() => setPage('inventory')} />}
 
       {page === 'achievements' && <AchievementsPage onBack={() => setPage('title')} />}
+
+      {page === 'guns' && <GunsPage onBack={() => setPage('title')} onStore={() => setPage('store')} />}
+
+      {page === 'store' && <StorePage onBack={() => setPage('guns')} />}
 
       {page === 'title' && device !== 'touch' && (
         <div style={{ position: 'absolute', bottom: 18, right: 72, fontSize: 20, color: '#8ea3b6', letterSpacing: 2 }}>
