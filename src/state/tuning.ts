@@ -131,6 +131,18 @@ export const LIMITS = {
 // ─── Stage 2 — Hangar ────────────────────────────────────────────────────────
 
 export const HANGAR = {
+  /** Crew chatter: first line delay, rest between exchanges, pause before a reply (s). */
+  chatterFirstDelay: 1.5,
+  chatterGapMin: 3,
+  chatterGapMax: 6,
+  chatterReplyGap: 0.35,
+  /** Line length: base + per word, capped (s); bubble stays this long after the line. */
+  chatterLineBase: 0.5,
+  chatterPerWord: 0.27,
+  chatterLineMax: 3.6,
+  /** Spoken crew lines: volume (× SFX setting), and a safety cap before moving on (s). */
+  crewVoiceVolume: 0.45,
+  chatterLineTimeout: 8,
   /** Rotation speed, degrees/s. */
   rotateSpeed: 210,
   /** Thrust acceleration, px/s² (70 × WORLD_SCALE). */

@@ -14,6 +14,7 @@ import { getBiome } from '../theme/biomes';
 import { playerJet } from '../theme/loadoutTheme';
 import { drawJetTopDown } from '../models/Vehicles';
 import { drawHangarStatic, HangarCrew } from '../hangar/HangarDecor';
+import { HangarChatter } from '../hangar/HangarChatter';
 import { TakeoffCutscene } from '../hangar/TakeoffCutscene';
 import { EngineSound } from '../audio/EngineSound';
 import type { Biome } from '../theme/biomes';
@@ -87,7 +88,8 @@ export class HangarScene extends Phaser.Scene {
   private doorGfx!:         Phaser.GameObjects.Graphics; // door trim + lights
   private touchControls!:   TouchControls;
   private pauseCtl!: PauseController;
-  private ambience = new HangarAmbience();
+  private ambience!: HangarAmbience;
+  private chatter!: HangarChatter;
   private engine = new EngineSound();
   private biome!: Biome;
   private seed = 0;
@@ -145,7 +147,9 @@ export class HangarScene extends Phaser.Scene {
     this.biome = biome; this.seed = seed;
     drawHangarStatic(this.add.graphics().setDepth(0), biome, { wallMargin: WALL_MARGIN, doorH: DOOR_H }, seed);
     this.crewRng = createRng(seed + 7);
-    this.crew = new HangarCrew(this.crewRng);
+    this.crew = new HangarCrew(this.crewRng, biome.hangar.local.crew);
+    this.ambience = new HangarAmbience(biome.hangar.local.voice === 'radio');
+    this.chatter = new HangarChatter(biome.hangar.local, createRng(seed + 11), this.crew, this.ambience);
     this.crewGfx = this.add.graphics().setDepth(1);
     this.doorColor = { panel: biome.hangar.wall, rib: biome.hangar.wallRib, lamp: biome.hangar.lamp };
 
@@ -180,11 +184,11 @@ export class HangarScene extends Phaser.Scene {
     this.touchControls = new TouchControls(this, { move: 'FLY', fire: 'SKIP', action: 'OPEN / LAUNCH' });
     this.pauseCtl = new PauseController(this);
     this.ambience.start();
-    this.events.once('shutdown', () => { this.ambience.stop(); this.engine.stop(); this.takeoff?.destroy(); });
+    this.events.once('shutdown', () => { this.ambience.stop(); this.engine.stop(); this.takeoff?.destroy(); this.chatter.hush(); });
 
     // ── Pause on visibility ──────────────────────────────────────────────────
     this.visibilityHandler = () => {
-      if (document.hidden) this.scene.pause(); else this.scene.resume();
+      if (document.hidden) { this.chatter.hush(); this.scene.pause(); } else this.scene.resume();
     };
     document.addEventListener('visibilitychange', this.visibilityHandler);
     this.events.once('shutdown', this.shutdown, this);
@@ -196,7 +200,7 @@ export class HangarScene extends Phaser.Scene {
     this.touchControls.update();
 
     const input = InputRouter.read();
-    if (this.pauseCtl.update(input.pause)) return;
+    if (this.pauseCtl.update(input.pause)) { this.chatter.hush(); return; }
     const actionJustPressed = input.action && !this.prevAction;
     const fireJustPressed   = input.fire   && !this.prevFire;
     this.prevAction = input.action;
@@ -222,6 +226,8 @@ export class HangarScene extends Phaser.Scene {
     _fireJustPressed: boolean,
   ): void {
     this.crew.update(dt, this.crewRng);
+    if (!this.takeoff) this.chatter.update(dt);
+    else this.chatter.hush();
     switch (this.planeState) {
       case 'flying':
         this.stepFlying(dt, moveX, moveY, actionJustPressed);
