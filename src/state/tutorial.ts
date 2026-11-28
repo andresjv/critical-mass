@@ -50,8 +50,9 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
       '{move} to walk and crouch, {action} or up to jump, {fire} to shoot. You can take 5 hits.',
       'Hold H (Y on a pad, GUNS on touch) to pick from the 4 guns you carry.',
       'Crouch right next to a crate or sandbags to take cover; hold fire to pop up and shoot over it.',
-      'J throws your side item: frag grenades, firebombs, or use a medkit. Q switches item (RB / LB on a pad, ITEM button on touch).',
-      'Enemies carry rifles, SMGs, shotguns, machine guns or pistols, and some throw grenades: run from the blinking ones.',
+      'J uses your side tool (RB on a pad, ITEM on touch); Q switches. Hold J with a grenade, firebomb or smoke to aim: a dotted arc and a red marker show where it lands, and holding longer throws farther. Release to throw.',
+      'Live grenades show a red ring: that is the blast. Get out of it. Smoke hides you: enemies cannot see or shoot through it.',
+      'Enemies carry rifles, SMGs, shotguns, machine guns or pistols, and some throw grenades. Sandbags are low: you can shoot soldiers over them.',
     ],
   },
   {
@@ -59,7 +60,7 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
     lines: [
       'Beating a level earns its medal and unlocks a new jet, gun or bomb, plus a ground gun.',
       'Endless mode (in Select level) runs random biomes back to back: reach the hangar to fly again. Every enemy is 100 points and each 1000 points earns 5 credits for the daily store (Guns & store), new every day; rarer guns show up less often. On foot you start with only the Service Pistol; buy guns there or earn them with medals.',
-      'Equip parts from Inventory on the main menu. {pause} pauses the game.',
+      'Inventory on the main menu has your plane parts and your soldier kit: guns, 3 side-tool slots and armor (light vest = 1 extra hit, heavy armor = 2 extra hits but a little slower; buy armor once with credits). {pause} pauses the game.',
     ],
   },
 ];

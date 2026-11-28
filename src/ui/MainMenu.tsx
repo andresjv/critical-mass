@@ -11,9 +11,10 @@ import { ACCENT, FONT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
 import { AchievementsPage, InventoryPage, PartsPage } from './LoadoutPages';
 import { TutorialPage } from './TutorialPage';
 import { GunsPage, StorePage } from './ArmoryPages';
+import { ArmorPage, ToolsPage } from './KitPages';
 import { isTutorialDone, markTutorialDone } from '../state/tutorial';
 
-type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial' | 'guns' | 'store';
+type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial' | 'guns' | 'store' | 'tools' | 'armor';
 
 
 const DIFFICULTIES: { id: Difficulty; label: string; note: string }[] = [
@@ -24,6 +25,8 @@ const DIFFICULTIES: { id: Difficulty; label: string; note: string }[] = [
 
 export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' | 'touch' | 'gamepad' }) {
   const [page, setPage]   = useState<Page>('title');
+  /** Where Back from the Guns page goes (the title, or the Inventory it was opened from). */
+  const [gunsBack, setGunsBack] = useState<Page>('title');
   const [level, setLevel] = useState<LevelId>(settings.lastLevel);
   /** Level highlighted while browsing the level page (not chosen until clicked). */
   const [browse, setBrowse] = useState<LevelId>(settings.lastLevel);
@@ -72,12 +75,12 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       } else if (e.key === 'Enter' || e.key === ' ') {
         if (i >= 0 && items[i].tagName === 'BUTTON') { e.preventDefault(); items[i].click(); }
       } else if (e.key === 'Escape' && page !== 'title') {
-        e.preventDefault(); setPage(page === 'parts' ? 'inventory' : page === 'store' ? 'guns' : page === 'tutorial' && replay ? 'settings' : 'title');
+        e.preventDefault(); setPage(page === 'parts' || page === 'tools' || page === 'armor' ? 'inventory' : page === 'guns' ? gunsBack : page === 'store' ? 'guns' : page === 'tutorial' && replay ? 'settings' : 'title');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [show, page, replay]);
+  }, [show, page, replay, gunsBack]);
 
   if (!show) return null;
 
@@ -139,7 +142,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
             <MenuButton primary autoFocus onClick={play}>Play</MenuButton>
             <MenuButton onClick={openLevels}>Select level</MenuButton>
             <MenuButton onClick={() => setPage('inventory')}>Inventory</MenuButton>
-            <MenuButton onClick={() => setPage('guns')}>Guns &amp; store</MenuButton>
+            <MenuButton onClick={() => { setGunsBack('title'); setPage('guns'); }}>Guns &amp; store</MenuButton>
             <MenuButton onClick={() => setPage('achievements')}>Achievements</MenuButton>
             <MenuButton onClick={() => setPage('settings')}>Settings</MenuButton>
           </div>
@@ -239,14 +242,18 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       )}
 
       {page === 'inventory' && (
-        <InventoryPage onBack={() => setPage('title')} onOpenSlot={sl => { setSlot(sl); setPage('parts'); }} />
+        <InventoryPage onBack={() => setPage('title')} onOpenSlot={sl => { setSlot(sl); setPage('parts'); }}
+          onOpenKit={k => { if (k === 'guns') setGunsBack('inventory'); setPage(k); }} />
       )}
 
       {page === 'parts' && <PartsPage slot={slot} onBack={() => setPage('inventory')} />}
 
       {page === 'achievements' && <AchievementsPage onBack={() => setPage('title')} />}
 
-      {page === 'guns' && <GunsPage onBack={() => setPage('title')} onStore={() => setPage('store')} />}
+      {page === 'guns' && <GunsPage onBack={() => setPage(gunsBack)} onStore={() => setPage('store')} />}
+
+      {page === 'tools' && <ToolsPage onBack={() => setPage('inventory')} />}
+      {page === 'armor' && <ArmorPage onBack={() => setPage('inventory')} />}
 
       {page === 'store' && <StorePage onBack={() => setPage('guns')} />}
 

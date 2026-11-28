@@ -17,9 +17,10 @@ import { missionState } from '../../state/MissionState';
 import { debugInfo } from '../../state/debugInfo';
 import { gameUi } from '../../state/gameUi';
 import {
-  FOE_AI, FOES, GROUND, ITEMS, SCORE, SOLDIER_ANIM, TUNING, type FoeKind, type FoeStats, type GunStats,
+  FOE_AI, FOES, GROUND, ITEMS, KIT, SCORE, SOLDIER_ANIM, TUNING, type FoeKind, type FoeStats, type GunStats,
 } from '../../state/tuning';
 import { createRng, type Rng } from '../../state/rng';
+import { segRect } from '../../state/geom';
 import { armory, gunDef, gunStats, grantMedalGun, startingLoadout, SLOT_COUNT, type GunId } from '../../state/armory';
 import { earnLevelAchievement } from '../../state/progress';
 import { foeRoster, foeTier } from '../../state/foes';
@@ -33,7 +34,10 @@ import { Effects } from '../effects/Effects';
 import { Xform } from '../models/shapes';
 import { trooperHead, trooperTorso } from '../models/Trooper';
 import { drawGun } from '../models/Guns';
-import { basePose, drawSoldierRig, rigHand, rigHead, rigMuzzle, type SoldierPose } from '../models/SoldierRig';
+import { basePose, drawSoldierRig, rigHand, rigHead, rigJoints, rigMuzzle, type SoldierPose } from '../models/SoldierRig';
+import { Ragdoll, type RagdollWorld } from '../models/Ragdoll';
+import { kit, toolLoadout, toolDef } from '../../state/soldierKit';
+import type { SoldierPalette } from '../theme/factions';
 import { MusicTrack } from '../audio/MusicTrack';
 import { playExplosion } from '../audio/ExplosionSound';
 import { playReload, playShot } from '../audio/GunSound';
@@ -77,22 +81,28 @@ interface Enemy {
   hitT: number; flinchT: number; recoilT: number; lookT: number;
   deadT: number; deadDir: 1 | -1;
   walkDir: 1 | -1;
+  /** Set when killed: the body goes limp. */
+  rag: Ragdoll | null;
 }
 
 interface Bullet {
   x: number; y: number; vx: number; vy: number; life: number;
   dmg: number; enemy: boolean; gun: GunId | null;
   pierce: boolean; splash: number; hit: Set<Enemy>;
+  /** Where the bullet was last step: hits are tested along the whole path, not just the tip. */
+  ox: number; oy: number;
 }
 
-type ItemKind = 'frag' | 'molotov' | 'medkit';
-const ITEM_ORDER: readonly ItemKind[] = ['frag', 'molotov', 'medkit'];
-const ITEM_NAME: Record<ItemKind, string> = { frag: 'Frag grenade', molotov: 'Firebomb', medkit: 'Medkit' };
+type ItemKind = 'frag' | 'molotov' | 'medkit' | 'smoke';
+type ThrowKind = 'frag' | 'molotov' | 'smoke';
 
 interface Throwable {
-  kind: 'frag' | 'molotov'; enemy: boolean;
+  kind: ThrowKind; enemy: boolean;
   x: number; y: number; vx: number; vy: number; rot: number; fuse: number; resting: boolean;
+  t: number;
 }
+interface Smoke { x: number; y: number; t: number; seed: number }
+interface Scorch { x: number; w: number; t: number }
 interface Fire { x: number; w: number; t: number; tick: number }
 interface Drop { x: number; y: number; vx: number; vy: number; rot: number; vr: number; gun: GunId; face: 1 | -1; t: number; rest: boolean }
 
@@ -162,9 +172,21 @@ export class GroundAssaultScene extends Phaser.Scene {
   private burstLeft = 0;
   private burstT = 0;
   private wheelHi = -1;
-  private items: Record<ItemKind, number> = { ...ITEMS.start };
+  private items: Record<ItemKind, number> = { frag: 0, molotov: 0, medkit: 0, smoke: 0 };
+  /** Side tools picked in the Inventory, in slot order. */
+  private itemOrder: ItemKind[] = [];
   private itemSel: ItemKind = 'frag';
   private itemCd = 0;
+  /** Holding J with a throwable: seconds held (power grows), null = not aiming. */
+  private aimT: number | null = null;
+  /** Throw power locked in at release. */
+  private throwPow = 1;
+  private smokes: Smoke[] = [];
+  private scorches: Scorch[] = [];
+  private playerRag: Ragdoll | null = null;
+  /** Kit: armor level and the character's palette. */
+  private armor: 0 | 1 | 2 = 0;
+  private pal!: SoldierPalette;
 
   private prevFire = false;
   private prevAction = false;
@@ -179,14 +201,20 @@ export class GroundAssaultScene extends Phaser.Scene {
     this.bullets = []; this.throwables = []; this.fires = []; this.drops = [];
     this.accumulator = 0; this.simT = 0;
     this.state = 'chute';
-    this.maxHits = missionState.endless ? GROUND.endlessHits : GROUND.playerHits;
+    this.armor = kit.armor === 'heavy' ? 2 : kit.armor === 'light' ? 1 : 0;
+    this.maxHits = (missionState.endless ? GROUND.endlessHits : GROUND.playerHits) + KIT.armorHits[kit.armor];
     this.hits = this.maxHits;
     this.invuln = 0;
     this.prevInteract = true;
     this.vx = 0; this.vy = 0; this.face = 1; this.crouch = false; this.crouchV = 0; this.peekT = 0; this.cover = null;
     this.fireT = 0; this.burstLeft = 0; this.wheelHi = -1; this.endT = 0;
     this.landT = 0; this.recoilT = 0; this.flinchT = 0; this.throwT = null;
-    this.items = { ...ITEMS.start }; this.itemSel = 'frag'; this.itemCd = 0;
+    this.items = { frag: 0, molotov: 0, medkit: 0, smoke: 0 };
+    const tools = toolLoadout();
+    for (const t of tools) this.items[t.id] = t.count;
+    this.itemOrder = tools.map(t => t.id);
+    this.itemSel = this.itemOrder[0] ?? 'frag'; this.itemCd = 0; this.aimT = null; this.throwPow = 1;
+    this.smokes = []; this.scorches = []; this.playerRag = null;
     this.prevFire = true; this.prevAction = true; this.prevUp = true; this.prevWheel = false; this.prevItem = true;
     gameUi.hull = this.hits; gameUi.hullMax = this.maxHits; gameUi.hullLabel = 'Health';
     gameUi.interactPrompt = null;
@@ -197,6 +225,8 @@ export class GroundAssaultScene extends Phaser.Scene {
 
   create(): void {
     this.biome = getBiome(missionState.level);
+    // The player wears the region's kit (only the starter character for now).
+    this.pal = this.biome.troops.blue;
     this.rng = createRng(missionState.seed + this.launchIndex * 977 + 5150);
     this.buildLevel();
 
@@ -262,7 +292,7 @@ export class GroundAssaultScene extends Phaser.Scene {
       const r = this.rng.next();
       const kind: BoxKind = r < 0.5 ? 'crate' : r < 0.8 ? 'sandbag' : 'barrel';
       const w = kind === 'crate' ? 90 + this.rng.nextInt(3) * 40 : kind === 'sandbag' ? 130 + this.rng.nextInt(60) : 56;
-      const h = kind === 'crate' ? 70 + this.rng.nextInt(3) * 35 : kind === 'sandbag' ? 52 : 74;
+      const h = kind === 'crate' ? 70 + this.rng.nextInt(3) * 35 : kind === 'sandbag' ? GROUND.sandbagHeight : 74;
       const seed = this.rng.nextInt(1000);
       const stack = this.rng.chance(0.4);
       if (!nestXs.some(nx => x + w > nx - 140 && x < nx + 140)) {
@@ -328,7 +358,7 @@ export class GroundAssaultScene extends Phaser.Scene {
       throwCd: st.throwInterval * (0.4 + this.rng.next() * 0.5), throwT: 0, thrown: false,
       aim: Math.PI, flash: 0, walk: this.rng.next() * 6, move: 0, crouch: 0, kneel: false,
       hitT: 0, flinchT: 0, recoilT: 0, lookT: FOE_AI.lookMin + this.rng.next() * 2,
-      deadT: 0, deadDir: -1, walkDir: this.rng.chance(0.5) ? 1 : -1,
+      deadT: 0, deadDir: -1, walkDir: this.rng.chance(0.5) ? 1 : -1, rag: null,
     };
   }
 
@@ -403,6 +433,7 @@ export class GroundAssaultScene extends Phaser.Scene {
       this.endT += dt;
       this.vy += GROUND.gravity * dt; this.py = Math.min(this.py + this.vy * dt, this.supportY(this.px, this.py));
       this.stepEnemies(dt); this.stepBullets(dt); this.stepThrowables(dt); this.stepDrops(dt);
+      if (this.playerRag) this.playerRag.step(dt, this.ragWorld());
       return;
     }
 
@@ -431,7 +462,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     this.crouchV += ((low ? 1 : 0) - this.crouchV) * (1 - Math.exp(-14 * dt));
 
     this.stepGun(dt, fire, fireJust);
-    this.stepItem(dt, itemJust);
+    this.stepItem(dt, itemJust, item);
     this.stepEnemies(dt);
     this.stepBullets(dt);
     this.stepThrowables(dt);
@@ -449,7 +480,7 @@ export class GroundAssaultScene extends Phaser.Scene {
 
   private stepPlayer(dt: number, mx: number, my: number, jump: boolean): void {
     this.crouch = this.onGround && my > 0.6;
-    const speed = GROUND.walkSpeed * (this.crouch ? 0.35 : 1);
+    const speed = GROUND.walkSpeed * (this.crouch ? 0.35 : 1) * (this.armor === 2 ? KIT.heavySpeed : 1);
     this.vx += (mx * speed - this.vx) * (1 - Math.exp(-GROUND.walkResponse * dt));
     if (Math.abs(mx) > 0.15) this.face = mx > 0 ? 1 : -1;
     if (this.onGround && Math.abs(this.vx) > 20) this.phase += dt * Math.abs(this.vx) * 0.035;
@@ -499,7 +530,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     if (this.state !== 'live' || !this.onGround || !this.crouch) return null;
     const crouchTop = this.py - GROUND.playerH * 0.62;
     for (const b of this.boxes) {
-      if (b.top > crouchTop + 8 || b.bottom < this.py - 4) continue; // too low, or up on a stack
+      if (b.top > crouchTop + 12 || b.bottom < this.py - 4) continue; // too low, or up on a stack
       const gap = this.face === 1 ? b.x - (this.px + GROUND.playerHalfW) : this.px - GROUND.playerHalfW - (b.x + b.w);
       if (gap >= -3 && gap < FOE_AI.coverGap) return b;
     }
@@ -557,12 +588,23 @@ export class GroundAssaultScene extends Phaser.Scene {
       if (e.hp <= 0) continue;
       const dx = e.x - m.x;
       if (Math.sign(dx) !== this.face || Math.abs(dx) > GROUND.enemySight) continue;
-      const ty = e.y - (e.kind === 'nest' ? 34 : 44 - e.crouch * 14);
+      // Aim at the chest; if cover is in the way, aim over it at the head instead.
+      let ty = e.y - (e.kind === 'nest' ? 34 : 44 - e.crouch * 14);
+      if (this.blocked(m.x, m.y, e.x, ty)) {
+        const head = e.y - (e.kind === 'nest' ? 52 : (74 * e.look.scale - 10) * (1 - e.crouch * 0.33));
+        if (this.blocked(m.x, m.y, e.x, head)) continue;
+        ty = head;
+      }
       const a = Math.atan2(ty - m.y, Math.abs(dx));
       if (Math.abs(a) > GROUND.autoAimAngle) continue;
       if (Math.abs(dx) < best) { best = Math.abs(dx); ang = this.face === 1 ? a : Math.PI - a; }
     }
     return ang;
+  }
+
+  /** Is a crate, sandbag wall or barrel between these two points? */
+  private blocked(x0: number, y0: number, x1: number, y1: number): boolean {
+    return this.boxes.some(b => segRect(x0, y0, x1, y1, b.x, b.top, b.x + b.w, b.bottom) !== null);
   }
 
   private playerMuzzle(a: number): { x: number; y: number } {
@@ -580,6 +622,8 @@ export class GroundAssaultScene extends Phaser.Scene {
       this.bullets.push({
         x: m.x, y: m.y, vx: Math.cos(a) * st.bulletSpeed, vy: Math.sin(a) * st.bulletSpeed, life: st.life,
         dmg: st.damage, enemy: false, gun: g.id, pierce: st.pierce, splash: st.splash, hit: new Set(),
+        // The first sweep starts at the shooter's body, so an enemy right in front of the gun is hit too.
+        ox: this.px, oy: m.y,
       });
     }
     this.flash = 0.06;
@@ -592,34 +636,61 @@ export class GroundAssaultScene extends Phaser.Scene {
   // ── Side items (J) ───────────────────────────────────────────────────────
 
   private nextItem(): void {
-    const i = ITEM_ORDER.indexOf(this.itemSel);
-    for (let k = 1; k <= ITEM_ORDER.length; k++) {
-      const n = ITEM_ORDER[(i + k) % ITEM_ORDER.length];
-      if (this.items[n] > 0 || k === ITEM_ORDER.length) { this.itemSel = n; return; }
+    const order = this.itemOrder;
+    if (order.length === 0) return;
+    const i = order.indexOf(this.itemSel);
+    for (let k = 1; k <= order.length; k++) {
+      const n = order[(i + k) % order.length];
+      if (this.items[n] > 0 || k === order.length) { this.itemSel = n; return; }
     }
   }
 
-  private stepItem(dt: number, use: boolean): void {
+  /** Throw power for the current hold: grows from aimMinPower to 1 over aimFullTime. */
+  private aimPower(): number {
+    const f = Math.min(1, (this.aimT ?? 0) / ITEMS.aimFullTime);
+    return ITEMS.aimMinPower + (1 - ITEMS.aimMinPower) * f;
+  }
+
+  /** Where and how fast a throw leaves the hand at this power. */
+  private throwStart(pow: number): { x: number; y: number; vx: number; vy: number } {
+    const p = this.playerPose(this.simT);
+    p.throwT = 0.55;
+    const h = rigHand(this.px, this.py, this.face, GROUND.soldierScale, p);
+    return { x: h.x, y: h.y, vx: this.face * ITEMS.throwSpeed * pow + this.vx * 0.3, vy: -ITEMS.throwLift * (0.65 + 0.35 * pow) };
+  }
+
+  private stepItem(dt: number, press: boolean, held: boolean): void {
     if (this.throwT !== null) {
       this.throwT += dt / SOLDIER_ANIM.throwTime;
       if (!this.thrown && this.throwT >= 0.55) {
         this.thrown = true;
-        const h = rigHand(this.px, this.py, this.face, GROUND.soldierScale, this.playerPose(this.simT));
+        const kind = this.itemSel as ThrowKind;
+        const v = this.throwStart(this.throwPow);
         this.throwables.push({
-          kind: this.itemSel === 'molotov' ? 'molotov' : 'frag', enemy: false,
-          x: h.x, y: h.y, vx: this.face * ITEMS.throwSpeed + this.vx * 0.3, vy: -ITEMS.throwLift,
-          rot: 0, fuse: ITEMS.fragFuse, resting: false,
+          kind, enemy: false, ...v, rot: 0, resting: false, t: 0,
+          fuse: kind === 'smoke' ? ITEMS.smokeFuse : ITEMS.fragFuse,
         });
         if (this.items[this.itemSel] === 0) this.nextItem();
       }
       if (this.throwT >= 1) this.throwT = null;
       return;
     }
-    if (!use || this.itemCd > 0 || this.state !== 'live') return;
+    // Aiming a throwable: hold J to see the arc and the red landing marker, release to throw.
+    if (this.aimT !== null) {
+      if (this.state !== 'live') { this.aimT = null; return; }
+      if (held) { this.aimT += dt; return; }
+      this.throwPow = this.aimPower();
+      this.aimT = null;
+      this.items[this.itemSel]--;
+      this.itemCd = ITEMS.cooldown;
+      this.throwT = 0; this.thrown = false;
+      return;
+    }
+    if (!press || this.itemCd > 0 || this.state !== 'live' || this.itemOrder.length === 0) return;
     const kind = this.itemSel;
     if (this.items[kind] <= 0) { missionState.hudCue = 'NO ITEMS LEFT'; return; }
-    this.itemCd = ITEMS.cooldown;
     if (kind === 'medkit') {
+      this.itemCd = ITEMS.cooldown;
       if (this.hits >= this.maxHits) { missionState.hudCue = 'HEALTH FULL'; return; }
       this.items.medkit--;
       this.hits = Math.min(this.maxHits, this.hits + ITEMS.medkitHeal);
@@ -628,40 +699,72 @@ export class GroundAssaultScene extends Phaser.Scene {
       playReload();
       if (this.items.medkit === 0) this.nextItem();
     } else {
-      this.items[kind]--;
-      this.throwT = 0; this.thrown = false;
+      this.aimT = 0;
     }
+  }
+
+  /** One physics step for a thrown item (shared by the real throw and the aim preview).
+   *  Returns true when a firebomb shatters (on its first touch). */
+  private moveThrowable(t: Throwable, dt: number): boolean {
+    if (t.resting) return false;
+    t.vy += ITEMS.gravity * dt;
+    t.x += t.vx * dt; t.y += t.vy * dt; t.rot += t.vx * dt * 0.03;
+    const box = this.boxes.find(b => t.x > b.x && t.x < b.x + b.w && t.y > b.top && t.y < b.bottom);
+    if (box) {
+      if (t.kind === 'molotov') { t.y = Math.min(t.y, box.top); return true; }
+      const fromSide = t.y - t.vy * dt > box.top + 4;
+      if (fromSide) { t.vx *= -0.4; t.x = t.vx > 0 ? box.x + box.w + 2 : box.x - 2; }
+      else { t.y = box.top; t.vy *= -0.35; t.vx *= 0.6; if (Math.abs(t.vy) < 60) { t.resting = true; t.vy = 0; } }
+    }
+    const gy = this.groundY(t.x);
+    if (!t.resting && t.y >= gy) {
+      t.y = gy;
+      if (t.kind === 'molotov') return true;
+      t.vy *= -0.35; t.vx *= 0.6;
+      if (Math.abs(t.vy) < 60) { t.resting = true; t.vy = 0; }
+    }
+    return false;
+  }
+
+  /** Aim preview: the path a throw at this power will take and where it ends up. */
+  private predictThrow(pow: number): { pts: { x: number; y: number }[]; end: { x: number; y: number } } {
+    const v = this.throwStart(pow);
+    const kind = this.itemSel as ThrowKind;
+    const t: Throwable = { kind, enemy: false, ...v, rot: 0, resting: false, t: 0, fuse: 0 };
+    const fuse = kind === 'smoke' ? ITEMS.smokeFuse : ITEMS.fragFuse;
+    const pts: { x: number; y: number }[] = [];
+    const dt = FIXED_DT;
+    for (let i = 0; i < 240; i++) {
+      const burst = this.moveThrowable(t, dt);
+      if (i % 3 === 0) pts.push({ x: t.x, y: t.y });
+      if (burst || t.resting || (kind !== 'molotov' && (i + 1) * dt >= fuse) || t.y > H + 100) break;
+    }
+    return { pts, end: { x: t.x, y: t.y } };
   }
 
   private stepThrowables(dt: number): void {
     for (const t of this.throwables) {
-      if (!t.resting) {
-        t.vy += ITEMS.gravity * dt;
-        t.x += t.vx * dt; t.y += t.vy * dt; t.rot += t.vx * dt * 0.03;
-        const box = this.boxes.find(b => t.x > b.x && t.x < b.x + b.w && t.y > b.top && t.y < b.bottom);
-        if (box) {
-          if (t.kind === 'molotov') { this.burst(t, box.top); continue; }
-          const fromSide = t.y - t.vy * dt > box.top + 4;
-          if (fromSide) { t.vx *= -0.4; t.x = t.vx > 0 ? box.x + box.w + 2 : box.x - 2; }
-          else { t.y = box.top; t.vy *= -0.35; t.vx *= 0.6; if (Math.abs(t.vy) < 60) { t.resting = true; t.vy = 0; } }
-        }
-        const gy = this.groundY(t.x);
-        if (!t.resting && t.y >= gy) {
-          t.y = gy;
-          if (t.kind === 'molotov') { this.burst(t, gy); continue; }
-          t.vy *= -0.35; t.vx *= 0.6;
-          if (Math.abs(t.vy) < 60) { t.resting = true; t.vy = 0; }
-        }
-      }
-      if (t.kind === 'frag') {
+      t.t += dt;
+      if (this.moveThrowable(t, dt)) { this.burst(t); continue; }
+      if (t.kind === 'frag' || t.kind === 'smoke') {
         t.fuse -= dt;
+        if (t.kind === 'frag' && !t.resting && this.rng.chance(0.3)) this.fx.smokePuff(t.x, t.y - 8, 2);
         if (t.fuse <= 0) {
           t.fuse = -99;
-          this.blast(t.x, t.y - 10, ITEMS.fragRadius, t.enemy ? 0 : ITEMS.fragDamage, ITEMS.fragPlayerHits);
+          if (t.kind === 'smoke') {
+            this.smokes.push({ x: t.x, y: t.y, t: ITEMS.smokeSecs, seed: this.rng.nextInt(1000) });
+            playExplosion(12);
+          } else {
+            this.blast(t.x, t.y - 10, ITEMS.fragRadius, t.enemy ? 0 : ITEMS.fragDamage, ITEMS.fragPlayerHits);
+          }
         }
       }
     }
     this.throwables = this.throwables.filter(t => t.fuse > -50 && t.y < H + 200);
+    for (const sm of this.smokes) sm.t -= dt;
+    this.smokes = this.smokes.filter(sm => sm.t > 0);
+    for (const sc of this.scorches) sc.t -= dt;
+    this.scorches = this.scorches.filter(sc => sc.t > 0);
 
     // Fire patches burn enemies standing in them (who run out of them).
     for (const f of this.fires) {
@@ -679,21 +782,54 @@ export class GroundAssaultScene extends Phaser.Scene {
   }
 
   /** A firebomb shatters into a fire patch on the ground. */
-  private burst(t: Throwable, _y: number): void {
+  private burst(t: Throwable): void {
     t.fuse = -99;
     this.fires.push({ x: t.x, w: ITEMS.burnWidth, t: ITEMS.burnSecs, tick: 0 });
     playExplosion(25);
   }
 
-  /** Grenade blast: damages enemies (player grenades only) and the player inside it. */
-  private blast(x: number, y: number, r: number, enemyDmg: number, playerHits: number): void {
-    this.fx.explosion(x, y, r * 0.45, 10, false, true);
-    playExplosion(50);
-    if (!settings.reducedFlashing) this.cameras.main.shake(140, 0.005);
-    if (enemyDmg > 0) for (const e of this.enemies) {
-      if (e.hp > 0 && Math.hypot(e.x - x, e.y - 35 - y) < r) this.damageEnemy(e, enemyDmg, x, true);
+  /** Does a smoke cloud sit between these two points? (Enemies can't see or aim through it.) */
+  private smokeBetween(x0: number, y0: number, x1: number, y1: number): boolean {
+    const r = ITEMS.smokeRadius;
+    for (const sm of this.smokes) {
+      if (sm.t < 0.4) continue;
+      const cy = sm.y - r * 0.45;
+      if (segRect(x0, y0, x1, y1, sm.x - r * 0.8, cy - r * 0.6, sm.x + r * 0.8, sm.y + 10) !== null) return true;
+      if (Math.abs(x0 - sm.x) < r * 0.8 && y0 > cy - r * 0.6) return true; // standing inside it
     }
-    if (this.state === 'live' && Math.hypot(this.px - x, this.py - this.height() / 2 - y) < r * 0.75) this.hitPlayer(playerHits);
+    return false;
+  }
+
+  /** Grenade blast: damages enemies (player grenades only) and the player inside it, throws
+   *  bodies, and leaves a scorch mark. */
+  private blast(x: number, y: number, r: number, enemyDmg: number, playerHits: number): void {
+    this.fx.explosion(x, y, r * 0.45, 14, true, true);
+    this.scorches.push({ x, w: r * 0.9, t: GROUND.scorchSecs });
+    playExplosion(50);
+    if (!settings.reducedFlashing) this.cameras.main.shake(160, 0.006);
+    const throwBody = (bx: number, by: number) => {
+      const dx = bx - x, dy = by - y, d = Math.hypot(dx, dy) || 1, f = Math.max(0, 1 - d / (r * 1.3));
+      return { vx: (dx / d) * GROUND.blastThrow * f, vy: -GROUND.blastThrow * (0.5 + 0.5 * f) * f };
+    };
+    for (const e of this.enemies) {
+      if (e.hp > 0) {
+        if (enemyDmg > 0 && Math.hypot(e.x - x, e.y - 35 - y) < r) {
+          this.damageEnemy(e, enemyDmg, x, true, throwBody(e.x, e.y - 35));
+        }
+      } else if (e.rag && Math.hypot(e.x - x, e.y - y) < r * 1.3) {
+        const v = throwBody(e.rag.center().x, e.rag.center().y);
+        e.rag.push(v.vx * 0.6, v.vy * 0.6, FIXED_DT);
+      }
+    }
+    if (this.state === 'live' && Math.hypot(this.px - x, this.py - this.height() / 2 - y) < r * 0.75) {
+      this.hitPlayer(playerHits);
+      if (this.playerRag) { const v = throwBody(this.px, this.py - 30); this.playerRag.push(v.vx, v.vy, FIXED_DT); }
+    }
+  }
+
+  /** What ragdolls collide with. */
+  private ragWorld(): RagdollWorld {
+    return { gravity: ITEMS.gravity, ground: (x) => this.groundY(x), boxes: this.boxes };
   }
 
   private stepDrops(dt: number): void {
@@ -717,7 +853,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     for (const e of this.enemies) {
       e.flash = Math.max(0, e.flash - dt);
       e.hitT = Math.max(0, e.hitT - dt);
-      if (e.hp <= 0) { e.deadT += dt; continue; }
+      if (e.hp <= 0) { e.deadT += dt; e.rag?.step(dt, this.ragWorld()); continue; }
       if (e.kind === 'nest') this.stepNest(e, dt, rate);
       else this.stepFoe(e, dt, rate);
     }
@@ -795,7 +931,7 @@ export class GroundAssaultScene extends Phaser.Scene {
 
     if (!e.aware) {
       // Spot the player (harder to notice someone hiding behind cover).
-      const hidden = this.cover !== null && adx > 260;
+      const hidden = (this.cover !== null && adx > 260) || this.smokeBetween(e.x, e.y - 50, this.px, this.playerCenterY());
       if (this.playerOk() && adx < Math.max(st.range, GROUND.enemySight) && !hidden) {
         this.alertFoe(e);
         for (const o of this.enemies) if (o !== e && Math.abs(o.x - e.x) < 320) this.alertFoe(o, FOE_AI.alertTime + 0.25);
@@ -871,7 +1007,8 @@ export class GroundAssaultScene extends Phaser.Scene {
       }
 
       // Shooting: only standing up out of cover, or in the open.
-      const canShoot = (e.state === 'peek' || e.state === 'fight') && e.flinchT <= 0 && this.playerOk() && adx < st.range;
+      const canShoot = (e.state === 'peek' || e.state === 'fight') && e.flinchT <= 0 && this.playerOk() && adx < st.range &&
+        !this.smokeBetween(e.x, e.y - 50, this.px, this.playerCenterY());
       if (canShoot) {
         if (e.burstLeft > 0) {
           e.burstT -= dt;
@@ -989,7 +1126,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     const a = e.aim + (this.rng.next() - 0.5) * 2 * spread;
     this.bullets.push({
       x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 2.2,
-      dmg, enemy: true, gun: null, pierce: false, splash: 0, hit: new Set(),
+      dmg, enemy: true, gun: null, pierce: false, splash: 0, hit: new Set(), ox: x, oy: y,
     });
     e.flash = 0.07;
   }
@@ -1002,11 +1139,11 @@ export class GroundAssaultScene extends Phaser.Scene {
     this.throwables.push({
       kind: 'frag', enemy: true, x: h.x, y: h.y,
       vx: (tx - h.x) / T, vy: (ty - h.y - 0.5 * g * T * T) / T,
-      rot: 0, fuse: T + 0.6, resting: false,
+      rot: 0, fuse: T + 0.6, resting: false, t: 0,
     });
   }
 
-  private damageEnemy(e: Enemy, dmg: number, fromX: number, knock = true): void {
+  private damageEnemy(e: Enemy, dmg: number, fromX: number, knock = true, fling?: { vx: number; vy: number }): void {
     if (e.hp <= 0) return;
     e.hp -= dmg; e.hitT = 0.12;
     if (e.kind === 'nest') {
@@ -1022,6 +1159,12 @@ export class GroundAssaultScene extends Phaser.Scene {
     if (knock) e.vx += push * FOE_AI.knockback;
     if (!e.aware) this.alertFoe(e, 0.2);
     if (e.hp > 0) return;
+    // Goes limp: a ragdoll from the last live pose, thrown by the shot or the blast.
+    const k = GROUND.soldierScale * e.look.scale;
+    const live = this.foePose(e, this.simT);
+    live.dead = null; live.alpha = 1; live.flinch = 0;
+    const v = fling ?? { vx: push * GROUND.shotThrow, vy: -GROUND.shotThrow * 0.35 };
+    e.rag = new Ragdoll(rigJoints(e.x, e.y, e.face, k, live), v.vx + e.vx * 0.5, v.vy, e.look.pal, k, e.face, e.look.pack, 0, FIXED_DT);
     e.state = 'dead';
     e.deadT = 0;
     e.vx = 0;
@@ -1029,7 +1172,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     const pts = missionState.addKill(GROUND.scoreKill);
     missionState.hudCue = `+${pts}`;
     // The gun drops and clatters to the ground.
-    const m = rigMuzzle(e.x, e.y, e.face, GROUND.soldierScale * e.look.scale, this.foePose(e, this.simT));
+    const m = rigMuzzle(e.x, e.y, e.face, k, live);
     this.drops.push({
       x: (m.x + e.x) / 2, y: m.y, vx: push * (80 + this.rng.next() * 80), vy: -260 - this.rng.next() * 120,
       rot: e.face === 1 ? 0 : Math.PI, vr: push * (6 + this.rng.next() * 6), gun: e.st.gun, face: e.face, t: 0, rest: false,
@@ -1043,30 +1186,54 @@ export class GroundAssaultScene extends Phaser.Scene {
     for (const b of this.bullets) {
       b.life -= dt;
       if (b.gun === 'rocket') b.vy += 120 * dt;
+      const x0 = b.ox, y0 = b.oy;
       b.x += b.vx * dt; b.y += b.vy * dt;
+      b.ox = b.x; b.oy = b.y;
       if (b.life <= 0) continue;
-      // Cover and ground stop bullets (rockets explode).
-      const box = this.boxes.find(bx => b.x > bx.x && b.x < bx.x + bx.w && b.y > bx.top && b.y < bx.bottom);
-      if (box || b.y > this.groundY(b.x)) { this.impact(b); continue; }
+      // Sweep the whole path this step: the first thing it crosses stops it (cover, ground,
+      // the player or an enemy), so fast bullets can't skip past a target between frames.
+      let stop = Infinity;
+      for (const bx of this.boxes) {
+        const t = segRect(x0, y0, b.x, b.y, bx.x, bx.top, bx.x + bx.w, bx.bottom);
+        if (t !== null && t < stop) stop = t;
+      }
+      if (b.y > this.groundY(b.x)) stop = Math.min(stop, 1);
       if (b.enemy) {
-        if (!this.playerOk()) continue;
-        const top = this.py - this.height();
-        if (Math.abs(b.x - this.px) < GROUND.playerHalfW && b.y > top && b.y < this.py) { b.life = 0; this.hitPlayer(b.dmg); }
+        if (!this.playerOk()) { if (stop <= 1) this.impactAt(b, x0, y0, stop); continue; }
+        let top = this.py - this.height();
+        // Crouched in cover, only what shows above the cover can be hit.
+        if (this.cover && this.crouchV > 0.5) top = Math.max(top, this.cover.top);
+        const t = top < this.py ? segRect(x0, y0, b.x, b.y, this.px - GROUND.playerHalfW, top, this.px + GROUND.playerHalfW, this.py) : null;
+        if (t !== null && t <= stop) { b.life = 0; this.hitPlayer(b.dmg); continue; }
       } else {
+        const hits: { e: Enemy; t: number }[] = [];
         for (const e of this.enemies) {
           if (e.hp <= 0 || b.hit.has(e)) continue;
           const nest = e.kind === 'nest';
           const hw = nest ? 52 : FOE_HALF_W, hh = nest ? 56 : 74 * e.look.scale * (1 - e.crouch * 0.33);
-          if (Math.abs(b.x - e.x) < hw && b.y > e.y - hh && b.y < e.y) {
-            if (b.splash > 0) { this.impact(b); break; }
-            this.damageEnemy(e, b.dmg, b.x - b.vx * 0.05);
-            this.fx.smokePuff(b.x, b.y, 4);
-            if (b.pierce) b.hit.add(e); else { b.life = 0; break; }
-          }
+          const t = segRect(x0, y0, b.x, b.y, e.x - hw, e.y - hh, e.x + hw, e.y);
+          if (t !== null && t <= stop) hits.push({ e, t });
         }
+        hits.sort((p, q) => p.t - q.t);
+        let done = false;
+        for (const h of hits) {
+          const hx = x0 + (b.x - x0) * h.t, hy = y0 + (b.y - y0) * h.t;
+          if (b.splash > 0) { b.x = hx; b.y = hy; this.impact(b); done = true; break; }
+          this.damageEnemy(h.e, b.dmg, hx - b.vx * 0.05);
+          this.fx.smokePuff(hx, hy, 4);
+          if (b.pierce) b.hit.add(h.e); else { b.life = 0; done = true; break; }
+        }
+        if (done) continue;
       }
+      if (stop <= 1) this.impactAt(b, x0, y0, stop);
     }
     this.bullets = this.bullets.filter(b => b.life > 0 && b.x > this.camX - 200 && b.x < this.camX + W + 400);
+  }
+
+  /** Bullet stopped at fraction t of this step's path. */
+  private impactAt(b: Bullet, x0: number, y0: number, t: number): void {
+    b.x = x0 + (b.x - x0) * t; b.y = y0 + (b.y - y0) * t;
+    this.impact(b);
   }
 
   private impact(b: Bullet): void {
@@ -1098,10 +1265,17 @@ export class GroundAssaultScene extends Phaser.Scene {
   // ── Endings ──────────────────────────────────────────────────────────────
 
   private goDown(): void {
+    const live = this.playerPose(this.simT);
+    live.dead = null; live.flinch = 0;
+    this.playerRag = new Ragdoll(
+      rigJoints(this.px, this.py, this.face, GROUND.soldierScale, live),
+      -this.face * GROUND.shotThrow, -GROUND.shotThrow * 0.5, this.pal, GROUND.soldierScale, this.face, live.pack, this.armor, FIXED_DT,
+    );
     this.state = 'down';
     this.endT = 0;
     this.vy = -300;
     this.throwT = null;
+    this.aimT = null;
     missionState.hudCue = 'SOLDIER DOWN';
     this.music.fadeOut(0.8);
     this.time.delayedCall(1600, () => {
@@ -1193,10 +1367,12 @@ export class GroundAssaultScene extends Phaser.Scene {
     } : null;
     const it = gameUi.item;
     const count = this.items[this.itemSel];
-    if (!it || it.kind !== this.itemSel || it.count !== count || it.all.some(a => a.count !== this.items[a.kind as ItemKind])) {
+    if (this.itemOrder.length === 0) gameUi.item = null;
+    else if (!it || it.kind !== this.itemSel || it.count !== count || it.all.length !== this.itemOrder.length ||
+      it.all.some(a => a.count !== this.items[a.kind as ItemKind])) {
       gameUi.item = {
-        kind: this.itemSel, name: ITEM_NAME[this.itemSel], count,
-        all: ITEM_ORDER.map(k => ({ kind: k, count: this.items[k] })),
+        kind: this.itemSel, name: toolDef(this.itemSel).name, count,
+        all: this.itemOrder.map(k => ({ kind: k, count: this.items[k] })),
       };
     }
     gameUi.inCover = this.cover !== null && this.crouchV > 0.5;
@@ -1213,6 +1389,11 @@ export class GroundAssaultScene extends Phaser.Scene {
     if (missionState.endless) this.drawHangar(g, this.bunkerX - cx, time);
     else this.drawBunker(g, this.bunkerX - cx, time);
     for (const f of this.fires) this.drawScorch(g, f, cx);
+    for (const sc of this.scorches) {
+      const fade = Math.min(1, sc.t / 2);
+      g.fillStyle(C.scorch, 0.45 * fade); g.fillEllipse(sc.x - cx, this.groundY(sc.x) + 2, sc.w, 14);
+      g.fillStyle(C.scorch, 0.3 * fade); g.fillEllipse(sc.x - cx, this.groundY(sc.x) + 1, sc.w * 0.55, 8);
+    }
     const cg = this.coverGfx;
     cg.clear();
     for (const b of this.boxes) if (b.x + b.w > cx - 20 && b.x < cx + W + 20) this.drawBox(cg, b, cx);
@@ -1227,9 +1408,13 @@ export class GroundAssaultScene extends Phaser.Scene {
     const bg = this.bulletGfx;
     bg.clear();
     for (const f of this.fires) this.drawFire(bg, f, cx, time);
+    for (const th of this.throwables) this.drawDanger(bg, th, cx, time);
     for (const th of this.throwables) this.drawThrowable(bg, th, cx, time);
+    if (this.aimT !== null) this.drawAim(bg, cx, time);
     for (const b of this.bullets) this.drawBullet(bg, b, cx);
     this.fx.render(cx, time);
+    const sg = this.fxGfx;
+    for (const sm of this.smokes) this.drawSmoke(sg, sm, cx, time);
   }
 
   private drawGround(g: Phaser.GameObjects.Graphics, cx: number): void {
@@ -1370,6 +1555,11 @@ export class GroundAssaultScene extends Phaser.Scene {
       if (e.hp > 0 && e.hp < e.maxHp) this.hpBar(a, x, gy - 100, e.hp / e.maxHp);
       return;
     }
+    if (e.rag) {
+      const fade = e.deadT > GROUND.bodyFadeAt ? Math.max(0, 1 - (e.deadT - GROUND.bodyFadeAt)) : 1;
+      if (fade > 0) e.rag.draw(a, cx, fade);
+      return;
+    }
     const pose = this.foePose(e, t);
     if (pose.alpha <= 0) return;
     const k = GROUND.soldierScale * e.look.scale;
@@ -1414,12 +1604,14 @@ export class GroundAssaultScene extends Phaser.Scene {
     p.deadDir = -1;
     p.flash = this.flash > 0;
     p.slope = this.onGround && this.onSlope(this.px, this.py) ? this.slopeAt(this.px) : 0;
+    p.armor = this.armor;
     return p;
   }
 
   private drawPlayer(a: Phaser.GameObjects.Graphics, cx: number, time: number): void {
     if (this.invuln > 0 && this.state === 'live' && Math.floor(time / 80) % 2 === 0) return;
-    const x = this.px - cx, y = this.py, pal = this.biome.troops.blue, k = GROUND.soldierScale;
+    if (this.playerRag) { this.playerRag.draw(a, cx, 1); return; }
+    const x = this.px - cx, y = this.py, pal = this.pal, k = GROUND.soldierScale;
     if (this.state !== 'down') this.shadow(a, x, this.px, y, 12 * k);
     if (this.state === 'chute') {
       // Canopy and lines.
@@ -1442,17 +1634,88 @@ export class GroundAssaultScene extends Phaser.Scene {
   }
 
   private drawThrowable(g: Phaser.GameObjects.Graphics, t: Throwable, cx: number, time: number): void {
-    const x = t.x - cx;
+    const x = t.x - cx, y = t.y - 8;
+    const c = Math.cos(t.rot), s = Math.sin(t.rot);
+    const at = (lx: number, ly: number) => ({ x: x + lx * c - ly * s, y: y + lx * s + ly * c });
     if (t.kind === 'frag') {
-      g.fillStyle(C.grenade, 1); g.fillEllipse(x, t.y - 7, 13, 16);
-      g.fillStyle(C.grenadeBand, 1); g.fillRect(x - 6, t.y - 8, 12, 3);
+      // Ribbed body, fuse cap, spoon lever and pull ring; a spark fizzes from the fuse.
+      g.fillStyle(C.grenadeDark, 1); g.fillEllipse(x, y + 1, 15, 18);
+      g.fillStyle(C.grenade, 1); g.fillEllipse(x, y, 13, 16);
+      g.fillStyle(C.grenadeHi, 1); g.fillEllipse(x - 2.5, y - 3, 4, 6);
+      g.lineStyle(1.2, C.grenadeDark, 0.9);
+      for (const ly of [-3, 1.5]) { const p0 = at(-6, ly), p1 = at(6, ly); g.lineBetween(p0.x, p0.y, p1.x, p1.y); }
+      const p0 = at(0, -6), p1 = at(0, 7); g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+      const cap = at(0, -9);
+      g.fillStyle(C.grenadeBand, 1); g.fillRect(cap.x - 3.5, cap.y - 2.5, 7, 5);
+      const l0 = at(2, -10), l1 = at(6, -3);
+      g.lineStyle(2, C.grenadeLever, 1); g.lineBetween(l0.x, l0.y, l1.x, l1.y);
+      if (t.enemy || t.t < 0.25) { const r = at(-4, -10); g.lineStyle(1.4, C.grenadePin, 1); g.strokeCircle(r.x, r.y, 2.4); }
+      const sp = at(0, -12), fl = Math.sin(time * 0.06) * 0.5 + 0.5;
+      g.fillStyle(C.spark, 0.9); g.fillCircle(sp.x, sp.y, 1.6 + fl * 1.4);
       // Blinks faster as the fuse runs down.
-      if (Math.sin(time * 0.001 * (8 + (2 - Math.max(0, t.fuse)) * 14)) > 0.3) { g.fillStyle(C.fuseLight, 1); g.fillCircle(x, t.y - 16, 2.5); }
+      if (Math.sin(time * 0.001 * (8 + (2 - Math.max(0, t.fuse)) * 14)) > 0.3) { g.fillStyle(C.fuseLight, 1); g.fillCircle(sp.x, sp.y, 2.4); }
+    } else if (t.kind === 'smoke') {
+      const p0 = at(0, -8), p1 = at(0, 8);
+      g.lineStyle(11, C.smokeCan, 1); g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+      const b0 = at(-5.5, -1), b1 = at(5.5, -1);
+      g.lineStyle(3, C.smokeBand, 1); g.lineBetween(b0.x, b0.y, b1.x, b1.y);
+      const cap = at(0, -10); g.fillStyle(C.grenadeBand, 1); g.fillCircle(cap.x, cap.y, 2.6);
+      if (t.fuse < ITEMS.smokeFuse * 0.6) { g.fillStyle(C.smoke, 0.6); g.fillCircle(cap.x, cap.y - 4, 4 + Math.sin(time * 0.02) * 1.5); }
     } else {
-      const c = Math.cos(t.rot), s = Math.sin(t.rot);
       g.lineStyle(7, C.bottle, 1); g.lineBetween(x - c * 9, t.y - s * 9, x + c * 9, t.y + s * 9);
       g.fillStyle(C.bottleRag, 1); g.fillCircle(x + c * 10, t.y + s * 10, 2.5);
       g.fillStyle(C.fireMid, 0.9); g.fillCircle(x + c * 13, t.y + s * 13, 4 + Math.sin(time * 0.05) * 1.5);
+    }
+  }
+
+  /** Red danger ring on the ground showing a live frag's blast area (yours and theirs). */
+  private drawDanger(g: Phaser.GameObjects.Graphics, t: Throwable, cx: number, time: number): void {
+    if (t.kind !== 'frag') return;
+    const gx = t.x - cx, gy = this.groundY(t.x) + 2, r = ITEMS.fragRadius;
+    const urgent = 1 - Math.max(0, Math.min(1, t.fuse / ITEMS.fragFuse));
+    const pulse = 0.5 + 0.5 * Math.sin(time * 0.001 * (6 + urgent * 18));
+    g.fillStyle(C.dangerFill, 0.08 + 0.1 * pulse); g.fillEllipse(gx, gy, r * 2, r * 0.36);
+    g.lineStyle(3, C.dangerRing, 0.55 + 0.4 * pulse); g.strokeEllipse(gx, gy, r * 2, r * 0.36);
+    g.lineStyle(2, C.dangerRing, 0.9); g.strokeEllipse(gx, gy, 26, 8);
+  }
+
+  /** Holding J: dotted arc and a red marker where the throw will land. */
+  private drawAim(g: Phaser.GameObjects.Graphics, cx: number, time: number): void {
+    const pr = this.predictThrow(this.aimPower());
+    pr.pts.forEach((p, i) => {
+      const f = 1 - i / Math.max(1, pr.pts.length);
+      g.fillStyle(C.aimDot, 0.35 + 0.5 * f); g.fillCircle(p.x - cx, p.y, 3);
+    });
+    const ex = pr.end.x - cx, ey = pr.end.y + 2;
+    const pulse = 0.5 + 0.5 * Math.sin(time * 0.01);
+    if (this.itemSel === 'frag') {
+      const r = ITEMS.fragRadius;
+      g.fillStyle(C.dangerFill, 0.12); g.fillEllipse(ex, ey, r * 2, r * 0.36);
+      g.lineStyle(2, C.dangerRing, 0.5); g.strokeEllipse(ex, ey, r * 2, r * 0.36);
+    } else if (this.itemSel === 'molotov') {
+      g.fillStyle(C.dangerFill, 0.12); g.fillEllipse(ex, ey, ITEMS.burnWidth, 18);
+    } else if (this.itemSel === 'smoke') {
+      g.lineStyle(2, C.smoke, 0.6); g.strokeEllipse(ex, ey, ITEMS.smokeRadius * 1.6, 30);
+    }
+    g.lineStyle(4, C.dangerRing, 0.95); g.strokeEllipse(ex, ey, 34 + pulse * 6, 11 + pulse * 2);
+    g.fillStyle(C.dangerRing, 1); g.fillCircle(ex, ey, 4);
+    g.lineStyle(2, C.dangerRing, 0.9);
+    g.lineBetween(ex, ey - 26, ex, ey - 10);
+    g.fillTriangle(ex - 6, ey - 14, ex + 6, ey - 14, ex, ey - 6);
+  }
+
+  /** A drifting smoke cloud: overlapping soft puffs that thin out at the end. */
+  private drawSmoke(g: Phaser.GameObjects.Graphics, sm: Smoke, cx: number, time: number): void {
+    const age = ITEMS.smokeSecs - sm.t, r = ITEMS.smokeRadius;
+    const grow = Math.min(1, age / 0.8), fade = Math.min(1, sm.t / 1.5);
+    for (let i = 0; i < 14; i++) {
+      const h1 = hash01(sm.seed + i * 3.7), h2 = hash01(sm.seed + i * 9.1);
+      const ox = (h1 - 0.5) * r * 1.5 * grow + Math.sin(time * 0.0006 + i) * 10;
+      const oy = -h2 * r * 0.9 * grow - age * 4;
+      const rad = (28 + h2 * 34) * (0.5 + 0.5 * grow);
+      const col = i % 3 === 0 ? C.smokeDark : C.smoke;
+      g.fillStyle(col, 0.22 * fade); g.fillCircle(sm.x - cx + ox, sm.y + oy, rad * 1.3);
+      g.fillStyle(col, 0.38 * fade); g.fillCircle(sm.x - cx + ox, sm.y + oy, rad * 0.85);
     }
   }
 
@@ -1503,3 +1766,4 @@ export class GroundAssaultScene extends Phaser.Scene {
     this.touchControls?.destroy();
   }
 }
+

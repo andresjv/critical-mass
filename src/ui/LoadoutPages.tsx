@@ -6,6 +6,9 @@ import { LEVELS, levelInfo, type LevelId } from '../state/levels';
 import { JET_SKINS } from '../game/theme/loadoutTheme';
 import { PLAYER_JET, type JetPalette } from '../game/theme/factions';
 import { ACCENT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
+import { armory, gunDef, SLOT_COUNT, type GunId } from '../state/armory';
+import { ArmorIcon, kitSummary } from './KitPages';
+import { ItemIcon } from './WeaponHud';
 
 const SLOTS: { slot: PartSlot; label: string }[] = [
   { slot: 'jet',  label: 'Jet' },
@@ -15,39 +18,80 @@ const SLOTS: { slot: PartSlot; label: string }[] = [
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
-// ── Inventory: one clickable card per slot ──────────────────────────────────
+// ── Inventory: the plane's parts, then the soldier's kit ────────────────────
 
-export function InventoryPage({ onBack, onOpenSlot }: { onBack: () => void; onOpenSlot: (s: PartSlot) => void }) {
+export type KitSection = 'guns' | 'tools' | 'armor';
+
+const invCard = {
+  ...resetBtn, textAlign: 'left' as const, borderRadius: 10, padding: '10px 14px 12px',
+  background: 'rgba(8,14,22,0.92)', border: '2px solid rgba(136,204,255,0.3)',
+  display: 'flex', flexDirection: 'column' as const, gap: 4, minWidth: 0,
+};
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return <div style={{ fontFamily: MONO, fontSize: 16, color: '#7f97ad', letterSpacing: 3, margin: '4px 0 8px' }}>{children}</div>;
+}
+
+function CardHead({ label, right }: { label: string; right?: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: 15, color: '#6f879c' }}>
+      <span>{label.toUpperCase()}</span>{right && <span>{right}</span>}
+    </div>
+  );
+}
+
+export function InventoryPage({ onBack, onOpenSlot, onOpenKit }: {
+  onBack: () => void; onOpenSlot: (s: PartSlot) => void; onOpenKit: (k: KitSection) => void;
+}) {
+  const k = kitSummary();
+  const guns = armory.slots.filter((g): g is GunId => g !== null);
   return (
     <Panel title="Inventory" onBack={onBack}>
-      <div style={{ fontSize: 22, color: '#9fb2c3', marginBottom: 18 }}>
-        Pick a slot to change parts. Beat levels to unlock more.
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 26 }}>
+      <SectionLabel>PLANE</SectionLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
         {SLOTS.map(({ slot, label }, i) => {
           const part = partDef(progress.loadout[slot]);
           const all = PARTS.filter(p => p.slot === slot);
           const open = all.filter(p => isPartUnlocked(p.id)).length;
           return (
-            <button key={slot} data-nav data-autofocus={i === 0 ? '' : undefined} onClick={() => onOpenSlot(slot)}
-              className="cm-card"
-              style={{
-                ...resetBtn, textAlign: 'left', borderRadius: 10, padding: '16px 20px 18px',
-                background: 'rgba(8,14,22,0.92)', border: '2px solid rgba(136,204,255,0.3)',
-                display: 'flex', flexDirection: 'column', gap: 6,
-              }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: 18, color: '#6f879c' }}>
-                <span>{label.toUpperCase()}</span><span>{open}/{all.length} UNLOCKED</span>
+            <button key={slot} data-nav data-autofocus={i === 0 ? '' : undefined} onClick={() => onOpenSlot(slot)} className="cm-card" style={invCard}>
+              <CardHead label={label} right={`${open}/${all.length}`} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 96, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <PartIcon part={part} />
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', minWidth: 0 }}>{part.name}</div>
               </div>
-              <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <PartIcon part={part} big />
-              </div>
-              <div style={{ fontSize: 30, fontWeight: 700, color: '#fff' }}>{part.name}</div>
-              <div style={{ fontSize: 20, color: '#9fb2c3', minHeight: 52 }}>{part.desc}</div>
-              <div style={{ fontSize: 20, color: ACCENT, letterSpacing: 2 }}>CHANGE ›</div>
             </button>
           );
         })}
+      </div>
+      <SectionLabel>SOLDIER</SectionLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+        <button data-nav onClick={() => onOpenKit('guns')} className="cm-card" style={invCard}>
+          <CardHead label="Guns" right={`${guns.length}/${SLOT_COUNT}`} />
+          <div style={{ minHeight: 72, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
+            {guns.slice(0, 4).map(g => <span key={g} style={{ fontSize: 17, color: '#d8e2ec' }}>▸ {gunDef(g).name}</span>)}
+          </div>
+          <div style={{ fontSize: 16, color: ACCENT, letterSpacing: 2 }}>CHANGE ›</div>
+        </button>
+        <button data-nav onClick={() => onOpenKit('tools')} className="cm-card" style={invCard}>
+          <CardHead label="Side tools" right={`${k.tools.filter(Boolean).length}/${k.tools.length}`} />
+          <div style={{ minHeight: 72, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {k.tools.map((t, i) => t
+              ? <ItemIcon key={i} kind={t} size={40} />
+              : <span key={i} style={{ width: 40, height: 40, borderRadius: 6, border: '2px dashed rgba(136,204,255,0.25)' }} />)}
+          </div>
+          <div style={{ fontSize: 16, color: ACCENT, letterSpacing: 2 }}>CHANGE ›</div>
+        </button>
+        <button data-nav onClick={() => onOpenKit('armor')} className="cm-card" style={invCard}>
+          <CardHead label="Armor" />
+          <div style={{ minHeight: 72, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ArmorIcon id={k.armor.id} size={56} />
+            <span style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{k.armor.name}</span>
+          </div>
+          <div style={{ fontSize: 16, color: ACCENT, letterSpacing: 2 }}>CHANGE ›</div>
+        </button>
       </div>
       <MenuButton onClick={onBack} style={{ width: 240 }}>Back</MenuButton>
     </Panel>
