@@ -440,3 +440,4 @@ Finish by running tests and opening a Vercel preview.
   (fire patch burns enemies), medkit ×1 (+3 health). Q / pad LB / tapping the item card switches;
   pad RB / touch ITEM uses. Refilled each life. J no longer fires (Space only).
 - **Start gun:** every ground assault starts with the Service Pistol in hand (`startingLoadout`); if it is not on the wheel it rides along in the first empty slot (or the last slot) for that run, without changing the saved loadout.
+- **Guns economy:** everyone owns only the Service Pistol (save format v2). Other guns come from the daily store (which never offers the pistol) or from a level medal, granted only when that medal is newly earned (`grantMedalGun`). Older saves keep only guns they bought.

@@ -11,8 +11,6 @@ import { ACCENT, FONT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
 import { AchievementsPage, InventoryPage, PartsPage } from './LoadoutPages';
 import { TutorialPage } from './TutorialPage';
 import { GunsPage, StorePage } from './ArmoryPages';
-import { syncUnlocks } from '../state/armory';
-import { progress } from '../state/progress';
 import { isTutorialDone, markTutorialDone } from '../state/tutorial';
 
 type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial' | 'guns' | 'store';
@@ -40,7 +38,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
   useEffect(() => { gameUi.menuPreview = page === 'levels' ? browse : level; }, [level, browse, page]);
 
   // Back to the title page whenever the menu reappears (e.g. after game over).
-  useEffect(() => { if (show) { setPage('title'); syncUnlocks(progress.achieved); } }, [show]);
+  useEffect(() => { if (show) { setPage('title'); } }, [show]);
 
   // Focus the first item on each page so keyboard players can start right away.
   useEffect(() => {

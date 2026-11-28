@@ -57,10 +57,15 @@ export interface Armory {
 
 const KEY = 'cm_armory_v1';
 const ID_KEY = 'cm_player_id';
-const START_OWNED: GunId[] = ['pistol', 'smg'];
+/** Everyone starts with only the Service Pistol; other guns come from the store or level medals. */
+export const STARTER_GUN: GunId = 'pistol';
+const START_OWNED: GunId[] = [STARTER_GUN];
+/** Save format: v2 = only the pistol is free; medal guns are granted only when a medal is newly
+ *  earned (v1 gave a free SMG and granted guns for every medal already held). */
+const SAVE_VERSION = 2;
 
 function fresh(): Armory {
-  return { owned: [...START_OWNED], slots: ['pistol', 'smg', null, null], credits: STORE.startingCredits, bought: [] };
+  return { owned: [...START_OWNED], slots: [STARTER_GUN, null, null, null], credits: STORE.startingCredits, bought: [] };
 }
 
 function isGun(id: unknown): id is GunId { return typeof id === 'string' && id in GUN_STATS; }
@@ -70,8 +75,15 @@ function load(): Armory {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KEY) : null;
     if (!raw) return a;
-    const p = JSON.parse(raw) as Partial<Armory>;
-    if (Array.isArray(p.owned)) a.owned = [...new Set([...START_OWNED, ...p.owned.filter(isGun)])];
+    const p = JSON.parse(raw) as Partial<Armory> & { v?: number };
+    if (Array.isArray(p.bought)) a.bought = p.bought.filter(b => typeof b === 'string').slice(-40);
+    if (Array.isArray(p.owned)) {
+      let owned = p.owned.filter(isGun);
+      // Older saves: keep only guns that were actually bought (no free SMG, no guns from medals
+      // earned before this change).
+      if ((p.v ?? 1) < SAVE_VERSION) owned = owned.filter(g => a.bought.some(b => b.endsWith(`:${g}`)));
+      a.owned = [...new Set([...START_OWNED, ...owned])];
+    }
     if (Array.isArray(p.slots)) {
       a.slots = Array.from({ length: SLOT_COUNT }, (_, i) => {
         const g = p.slots![i];
@@ -79,29 +91,27 @@ function load(): Armory {
       });
     }
     if (typeof p.credits === 'number' && p.credits >= 0) a.credits = Math.floor(p.credits);
-    if (Array.isArray(p.bought)) a.bought = p.bought.filter(b => typeof b === 'string').slice(-40);
+    if (!a.slots.some(g => g !== null)) a.slots[0] = STARTER_GUN;
   } catch { /* storage unavailable: defaults */ }
   return a;
 }
 
 function save(): void {
-  try { localStorage.setItem(KEY, JSON.stringify(armory)); } catch { /* ignore */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ ...armory, v: SAVE_VERSION })); } catch { /* ignore */ }
 }
 
 export const armory: Armory = load();
 
-/** Grants guns unlocked by the given level medals (call after loading progress / earning one). */
-export function syncUnlocks(achieved: readonly LevelId[]): GunId[] {
-  const added: GunId[] = [];
-  for (const g of GUNS) {
-    if (g.unlock && achieved.includes(g.unlock) && !armory.owned.includes(g.id)) {
-      armory.owned.push(g.id); added.push(g.id);
-      const empty = armory.slots.indexOf(null);
-      if (empty >= 0) armory.slots[empty] = g.id;
-    }
-  }
-  if (added.length) save();
-  return added;
+/** A level medal was just earned for the first time: grants that level's gun (if any, and not
+ *  already owned). Medals earned before are not rewarded again. Returns the new gun or null. */
+export function grantMedalGun(level: LevelId): GunId | null {
+  const g = GUNS.find(x => x.unlock === level);
+  if (!g || armory.owned.includes(g.id)) return null;
+  armory.owned.push(g.id);
+  const empty = armory.slots.indexOf(null);
+  if (empty >= 0) armory.slots[empty] = g.id;
+  save();
+  return g.id;
 }
 
 export function addCredits(n: number): void {
@@ -124,7 +134,7 @@ export function setSlot(slot: number, id: GunId | null): void {
 /** Carried guns in slot order; always at least the pistol. */
 export function carried(): GunId[] {
   const c = armory.slots.filter((g): g is GunId => g !== null);
-  return c.length ? c : ['pistol'];
+  return c.length ? c : [STARTER_GUN];
 }
 
 /** Guns for one ground assault: the wheel slots, always including the Service Pistol (it takes
@@ -186,10 +196,10 @@ export function dailyOffers(player: string, day: string): GunId[] {
   const picked: GunId[] = [];
   const total = RARITIES.reduce((s, r) => s + STORE.weight[r], 0);
   let guard = 0;
-  while (picked.length < Math.min(STORE.offers, GUNS.length) && guard++ < 200) {
+  while (picked.length < Math.min(STORE.offers, GUNS.length - 1) && guard++ < 200) {
     let roll = rng.next() * total, rarity: Rarity = 'common';
     for (const r of RARITIES) { roll -= STORE.weight[r]; if (roll < 0) { rarity = r; break; } }
-    const pool = GUNS.filter(g => g.rarity === rarity && !picked.includes(g.id));
+    const pool = GUNS.filter(g => g.rarity === rarity && g.id !== STARTER_GUN && !picked.includes(g.id));
     if (pool.length) picked.push(rng.pick(pool).id);
   }
   return picked;

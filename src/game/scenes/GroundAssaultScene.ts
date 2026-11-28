@@ -20,8 +20,8 @@ import {
   FOE_AI, FOES, GROUND, ITEMS, SCORE, SOLDIER_ANIM, TUNING, type FoeKind, type FoeStats, type GunStats,
 } from '../../state/tuning';
 import { createRng, type Rng } from '../../state/rng';
-import { armory, gunDef, gunStats, startingLoadout, syncUnlocks, SLOT_COUNT, type GunId } from '../../state/armory';
-import { earnLevelAchievement, progress } from '../../state/progress';
+import { armory, gunDef, gunStats, grantMedalGun, startingLoadout, SLOT_COUNT, type GunId } from '../../state/armory';
+import { earnLevelAchievement } from '../../state/progress';
 import { foeRoster, foeTier } from '../../state/foes';
 import { settings, haptic } from '../../state/settings';
 import { showStageIntro } from '../../state/stageIntros';
@@ -1123,11 +1123,11 @@ export class GroundAssaultScene extends Phaser.Scene {
     missionState.siteDestroyed();
     missionState.hudCue = '';
     haptic(150);
-    // Beating the level earns its achievement (and unlocks a gun) the first time.
+    // Beating the level earns its medal the first time, and that medal's gun.
     const earned = earnLevelAchievement(missionState.level);
-    const newGuns = syncUnlocks(progress.achieved);
+    const newGun = earned ? grantMedalGun(missionState.level) : null;
     if (earned) {
-      gameUi.callout = `ACHIEVEMENT UNLOCKED: ${earned.name.toUpperCase()}${newGuns.length ? ` · NEW GUN: ${gunDef(newGuns[0]).name.toUpperCase()}` : ''}`;
+      gameUi.callout = `ACHIEVEMENT UNLOCKED: ${earned.name.toUpperCase()}${newGun ? ` · NEW GUN: ${gunDef(newGun).name.toUpperCase()}` : ''}`;
       gameUi.calloutExpiry = Date.now() + 4000;
     }
     this.time.delayedCall(900, () => this.finish(true));
