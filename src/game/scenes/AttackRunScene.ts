@@ -6,10 +6,8 @@ import { TouchControls } from '../../input/TouchControls';
 import { missionState } from '../../state/MissionState';
 import { debugInfo } from '../../state/debugInfo';
 import { gameUi } from '../../state/gameUi';
-import { ATTACK_RUN, TUNING, SCORE, BATTLE } from '../../state/tuning';
+import { ATTACK_RUN, TUNING, SCORE, BATTLE, LOADOUT } from '../../state/tuning';
 import { createRng } from '../../state/rng';
-import { hasSeenHowToPlay, markSeenHowToPlay } from '../../state/howToPlay';
-import { showStageIntro } from '../../state/stageIntros';
 import { ProximityBeep, BeepSource } from '../audio/ProximityBeep';
 import { EngineSound } from '../audio/EngineSound';
 import { MusicTrack } from '../audio/MusicTrack';
@@ -25,7 +23,9 @@ import { drawJet, drawTank, TURRET_PIVOT_Y } from '../models/Vehicles';
 import { drawBuilding } from '../models/Buildings';
 import { drawTracer, drawShell, drawMissile } from '../models/Weapons';
 import { BattleLayer } from '../effects/BattleLayer';
-import { PLAYER_JET, SOLDIER_RED } from '../theme/factions';
+import { SOLDIER_RED } from '../theme/factions';
+import { playerJet } from '../theme/loadoutTheme';
+import { progress } from '../../state/progress';
 import { Xform } from '../models/shapes';
 import { settings, haptic } from '../../state/settings';
 
@@ -170,8 +170,8 @@ export class AttackRunScene extends Phaser.Scene {
   private fx!: Effects;
 
   // ── Pre-run briefing & pause ───────────────────────────────────────────────
-  private preRunActive = true;
-  private preRunTimer  = 0;
+  /** Seconds into the fly-in from the takeoff (player input ignored until it ends). */
+  private entryT = 0;
 
   // ── Input ─────────────────────────────────────────────────────────────────
   private prevFire   = false;
@@ -200,10 +200,6 @@ export class AttackRunScene extends Phaser.Scene {
   private explosionGfx!: Phaser.GameObjects.Graphics;
   private planeGfx!:     Phaser.GameObjects.Graphics;
   private shadowGfx!:    Phaser.GameObjects.Graphics;
-  private preRunGfx!:    Phaser.GameObjects.Graphics;
-  private preRunTitleText!:  Phaser.GameObjects.Text;
-  private preRunBodyText!:   Phaser.GameObjects.Text;
-  private preRunPromptText!: Phaser.GameObjects.Text;
   private touchControls!: TouchControls;
   private visibilityHandler!: () => void;
 
@@ -212,8 +208,8 @@ export class AttackRunScene extends Phaser.Scene {
   init(data: Partial<SceneData>): void {
     this.launchIndex = data.launchIndex ?? 0;
     this.cameraX     = 0;
-    this.planeX      = ATTACK_RUN.planeXMin + 100;
-    this.planeAlt    = ATTACK_RUN.altitudeMax * 0.4;
+    this.planeX      = ATTACK_RUN.entryStartX;
+    this.planeAlt    = ATTACK_RUN.entryStartAlt;
     this.planeState  = 'flying';
     this.stageTimer  = ATTACK_RUN.duration;
     this.thrusting   = false;
@@ -236,8 +232,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.engineSound.stop();
     this.musicTrack.stop();
     this.firstInterceptorVoiced = false;
-    this.preRunActive  = true;
-    this.preRunTimer   = 0;
+    this.entryT        = 0;
     this.hintTimer     = 0;
   }
 
@@ -255,8 +250,6 @@ export class AttackRunScene extends Phaser.Scene {
     gameUi.objective      = 'Survive and reach the silos';
     gameUi.contextualHint = null;
 
-    // Stage intro card (first visit this session).
-    showStageIntro('attack_run');
 
     // ── Generate terrain ────────────────────────────────────────────────────
     this.totalSegments = Math.ceil(
@@ -358,28 +351,6 @@ export class AttackRunScene extends Phaser.Scene {
       (wx, gy) => this.fallerImpact(wx, gy),
       this.biome.enemyJet,
     );
-    this.preRunGfx    = this.add.graphics().setDepth(20);
-
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
-    this.preRunTitleText = this.add.text(W / 2, H / 2 - 90,
-      `ATTACK RUN — LAUNCH ${this.launchIndex + 1}`, {
-        fontSize: '44px', color: '#44aaff',
-        fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
-      }).setOrigin(0.5).setDepth(21);
-
-    const diffLabel = missionState.difficulty.toUpperCase();
-    this.preRunBodyText = this.add.text(W / 2, H / 2 - 20,
-      `Threat: ${diffLabel}  ·  ${ATTACK_RUN.duration}s run  ·  Reach the silo`, {
-        fontSize: '26px', color: '#8aaabb',
-        fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
-      }).setOrigin(0.5).setDepth(21);
-
-    this.preRunPromptText = this.add.text(W / 2, H / 2 + 50,
-      'Press FIRE to launch', {
-        fontSize: '30px', color: '#ffffff',
-        fontFamily: "'Space Grotesk', sans-serif", resolution: dpr,
-      }).setOrigin(0.5).setDepth(21);
-
     this.pauseCtl = new PauseController(this);
 
     // ── Touch / pause ────────────────────────────────────────────────────────
@@ -391,12 +362,9 @@ export class AttackRunScene extends Phaser.Scene {
     // Phaser doesn't call shutdown() by name; without this, engine/music kept running in the hangar.
     this.events.once('shutdown', this.shutdown, this);
 
-    // ── How-to-play (first visit) ────────────────────────────────────────────
-    if (!hasSeenHowToPlay('attack_run')) {
-      markSeenHowToPlay('attack_run');
-      gameUi.howToPlayStage = 'attack_run';
-      this.time.delayedCall(5500, () => { gameUi.howToPlayStage = null; });
-    }
+    // Seamless start: fade in from the takeoff cutscene, music straight away, no briefing card.
+    this.cameras.main.fadeIn(ATTACK_RUN.entryFadeMs, 0, 0, 0);
+    this.musicTrack.start();
   }
 
   update(time: number, delta: number): void {
@@ -406,24 +374,6 @@ export class AttackRunScene extends Phaser.Scene {
     const actionJust = input.action && !this.prevAction;
     this.prevFire   = input.fire;
     this.prevAction = input.action;
-
-    // ── Pre-run briefing ──────────────────────────────────────────────────────
-    if (this.preRunActive) {
-      this.preRunTimer += delta * 0.001;
-      if (fireJust || this.preRunTimer >= 4.0) {
-        this.preRunActive = false;
-        this.preRunGfx.clear();
-        this.preRunTitleText.setVisible(false);
-        this.preRunBodyText.setVisible(false);
-        this.preRunPromptText.setVisible(false);
-        this.musicTrack.start();
-        this.voice.say('Engage', 'engage');
-      } else {
-        this.renderPreRun(time);
-        debugInfo.fps = Math.round(this.game.loop.actualFps);
-        return;
-      }
-    }
 
     // ── Pause toggle ──────────────────────────────────────────────────────────
     const wasPaused = this.pauseCtl.paused;
@@ -459,17 +409,26 @@ export class AttackRunScene extends Phaser.Scene {
     // Scroll camera.
     this.cameraX += ATTACK_RUN.scrollSpeed * dt;
 
-    // Move plane.
-    this.planeX = Phaser.Math.Clamp(
-      this.planeX + mx * ATTACK_RUN.planeXSpeed * dt,
-      ATTACK_RUN.planeXMin,
-      ATTACK_RUN.planeXMax,
-    );
-    this.planeAlt = Phaser.Math.Clamp(
-      this.planeAlt - my * ATTACK_RUN.planeAltSpeed * dt,
-      ATTACK_RUN.altitudeMin,
-      ATTACK_RUN.altitudeMax,
-    );
+    // Fly-in after takeoff: glide in from off-screen left, climbing to cruise height.
+    if (this.entryT < ATTACK_RUN.entryTime) {
+      this.entryT = Math.min(ATTACK_RUN.entryTime, this.entryT + dt);
+      const e = 1 - Math.pow(1 - this.entryT / ATTACK_RUN.entryTime, 3);
+      this.planeX = Phaser.Math.Linear(ATTACK_RUN.entryStartX, ATTACK_RUN.planeXMin + 100, e);
+      this.planeAlt = Phaser.Math.Linear(ATTACK_RUN.entryStartAlt, ATTACK_RUN.altitudeMax * 0.4, e);
+      mx = 0; my = 0;
+    } else {
+      // Move plane.
+      this.planeX = Phaser.Math.Clamp(
+        this.planeX + mx * ATTACK_RUN.planeXSpeed * dt,
+        ATTACK_RUN.planeXMin,
+        ATTACK_RUN.planeXMax,
+      );
+      this.planeAlt = Phaser.Math.Clamp(
+        this.planeAlt - my * ATTACK_RUN.planeAltSpeed * dt,
+        ATTACK_RUN.altitudeMin,
+        ATTACK_RUN.altitudeMax,
+      );
+    }
     this.thrusting = Math.abs(mx) > 0.05 || Math.abs(my) > 0.05;
 
     // Contextual hint after 5s without movement.
@@ -511,13 +470,18 @@ export class AttackRunScene extends Phaser.Scene {
     }
 
     // Player fire.
-    if (fireJust && this.projectiles.filter(p => !p.fromEnemy && p.alive).length < 4) {
-      this.projectiles.push({
-        x: this.planeX + PLANE_HIT_W,
-        y: planeScreenY,
-        vx: ATTACK_RUN.bulletSpeed, vy: 0,
-        alive: true, fromEnemy: false, kind: 'bullet',
-      });
+    const twin = progress.loadout.gun === 'twin';
+    const maxRounds = twin ? LOADOUT.twinMaxInAir : LOADOUT.cannonMaxInAir;
+    if (fireJust && this.projectiles.filter(p => !p.fromEnemy && p.alive).length < maxRounds) {
+      const spreads = twin ? [-LOADOUT.twinSpreadVy, LOADOUT.twinSpreadVy] : [0];
+      for (const vy of spreads) {
+        this.projectiles.push({
+          x: this.planeX + PLANE_HIT_W,
+          y: planeScreenY + Math.sign(vy) * LOADOUT.twinOffsetY,
+          vx: ATTACK_RUN.bulletSpeed, vy,
+          alive: true, fromEnemy: false, kind: 'bullet',
+        });
+      }
     }
 
     // Bomb drop.
@@ -528,7 +492,7 @@ export class AttackRunScene extends Phaser.Scene {
       this.bombs.filter(b => b.alive).length < ATTACK_RUN.bombMaxInAir
     ) {
       this.dropBomb();
-      this.bombReloadTimer = ATTACK_RUN.bombReloadTime;
+      this.bombReloadTimer = ATTACK_RUN.bombReloadTime + (progress.loadout.bomb === 'cluster' ? LOADOUT.clusterReloadAdd : 0);
     }
 
     // Update bombs.
@@ -1167,13 +1131,18 @@ export class AttackRunScene extends Phaser.Scene {
     t.ellipse(pal.helmet, 0, -12.3, 3.1, 2);
   }
 
+  /** Ground blast radius of the equipped bomb, px. */
+  private bombRadius(): number {
+    return ATTACK_RUN.bombBlastRadius * (progress.loadout.bomb === 'cluster' ? LOADOUT.clusterBlastMult : 1);
+  }
+
   /** Interceptor nose pitch from its climb rate (positive = nose up), radians. */
   private interceptorPitch(ic: Interceptor): number {
     return Phaser.Math.Clamp(Math.atan2(-ic.vy, Math.abs(ic.vx)), -ATTACK_RUN.interceptorMaxPitch, ATTACK_RUN.interceptorMaxPitch);
   }
 
   private drawSidePlane(sy: number, time: number): void {
-    drawJet(this.planeGfx, this.planeX, sy, PLAYER_JET, { facing: 1, thrust: this.thrusting ? 1 : 0.15, time });
+    drawJet(this.planeGfx, this.planeX, sy, playerJet(), { facing: 1, thrust: this.thrusting ? 1 : 0.15, time });
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -1196,11 +1165,19 @@ export class AttackRunScene extends Phaser.Scene {
     // Big ground blast: fireball, shockwave, dirt thrown up, crater scorch.
     this.fx.explosion(landWorldX, groundY - 10, 85, 16, true, true);
     this.fx.wreck(landWorldX, 'scorch', 60, 0);
+    if (progress.loadout.bomb === 'cluster') {
+      // Bomblets popping across the wider blast area.
+      const r = this.bombRadius();
+      for (const f of [-0.8, -0.4, 0.4, 0.8]) {
+        const wx = landWorldX + f * r;
+        this.fx.explosion(wx, this.groundYAtWorldX(wx) - 6, 40, 6, false, true);
+      }
+    }
     playExplosion(90);
 
     for (const enemy of this.activeEnemies) {
       if (!enemy.alive) continue;
-      if (Math.abs(enemy.worldX - landWorldX) <= ATTACK_RUN.bombBlastRadius) {
+      if (Math.abs(enemy.worldX - landWorldX) <= this.bombRadius()) {
         this.killGroundEnemy(enemy, false);
         const pts = enemy.type === 'sam' ? SCORE.bombSam : SCORE.tank;
         missionState.addScore(pts);
@@ -1453,28 +1430,6 @@ export class AttackRunScene extends Phaser.Scene {
   private spawnExplosion(worldX: number, screenY: number, size: number): void {
     this.fx.explosion(worldX, screenY, size, 8, false);
     playExplosion(size);
-  }
-
-  private renderPreRun(time: number): void {
-    this.preRunGfx.clear();
-    // Dark overlay.
-    this.preRunGfx.fillStyle(0x000000, 0.78);
-    this.preRunGfx.fillRect(0, 0, W, H);
-    // Countdown bar.
-    const prog  = Math.min(this.preRunTimer / 4.0, 1);
-    const BAR_W = 320; const BAR_H = 8;
-    const bx = W / 2 - BAR_W / 2;
-    const by = H / 2 + 100;
-    this.preRunGfx.fillStyle(0x223344, 1);
-    this.preRunGfx.fillRect(bx, by, BAR_W, BAR_H);
-    this.preRunGfx.fillStyle(0x44aaff, 1);
-    this.preRunGfx.fillRect(bx, by, BAR_W * prog, BAR_H);
-    // Flashing prompt.
-    if (Math.sin(time * 0.006) > 0) {
-      this.preRunPromptText.setAlpha(1);
-    } else {
-      this.preRunPromptText.setAlpha(0.4);
-    }
   }
 
   shutdown(): void {

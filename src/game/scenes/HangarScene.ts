@@ -11,7 +11,7 @@ import { HANGAR } from '../../state/tuning';
 import { showStageIntro } from '../../state/stageIntros';
 import { createRng, type Rng } from '../../state/rng';
 import { getBiome } from '../theme/biomes';
-import { PLAYER_JET } from '../theme/factions';
+import { playerJet } from '../theme/loadoutTheme';
 import { drawJetTopDown } from '../models/Vehicles';
 import { drawHangarStatic, HangarCrew } from '../hangar/HangarDecor';
 import { TakeoffCutscene } from '../hangar/TakeoffCutscene';
@@ -528,7 +528,7 @@ export class HangarScene extends Phaser.Scene {
       this.flameGfx.lineStyle(2, 0x44ff88, 0.7); this.flameGfx.strokeCircle(0, 0, 50);
     }
     this.planeGfx.clear();
-    drawJetTopDown(this.planeGfx, 0, 0, PLAYER_JET, { thrust: thrusting ? 1 : 0, time });
+    drawJetTopDown(this.planeGfx, 0, 0, playerJet(), { thrust: thrusting ? 1 : 0, time });
   }
 
   private drawDoorExtras(): void {

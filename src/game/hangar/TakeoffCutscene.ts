@@ -3,7 +3,7 @@
 // off and climbs away while the camera follows. Purely visual; ends after HANGAR.takeoffTime.
 import Phaser from 'phaser';
 import type { Biome } from '../theme/biomes';
-import { PLAYER_JET } from '../theme/factions';
+import { playerJet } from '../theme/loadoutTheme';
 import { drawJet } from '../models/Vehicles';
 import { Backdrop, hash01 } from '../effects/Backdrop';
 import { HANGAR } from '../../state/tuning';
@@ -77,7 +77,7 @@ export class TakeoffCutscene {
         g.fillEllipse(jx - 60 - k * 34, GROUND_Y - 4 - k * 3, 50 + k * 26, 12 + k * 5);
       }
     }
-    drawJet(g, jx, jy, PLAYER_JET, { facing: 1, rot: -pitch, thrust: 1, time, scale: k });
+    drawJet(g, jx, jy, playerJet(), { facing: 1, rot: -pitch, thrust: 1, time, scale: k });
 
     // Fade in from the top-down hangar, fade out into the attack run.
     this.fade.clear();
