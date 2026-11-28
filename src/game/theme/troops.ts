@@ -43,3 +43,41 @@ export const TROOPS: Record<LevelId, Troops> = {
     red:  kit(0x9aa0aa, 0x6a707a, null, 0x3a2a2a, 'spacesuit', 0x7a808a, RED),
   },
 };
+
+/** A soldier's own look: the side's kit with small personal differences. */
+export interface SoldierLook { pal: SoldierPalette; scale: number; pack: boolean }
+
+function shade(c: number, f: number): number {
+  const ch = (s: number) => Math.max(0, Math.min(255, Math.round(((c >> s) & 0xff) * f)));
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
+function hash(n: number): number {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Same uniform and side, but each soldier differs a little: skin, a lighter or darker
+ *  shade of kit, sometimes a soft hat instead of a helmet, height, with or without a pack.
+ *  Deterministic from `seed`, so a soldier keeps their look. */
+export function soldierLook(base: SoldierPalette, seed: number): SoldierLook {
+  const r = (k: number) => hash(seed * 13.7 + k);
+  const suit = base.headgear === 'spacesuit';
+  const f = 0.9 + r(1) * 0.2;
+  let headgear = base.headgear;
+  if (headgear === 'helmet' && r(2) < 0.22) headgear = 'boonie';
+  else if (headgear === 'boonie' && r(2) < 0.25) headgear = 'helmet';
+  return {
+    pal: {
+      ...base,
+      uniform: shade(base.uniform, f),
+      dark: shade(base.dark, 0.92 + r(3) * 0.16),
+      helmet: shade(base.helmet, 0.88 + r(4) * 0.24),
+      gear: shade(base.gear, 0.9 + r(5) * 0.2),
+      headgear,
+      skin: suit ? base.skin : SKIN[Math.floor(r(6) * SKIN.length)],
+    },
+    scale: 0.93 + r(7) * 0.13,
+    pack: suit || r(8) < 0.7,
+  };
+}
