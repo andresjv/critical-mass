@@ -47,13 +47,15 @@ export interface SoldierPose {
   pack: boolean;
   /** Repaint the gun (enemy guns are black); null = the gun's own colours. */
   gunTint: { body: number; accent: number } | null;
+  /** Body armor drawn over the torso: 0 none, 1 light vest, 2 heavy armor. */
+  armor: 0 | 1 | 2;
 }
 
 export function basePose(gun: GunId, aim: number, time: number): SoldierPose {
   return {
     gun, aim, walk: 0, move: 0, crouch: 0, air: null, recoil: 0, flinch: 0, land: 0, time,
     throwT: null, reload: null, relaxed: false, dead: null, deadDir: -1, alpha: 1, flash: false,
-    slope: 0, pack: true, gunTint: null,
+    slope: 0, pack: true, gunTint: null, armor: 0,
   };
 }
 
@@ -150,6 +152,37 @@ function solve(face: 1 | -1, p: SoldierPose): Solved {
   return { hip, shoulder, head, lean, legs, gunAt, gunAng, rearHand, frontHand };
 }
 
+/** Plate carrier over the torso; heavy armor adds shoulder pads and a collar. */
+export function drawArmor(t: Xform, pal: SoldierPalette, level: 1 | 2, al: number): void {
+  t.rect(pal.dark, -2.8, -6.4, 5.6, 4.6, al);
+  t.rect(pal.gear, -2.4, -6.0, 4.8, 3.8, al);
+  t.rect(pal.dark, -1.6, -4.6, 1.2, 1.4, al); t.rect(pal.dark, 0.4, -4.6, 1.2, 1.4, al); // pouches
+  if (level === 2) {
+    t.rect(pal.dark, -3.0, -7.2, 6.0, 1.2, al);   // collar
+    t.ellipse(pal.gear, 1.6, -6.4, 1.5, 1.0, al); // shoulder pad
+    t.rect(pal.dark, -2.8, -1.8, 5.6, 1.0, al);   // lower plate
+  }
+}
+
+export interface RigJoints {
+  head: P; neck: P; hip: P;
+  knee: [P, P]; foot: [P, P];
+  elbow: [P, P]; hand: [P, P];
+}
+
+/** World positions of every joint for this pose (ragdolls start from these). Index 0 = near
+ *  leg / front arm, 1 = far leg / rear arm. */
+export function rigJoints(x: number, y: number, face: 1 | -1, k: number, p: SoldierPose): RigJoints {
+  const s = solve(face, p);
+  const w = (q: P): P => ({ x: x + q.x * face * k, y: y + q.y * k });
+  const fE = ik(s.shoulder, s.frontHand, UPPER, FORE, 1), rE = ik(s.shoulder, s.rearHand, UPPER, FORE, 1);
+  return {
+    head: w(s.head), neck: w(s.shoulder), hip: w(s.hip),
+    knee: [w(s.legs[0].knee), w(s.legs[1].knee)], foot: [w(s.legs[0].foot), w(s.legs[1].foot)],
+    elbow: [w(fE), w(rE)], hand: [w(s.frontHand), w(s.rearHand)],
+  };
+}
+
 /** World position of the muzzle (for bullets, flashes and laser sights). */
 export function rigMuzzle(x: number, y: number, face: 1 | -1, k: number, p: SoldierPose): P {
   const s = solve(face, p);
@@ -200,6 +233,7 @@ export function drawSoldierRig(
   const torso = new Xform(g, hipW.x, hipW.y, rot + s.lean * face, face, k);
   if (p.pack) trooperPack(torso, pal, -4.2, -6.8, 2, 5, al);
   trooperTorso(torso, pal, -2.5, -7, 5, 7.2, al);
+  if (p.armor !== 0) drawArmor(torso, pal, p.armor, al);
 
   trooperHead(t, pal, s.head.x + 0.4, s.head.y, 2, al);
 

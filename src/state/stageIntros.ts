@@ -27,15 +27,15 @@ const INTRO_DATA: Record<StageKey, StageIntroData> = {
   },
   ground: {
     stageName: 'GROUND ASSAULT',
-    goal: 'Fight to the bunker and press the red button (T). You can take 5 hits',
-    keyboard: ['← → — move, ↓ — crouch (next to a crate = cover)', '↑ or Shift K X — jump', 'Space — shoot (in cover: pop up)', 'J — throw item, Q — switch item', 'Hold H — pick a gun (1–4 also swap)', 'T — press button'],
-    touch: ['Stick — move / crouch (next to a crate = cover)', 'JUMP — jump', 'SHOOT — fire (in cover: pop up)', 'ITEM — throw item, tap the item card to switch', 'Hold GUNS — pick a gun', 'Tap the pop-up — press'],
+    goal: 'Fight to the bunker and press the red button (T). You can take 5 hits (more with armor)',
+    keyboard: ['← → — move, ↓ — crouch (next to a crate = cover)', '↑ or Shift K X — jump', 'Space — shoot (in cover: pop up)', 'J — use tool (hold to aim a throw), Q — switch', 'Hold H — pick a gun (1–4 also swap)', 'T — press button'],
+    touch: ['Stick — move / crouch (next to a crate = cover)', 'JUMP — jump', 'SHOOT — fire (in cover: pop up)', 'Hold ITEM — aim a throw, release to throw; tap the item card to switch', 'Hold GUNS — pick a gun', 'Tap the pop-up — press'],
   },
   ground_endless: {
     stageName: 'ENDLESS · ON FOOT',
-    goal: 'Fight through to the hangar and board your plane (T). You can take 8 hits. Every enemy is 100 points; 1000 points = 5 credits',
-    keyboard: ['← → — move, ↓ — crouch (next to a crate = cover)', '↑ or Shift K X — jump', 'Space — shoot (in cover: pop up)', 'J — throw item, Q — switch item', 'Hold H — pick a gun (1–4 also swap)', 'T — board plane'],
-    touch: ['Stick — move / crouch (next to a crate = cover)', 'JUMP — jump', 'SHOOT — fire (in cover: pop up)', 'ITEM — throw item, tap the item card to switch', 'Hold GUNS — pick a gun', 'Tap the pop-up — board'],
+    goal: 'Fight through to the hangar and board your plane (T). You can take 8 hits (more with armor). Every enemy is 100 points; 1000 points = 5 credits',
+    keyboard: ['← → — move, ↓ — crouch (next to a crate = cover)', '↑ or Shift K X — jump', 'Space — shoot (in cover: pop up)', 'J — use tool (hold to aim a throw), Q — switch', 'Hold H — pick a gun (1–4 also swap)', 'T — board plane'],
+    touch: ['Stick — move / crouch (next to a crate = cover)', 'JUMP — jump', 'SHOOT — fire (in cover: pop up)', 'Hold ITEM — aim a throw, release to throw; tap the item card to switch', 'Hold GUNS — pick a gun', 'Tap the pop-up — board'],
   },
 };
 

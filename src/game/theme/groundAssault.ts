@@ -17,6 +17,10 @@ export const GROUND_FX = {
   medkit: 0xf2f2f2, medkitCross: 0xe0302a, healGlow: 0x5fd17a,
   foeGun: 0x0e0f11, foeGunAccent: 0x24262a, fuseLight: 0xff3a2a,
   alertMark: 0xffd23a, alertEdge: 0x1a1406,
+  // t21: grenade parts, aim arc, red landing / danger markers, smoke.
+  grenadeDark: 0x26301a, grenadeHi: 0x6a7a4a, grenadeLever: 0xb8b8a0, grenadePin: 0xd8d0a0, spark: 0xffd060,
+  aimDot: 0xffffff, dangerRing: 0xff2a1a, dangerFill: 0xff3a2a,
+  smokeCan: 0x7a8088, smokeBand: 0xe0e4e8, smoke: 0xd8dcdc, smokeDark: 0xa8aeb0,
 } as const;
 
 /** Rarity colours (store cards, weapon wheel, HUD). */

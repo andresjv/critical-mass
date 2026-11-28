@@ -412,6 +412,14 @@ export const GROUND = {
   /** Player hitbox half-width and height, px. */
   playerHalfW: 20,
   playerH: 74,
+  /** Sandbag wall height, px: low enough to shoot a standing soldier over (t21: was 52). */
+  sandbagHeight: 38,
+  /** Ragdolls: throw speed from a killing shot and from a grenade blast (px/s); bodies fade
+   *  out after this many seconds; grenade scorch marks last this long. */
+  shotThrow: 260,
+  blastThrow: 900,
+  bodyFadeAt: 4,
+  scorchSecs: 12,
   /** Camera keeps the player this far from the left edge (fraction of width). */
   cameraLead: 0.36,
   /** Weapon wheel: game speed while it is open. */
@@ -486,6 +494,17 @@ export const STORE = {
   weight: { common: 40, uncommon: 30, rare: 18, epic: 9, legendary: 3 },
   price:  { common: 80, uncommon: 150, rare: 260, epic: 450, legendary: 800 },
   startingCredits: 150,
+} as const;
+
+/** Soldier kit (Inventory): armor prices in store credits, extra hits, heavy armor slow-down,
+ *  side-tool slots, and how many of each tool a slot carries into a ground assault. */
+export const KIT = {
+  armorPrice: { none: 0, light: 120, heavy: 300 },
+  armorHits: { none: 0, light: 1, heavy: 2 },
+  /** Walk speed multiplier with heavy armor. */
+  heavySpeed: 0.9,
+  toolSlots: 3,
+  toolCount: { frag: 3, molotov: 2, medkit: 1, smoke: 2 },
 } as const;
 
 /** Endless mode scoring: every enemy is worth the same, and points turn into store credits. */
@@ -573,8 +592,6 @@ export const FOE_AI = {
 
 /** Side items (J). Speeds px/s, gravity px/s², radii px. */
 export const ITEMS = {
-  /** Uses carried into each ground assault (refilled on a new life). */
-  start: { frag: 3, molotov: 2, medkit: 1 },
   /** Delay between uses. */
   cooldown: 0.6,
   throwSpeed: 640,
@@ -592,6 +609,13 @@ export const ITEMS = {
   burnTick: 0.45,
   /** Medkit: health restored. */
   medkitHeal: 3,
+  /** Smoke grenade: cloud lasts this long and blocks enemy sight within this radius, px. */
+  smokeSecs: 7,
+  smokeRadius: 150,
+  smokeFuse: 0.8,
+  /** Hold J to aim: throw power grows from min to full over this many seconds. */
+  aimMinPower: 0.5,
+  aimFullTime: 0.8,
   /** Enemy grenadier throws: flight time to the target. */
   foeThrowTime: 1.05,
 } as const;

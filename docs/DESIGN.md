@@ -441,3 +441,30 @@ Finish by running tests and opening a Vercel preview.
   pad RB / touch ITEM uses. Refilled each life. J no longer fires (Space only).
 - **Start gun:** every ground assault starts with the Service Pistol in hand (`startingLoadout`); if it is not on the wheel it rides along in the first empty slot (or the last slot) for that run, without changing the saved loadout.
 - **Guns economy:** everyone owns only the Service Pistol (save format v2). Other guns come from the daily store (which never offers the pistol) or from a level medal, granted only when that medal is newly earned (`grantMedalGun`). Older saves keep only guns they bought.
+
+## t21 — Kit, ragdolls and better grenades
+- **Hit fix:** sandbag walls are `GROUND.sandbagHeight` 38 px (was 52), low enough to shoot a soldier
+  standing or crouching behind them. Auto-aim aims at the chest, or at the head if cover is in the way,
+  and skips targets fully behind cover. Bullets test their whole path each step (`segRect` in
+  `state/geom.ts`), and the player's first sweep starts at the body, so point-blank shots land. Foes
+  still only take cover behind tall crates (≥ 48 px). Crouched in cover, only what shows above the
+  cover can be hit.
+- **Grenades:** hold J (pad RB, touch ITEM) to aim: a dotted arc and a red landing marker, using the
+  same physics as the real throw. Holding longer throws farther (`ITEMS.aimMinPower` → full over
+  `aimFullTime`); release to throw. Live frags (yours and enemy ones) show a pulsing red ring with the
+  blast radius on the ground. New model (ribs, cap, lever, pin, spark, smoke trail). Blasts get a
+  shockwave, more debris and a scorch mark (`GROUND.scorchSecs`), and throw bodies.
+- **Smoke grenade** (new side tool): after `ITEMS.smokeFuse` a cloud (`smokeRadius`, `smokeSecs`);
+  enemies can't spot you or shoot through it.
+- **Ragdolls** (`models/Ragdoll.ts`): killed soldiers (and the player) go limp: a Verlet body (head,
+  neck, hip, knees, feet, elbows, hands) built from the rig's last pose (`rigJoints`), thrown by the
+  shot (`GROUND.shotThrow`) or blast (`blastThrow`), colliding with the ground and crates; bodies fade
+  after `GROUND.bodyFadeAt`.
+- **Guns:** more detailed side views (receiver, barrel, muzzle device, sights, magazine, stock, grip,
+  trigger guard, highlight edge). Muzzle lengths unchanged.
+- **Dogfights:** blue-side jets are grey fighters with a little blue (`ALLY_JET`).
+- **Inventory:** two rows. Plane: jet, gun, bomb (as before). Soldier: Guns (the 4 gun slots page),
+  Side tools (3 slots from frag / firebomb / medkit / smoke, counts `KIT.toolCount`), Character (4
+  looks: face and headgear, looks only; spacesuit on the Moon), Armor (none / light vest +1 hit /
+  heavy armor +2 hits and `KIT.heavySpeed` walk speed; bought once with credits, `KIT.armorPrice`).
+  Saved in `state/soldierKit.ts` (`cm_kit_v1`).
