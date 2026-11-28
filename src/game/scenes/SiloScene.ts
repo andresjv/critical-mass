@@ -10,7 +10,8 @@ import { TouchControls } from '../../input/TouchControls';
 import { missionState } from '../../state/MissionState';
 import { debugInfo } from '../../state/debugInfo';
 import { gameUi } from '../../state/gameUi';
-import { SILO, TUNING, SCORE } from '../../state/tuning';
+import { settings, haptic } from '../../state/settings';
+import { SILO, TUNING, SCORE, ATTACK_RUN } from '../../state/tuning';
 import { createRng } from '../../state/rng';
 import { hasSeenHowToPlay, markSeenHowToPlay } from '../../state/howToPlay';
 import { showStageIntro } from '../../state/stageIntros';
@@ -104,6 +105,10 @@ export class SiloScene extends Phaser.Scene {
   private pauseCtl!: PauseController;
   private visibilityHandler!: () => void;
 
+  /** Hits left on this plane and invulnerable seconds after a hit (same rules as the attack run). */
+  private hull: number = ATTACK_RUN.planeHits;
+  private invuln = 0;
+
   constructor() { super({ key: 'SiloScene' }); }
 
   init(data: Partial<SceneData>): void {
@@ -119,6 +124,9 @@ export class SiloScene extends Phaser.Scene {
     this.accumulator = 0;
     this.frameTime = 0;
     this.hintTimer = 0;
+    this.hull = ATTACK_RUN.planeHits;
+    this.invuln = 0;
+    gameUi.hull = this.hull; gameUi.hullMax = ATTACK_RUN.planeHits;
   }
 
   create(): void {
@@ -189,6 +197,7 @@ export class SiloScene extends Phaser.Scene {
   // ── Fixed-step simulation ────────────────────────────────────────────────
 
   private step(dt: number): void {
+    this.invuln = Math.max(0, this.invuln - dt);
     if (this.stageDone) {
       this.stageDoneTimer -= dt;
       if (this.stageDoneTimer <= 0) {
@@ -405,7 +414,18 @@ export class SiloScene extends Phaser.Scene {
     };
   }
 
+  /** A hit costs one hull point; the last one downs the plane. */
   private crashPlane(): void {
+    if (this.invuln > 0) return;
+    this.hull--;
+    gameUi.hull = this.hull;
+    if (this.hull > 0) {
+      this.invuln = ATTACK_RUN.hitInvuln;
+      missionState.hudCue = this.hull === 1 ? 'HULL CRITICAL!' : 'HIT! HULL DAMAGED';
+      if (!settings.reducedFlashing) this.cameras.main.shake(160, 0.005);
+      haptic(90);
+      return;
+    }
     missionState.losePlane();
     if (missionState.planes > 0) {
       this.scene.restart({ launchIndex: this.launchIndex });
@@ -626,6 +646,7 @@ export class SiloScene extends Phaser.Scene {
 
   shutdown(): void {
     gameUi.contextualHint = null;
+    gameUi.hullMax = 0; // hide the hull gauge outside flying stages
     gameUi.stageResult    = null;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.touchControls?.destroy();

@@ -128,7 +128,7 @@ export function AchievementsPage({ onBack }: { onBack: () => void }) {
         {earnedCount}/{ACHIEVEMENTS.length} EARNED · Beat a level to earn its medal
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14, justifyItems: 'center' }}>
-        {ACHIEVEMENTS.map((a, i) => {
+        {ACHIEVEMENTS.map(a => {
           const earned = progress.achieved.includes(a.level);
           const on = active === a.level;
           return (
@@ -142,7 +142,7 @@ export function AchievementsPage({ onBack }: { onBack: () => void }) {
               <div className="cm-coin-body">
                 {RIM_LAYERS.map(z => <div key={z} className="cm-coin-rim" style={{ transform: `translateZ(${z}px)` }} />)}
                 <div className="cm-coin-face front"><Diorama level={a.level} /></div>
-                <div className="cm-coin-face back"><Emblem n={i + 1} /></div>
+                <div className="cm-coin-face back"><Emblem /></div>
               </div>
               {!earned && <div className="cm-coin-lock"><LockIcon /></div>}
             </button>
@@ -212,13 +212,12 @@ const COIN_CSS = `
 @media (prefers-reduced-motion: reduce) { .cm-coin.spin .cm-coin-body { animation-duration: 6s; } }
 `;
 
-/** Back of each coin: a star medal with the level number. */
-function Emblem({ n }: { n: number }) {
+/** Back of each coin: a star medal. */
+function Emblem() {
   return (
     <svg viewBox="0 0 100 100" aria-hidden="true">
       <circle cx="50" cy="50" r="34" fill="none" stroke="#8a6418" strokeWidth="2.5" />
       <polygon points="50,22 57,41 77,41 61,53 67,73 50,61 33,73 39,53 23,41 43,41" fill="#fff3c4" stroke="#8a6418" strokeWidth="2" />
-      <text x="50" y="91" textAnchor="middle" fontFamily="JetBrains Mono, monospace" fontSize="10" fontWeight="700" fill="#6a4a10">LV {n}</text>
     </svg>
   );
 }

@@ -131,6 +131,18 @@ export const LIMITS = {
 // ─── Stage 2 — Hangar ────────────────────────────────────────────────────────
 
 export const HANGAR = {
+  /** Crew chatter: first line delay, rest between exchanges, pause before a reply (s). */
+  chatterFirstDelay: 1.5,
+  chatterGapMin: 3,
+  chatterGapMax: 6,
+  chatterReplyGap: 0.35,
+  /** Line length: base + per word, capped (s); bubble stays this long after the line. */
+  chatterLineBase: 0.5,
+  chatterPerWord: 0.27,
+  chatterLineMax: 3.6,
+  /** Spoken crew lines: volume (× SFX setting), and a safety cap before moving on (s). */
+  crewVoiceVolume: 0.45,
+  chatterLineTimeout: 8,
   /** Rotation speed, degrees/s. */
   rotateSpeed: 210,
   /** Thrust acceleration, px/s² (70 × WORLD_SCALE). */
@@ -149,6 +161,8 @@ export const HANGAR = {
   doorCooldown: 2.0,
   /** Length of the takeoff animation after flying out of the bay doors, seconds. */
   takeoffTime: 3.4,
+  /** Dissolve from the hangar into the takeoff, and from the takeoff into the attack run (ms). */
+  takeoffCrossfadeMs: 380,
 } as const;
 
 // ─── Stage 3 — Attack Run ────────────────────────────────────────────────────
@@ -217,8 +231,22 @@ export const ATTACK_RUN = {
   entryTime: 1.2,
   entryStartX: -80 * WORLD_SCALE,
   entryStartAlt: 30 * WORLD_SCALE,
-  /** Camera fade-in when the run starts (ms). */
-  entryFadeMs: 450,
+  /** Dissolve from the takeoff cutscene into the run (ms). */
+  entryFadeMs: 550,
+  /** Flight feel: how quickly speed follows the stick (1/s), max nose pitch (rad), how much
+   *  climb rate turns into pitch, and how quickly the nose follows (1/s). */
+  planeResponse: 5,
+  planeMaxPitch: 0.42,
+  planePitchGain: 1.1,
+  planePitchResponse: 7,
+  /** Gentle idle bob while cruising: amplitude (px) and speed (rad/s). */
+  planeBobAmp: 2.5,
+  planeBobSpeed: 2.2,
+  /** Hull: hits the plane can take (the last one downs it), and invulnerable seconds after a hit. */
+  planeHits: 3,
+  hitInvuln: 1.6,
+  /** Pushed back up after scraping the ground or an obstacle, px/s. */
+  hitBounce: 380,
   /** Seconds bomb travels to ground. */
   bombArcTime: 1.4,
   /** Max simultaneous bombs in flight. */

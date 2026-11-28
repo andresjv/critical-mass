@@ -19,13 +19,14 @@ import { pts } from '../effects/points';
 import { FX_PALETTE } from '../theme/coldFront';
 import { getBiome, type Biome } from '../theme/biomes';
 import { Backdrop, hash01 } from '../effects/Backdrop';
-import { drawJet, drawTank, TURRET_PIVOT_Y } from '../models/Vehicles';
+import { drawJet, drawTank, turretPivotY } from '../models/Vehicles';
 import { drawBuilding } from '../models/Buildings';
 import { TUTORIAL_HINTS, TUTORIAL_HINT_SECS, withControls } from '../../state/tutorial';
 import { drawSamSite, drawTower } from '../models/Structures';
 import { drawTracer, drawShell, drawMissile } from '../models/Weapons';
 import { BattleLayer } from '../effects/BattleLayer';
-import { SOLDIER_RED } from '../theme/factions';
+import { trooperHead, trooperTorso } from '../models/Trooper';
+import { fadeFromCapture, takeJetHandoff } from '../crossfade';
 import { playerJet } from '../theme/loadoutTheme';
 import { progress } from '../../state/progress';
 import { Xform } from '../models/shapes';
@@ -159,6 +160,17 @@ export class AttackRunScene extends Phaser.Scene {
   private planeState: PlaneState = 'flying';
   private stageTimer = ATTACK_RUN.duration;
   private thrusting  = false;
+  /** Flight feel: screen-x speed, climb rate (px/s) and nose pitch (rad, + = nose up). */
+  private planeVx = 0;
+  private planeVa = 0;
+  private planePitch = 0;
+  /** Hull hits left on this plane, invulnerable seconds after a hit, smoke timer. */
+  private hull: number = ATTACK_RUN.planeHits;
+  private invuln = 0;
+  private smokeT = 0;
+  /** Where the fly-in starts (screen px): the takeoff jet's last position, or off-screen left. */
+  private entryFrom: { x: number; y: number | null; pitch: number } = { x: 0, y: null, pitch: 0 };
+  private entryAlt0 = 0;
 
   // ── Active enemies / projectiles ─────────────────────────────────────────
   private projectiles: Projectile[] = [];
@@ -218,6 +230,13 @@ export class AttackRunScene extends Phaser.Scene {
     this.planeState  = 'flying';
     this.stageTimer  = ATTACK_RUN.duration;
     this.thrusting   = false;
+    this.planeVx = 0; this.planeVa = 0; this.planePitch = 0;
+    this.hull = ATTACK_RUN.planeHits; this.invuln = 0; this.smokeT = 0;
+    gameUi.hull = this.hull; gameUi.hullMax = ATTACK_RUN.planeHits;
+    const h = takeJetHandoff();
+    this.entryFrom = h ? { x: h.x, y: h.y, pitch: h.pitch } : { x: ATTACK_RUN.entryStartX, y: null, pitch: 0 };
+    this.planeX = this.entryFrom.x;
+    this.planePitch = this.entryFrom.pitch;
     this.projectiles = [];
     this.interceptors = [];
     this.heatSeeker  = null;
@@ -339,6 +358,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.battle = new BattleLayer(
       createRng(missionState.seed + this.launchIndex * 31 + 4242),
       this.biome.enemyJet,
+      this.biome.troops,
       { offset: () => this.backdrop.forestOffset(this.cameraX), floorY: (sx) => this.backdrop.forestY(sx, this.cameraX) },
     );
 
@@ -368,8 +388,8 @@ export class AttackRunScene extends Phaser.Scene {
     // Phaser doesn't call shutdown() by name; without this, engine/music kept running in the hangar.
     this.events.once('shutdown', this.shutdown, this);
 
-    // Seamless start: fade in from the takeoff cutscene, music straight away, no briefing card.
-    this.cameras.main.fadeIn(ATTACK_RUN.entryFadeMs, 0, 0, 0);
+    // Seamless start: dissolve from the takeoff cutscene (no black), music straight away.
+    fadeFromCapture(this, 1000, ATTACK_RUN.entryFadeMs);
     this.musicTrack.start();
   }
 
@@ -417,25 +437,52 @@ export class AttackRunScene extends Phaser.Scene {
 
     // Fly-in after takeoff: glide in from off-screen left, climbing to cruise height.
     if (this.entryT < ATTACK_RUN.entryTime) {
+      if (this.entryT === 0) {
+        // Start altitude: where the takeoff jet was on screen, else the default low entry.
+        const fy = this.entryFrom.y;
+        this.entryAlt0 = fy === null ? ATTACK_RUN.entryStartAlt
+          : this.groundYAtWorldX(this.cameraX + this.entryFrom.x) - fy;
+      }
+      const prevX = this.planeX, prevAlt = this.planeAlt;
       this.entryT = Math.min(ATTACK_RUN.entryTime, this.entryT + dt);
-      const e = 1 - Math.pow(1 - this.entryT / ATTACK_RUN.entryTime, 3);
-      this.planeX = Phaser.Math.Linear(ATTACK_RUN.entryStartX, ATTACK_RUN.planeXMin + 100, e);
-      this.planeAlt = Phaser.Math.Linear(ATTACK_RUN.entryStartAlt, ATTACK_RUN.altitudeMax * 0.4, e);
+      const u = this.entryT / ATTACK_RUN.entryTime;
+      const e = u * u * (3 - 2 * u); // smoothstep: eases out of the takeoff and into cruise
+      this.planeX = Phaser.Math.Linear(this.entryFrom.x, ATTACK_RUN.planeXMin + 100, e);
+      this.planeAlt = Phaser.Math.Linear(this.entryAlt0, ATTACK_RUN.altitudeMax * 0.4, e);
+      this.planeVx = (this.planeX - prevX) / dt;
+      this.planeVa = (this.planeAlt - prevAlt) / dt;
       mx = 0; my = 0;
     } else {
-      // Move plane.
-      this.planeX = Phaser.Math.Clamp(
-        this.planeX + mx * ATTACK_RUN.planeXSpeed * dt,
-        ATTACK_RUN.planeXMin,
-        ATTACK_RUN.planeXMax,
-      );
-      this.planeAlt = Phaser.Math.Clamp(
-        this.planeAlt - my * ATTACK_RUN.planeAltSpeed * dt,
-        ATTACK_RUN.altitudeMin,
-        ATTACK_RUN.altitudeMax,
-      );
+      // Move plane with momentum: speed eases toward what the stick asks for, so starts,
+      // stops and reversals are smooth instead of instant.
+      const k = 1 - Math.exp(-ATTACK_RUN.planeResponse * dt);
+      this.planeVx += (mx * ATTACK_RUN.planeXSpeed - this.planeVx) * k;
+      this.planeVa += (-my * ATTACK_RUN.planeAltSpeed - this.planeVa) * k;
+      this.planeX += this.planeVx * dt;
+      this.planeAlt += this.planeVa * dt;
+      if (this.planeX < ATTACK_RUN.planeXMin || this.planeX > ATTACK_RUN.planeXMax) {
+        this.planeX = Phaser.Math.Clamp(this.planeX, ATTACK_RUN.planeXMin, ATTACK_RUN.planeXMax); this.planeVx = 0;
+      }
+      if (this.planeAlt < ATTACK_RUN.altitudeMin || this.planeAlt > ATTACK_RUN.altitudeMax) {
+        this.planeAlt = Phaser.Math.Clamp(this.planeAlt, ATTACK_RUN.altitudeMin, ATTACK_RUN.altitudeMax); this.planeVa = 0;
+      }
     }
+    // Nose follows the flight path: pitch from climb rate over forward speed, eased.
+    const wantPitch = Phaser.Math.Clamp(
+      Math.atan2(this.planeVa, ATTACK_RUN.scrollSpeed + this.planeVx) * ATTACK_RUN.planePitchGain,
+      -ATTACK_RUN.planeMaxPitch, ATTACK_RUN.planeMaxPitch);
+    this.planePitch += (wantPitch - this.planePitch) * (1 - Math.exp(-ATTACK_RUN.planePitchResponse * dt));
     this.thrusting = Math.abs(mx) > 0.05 || Math.abs(my) > 0.05;
+    this.invuln = Math.max(0, this.invuln - dt);
+    // Damaged planes trail smoke (more of it with each hit).
+    if (this.hull < ATTACK_RUN.planeHits) {
+      this.smokeT -= dt;
+      if (this.smokeT <= 0) {
+        this.smokeT = this.hull <= 1 ? 0.05 : 0.11;
+        const gy0 = this.groundYAtWorldX(this.cameraX + this.planeX);
+        this.fx.smokePuff(this.cameraX + this.planeX - 34, gy0 - this.planeAlt, this.hull <= 1 ? 9 : 6);
+      }
+    }
 
     // Practice run (first play): timed step-by-step hints replace the idle hint.
     if (missionState.difficulty === 'tutorial' && this.launchIndex === 0) {
@@ -457,8 +504,7 @@ export class AttackRunScene extends Phaser.Scene {
     const planeScreenY = groundY - this.planeAlt;
     if (this.planeAlt <= ATTACK_RUN.altitudeMin + 2) {
       if (TUNING[missionState.difficulty].groundContactCrash) {
-        this.crashPlane('GROUND HIT');
-        return;
+        if (this.hitPlane('GROUND HIT')) return;
       }
     }
 
@@ -474,8 +520,7 @@ export class AttackRunScene extends Phaser.Scene {
         Math.abs(sx - this.planeX) < (PLANE_HIT_W + obsW / 2) &&
         planeScreenY + PLANE_HIT_H > obsTopY
       ) {
-        this.crashPlane('OBSTACLE');
-        return;
+        if (this.hitPlane('OBSTACLE')) return;
       }
     }
 
@@ -694,8 +739,7 @@ export class AttackRunScene extends Phaser.Scene {
         // Missile hits player?
         if (Math.abs(m.x - this.planeX) < PLANE_HIT_W && Math.abs(m.y - planeScreenY) < PLANE_HIT_H) {
           enemy.missile = null;
-          this.crashPlane('SAM HIT');
-          return;
+          if (this.hitPlane('SAM HIT')) return;
         }
       }
     }
@@ -726,8 +770,7 @@ export class AttackRunScene extends Phaser.Scene {
       if (!proj.alive || !proj.fromEnemy) continue;
       if (Math.abs(proj.x - this.planeX) < PLANE_HIT_W && Math.abs(proj.y - planeScreenY) < PLANE_HIT_H) {
         proj.alive = false;
-        this.crashPlane('ENEMY FIRE');
-        return;
+        if (this.hitPlane('ENEMY FIRE')) return;
       }
     }
 
@@ -803,9 +846,8 @@ export class AttackRunScene extends Phaser.Scene {
       // Interceptor collides with player.
       if (Math.abs(ic.x - this.planeX) < PLANE_HIT_W + INTERC_W / 2 &&
           Math.abs(ic.y - planeScreenY) < PLANE_HIT_H + INTERC_H) {
-        ic.alive = false;
-        this.crashPlane('INTERCEPTOR COLLISION');
-        return;
+        this.killInterceptor(ic);
+        if (this.hitPlane('INTERCEPTOR COLLISION')) return;
       }
     }
 
@@ -841,8 +883,7 @@ export class AttackRunScene extends Phaser.Scene {
           if (Math.abs(hs.x - this.planeX) < PLANE_HIT_W + HEATSEEK_W / 2 &&
               Math.abs(hs.lockedY - planeScreenY) < PLANE_HIT_H + HEATSEEK_H) {
             this.heatSeeker = null;
-            this.crashPlane('HEAT-SEEKER HIT');
-            return;
+            if (this.hitPlane('HEAT-SEEKER HIT')) return;
           }
         }
         if (hs.x > this.planeX + PLANE_HIT_W + 20) {
@@ -1057,7 +1098,10 @@ export class AttackRunScene extends Phaser.Scene {
   /** Hatch position of a tank's gunner (screen space), following the hull tilt. */
   private gunnerPos(enemy: GroundEnemy): { x: number; y: number; tilt: number } {
     const p = this.tankPivot(enemy), tilt = this.slopeAt(enemy.worldX);
-    const lx = -9, ly = -9; // behind and above the turret pivot
+    // Behind the gun mount: in the tank's hatch, standing in the humvee's roof ring, or in the
+    // swamp truck's roof hatch.
+    const kind = this.biome.vehicle.kind;
+    const [lx, ly] = kind === 'humvee' ? [-7, 2] : kind === 'hauler' ? [-13, 3] : [-9, -9];
     return { x: p.x + lx * Math.cos(tilt) - ly * Math.sin(tilt), y: p.y + lx * Math.sin(tilt) + ly * Math.cos(tilt), tilt };
   }
 
@@ -1090,11 +1134,11 @@ export class AttackRunScene extends Phaser.Scene {
   /** Red gunner standing in the hatch with a pintle machine gun; slumps when hit. */
   private drawGunner(enemy: GroundEnemy, gn: Gunner): void {
     const { x, y, tilt } = this.gunnerPos(enemy);
-    const g = this.enemyGfx, pal = SOLDIER_RED;
+    const g = this.enemyGfx, pal = this.biome.troops.red;
     if (!gn.alive) {
       // Slumped forward over the hatch rim, arm hanging down.
       const t = new Xform(g, x, y, tilt + Math.min(1, gn.deadT / 0.5) * 1.1, 1, 1.3);
-      t.rect(pal.uniform, -3, -8, 6, 8); t.circle(pal.helmet, 1, -10, 3);
+      trooperTorso(t, pal, -3, -8, 6, 8); trooperHead(t, pal, 1, -10.5, 2.3);
       t.line(pal.uniform, 2, 2, -6, 5, 0);
       return;
     }
@@ -1105,10 +1149,9 @@ export class AttackRunScene extends Phaser.Scene {
     t.line(0x1a1a1a, 2.4, 0, -5, c * 12, -5 + s * 12);
     if (gn.flash > 0) t.circle(0xfff2a8, c * 13, -5 + s * 13, 2.4);
     // Torso, arms on the gun, head.
-    t.rect(pal.uniform, -3, -9, 6, 9);
+    trooperTorso(t, pal, -3, -9, 6, 9);
     t.line(pal.uniform, 2, 0, -7, c * 5, -5 + s * 5);
-    t.circle(pal.skin, 0, -11, 2.3);
-    t.ellipse(pal.helmet, 0, -12.3, 3.1, 2);
+    trooperHead(t, pal, 0, -11.3, 2.3);
   }
 
   /** Ground blast radius of the equipped bomb, px. */
@@ -1122,7 +1165,13 @@ export class AttackRunScene extends Phaser.Scene {
   }
 
   private drawSidePlane(sy: number, time: number): void {
-    drawJet(this.planeGfx, this.planeX, sy, playerJet(), { facing: 1, thrust: this.thrusting ? 1 : 0.15, time });
+    // Blink while invulnerable after a hit.
+    if (this.invuln > 0 && Math.floor(time / 90) % 2 === 0) return;
+    // Gentle bob while cruising so it floats like the other aircraft.
+    const bob = Math.sin(time * 0.001 * ATTACK_RUN.planeBobSpeed) * ATTACK_RUN.planeBobAmp;
+    drawJet(this.planeGfx, this.planeX, sy + bob, playerJet(), {
+      facing: 1, rot: -this.planePitch, thrust: this.thrusting ? 1 : 0.25, time,
+    });
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -1328,6 +1377,28 @@ export class AttackRunScene extends Phaser.Scene {
 
   // ── Events ────────────────────────────────────────────────────────────────
 
+  /**
+   * The plane takes a hit. Each plane survives ATTACK_RUN.planeHits - 1 hits (with a short
+   * invulnerable window after each); the last one downs it.
+   */
+  /** Returns true if the plane went down. */
+  private hitPlane(reason: string): boolean {
+    if (this.planeState !== 'flying' || this.invuln > 0) return false;
+    this.hull--;
+    gameUi.hull = this.hull;
+    if (this.hull <= 0) { this.crashPlane(reason); return true; }
+    this.invuln = ATTACK_RUN.hitInvuln;
+    const pwx = this.cameraX + this.planeX;
+    this.fx.explosion(pwx, this.groundYAtWorldX(pwx) - this.planeAlt, 26, 6, false);
+    playExplosion(30);
+    // Scraping the ground or a building knocks the plane back up.
+    if (reason === 'GROUND HIT' || reason === 'OBSTACLE') this.planeVa = ATTACK_RUN.hitBounce;
+    missionState.hudCue = this.hull === 1 ? 'HULL CRITICAL!' : 'HIT! HULL DAMAGED';
+    if (!settings.reducedFlashing) this.cameras.main.shake(180, 0.006);
+    haptic(90);
+    return false;
+  }
+
   private crashPlane(reason: string): void {
     if (this.planeState !== 'flying') return;
     this.planeState = 'crashed';
@@ -1392,7 +1463,8 @@ export class AttackRunScene extends Phaser.Scene {
     // Turret pivot follows the hull tilt on slopes.
     const tilt = this.slopeAt(enemy.worldX);
     const sx = enemy.worldX - this.cameraX, gy = this.groundYAtWorldX(enemy.worldX);
-    return { x: sx - Math.sin(tilt) * TURRET_PIVOT_Y, y: gy + Math.cos(tilt) * TURRET_PIVOT_Y };
+    const py = turretPivotY(this.biome.vehicle.kind);
+    return { x: sx - Math.sin(tilt) * py, y: gy + Math.cos(tilt) * py };
   }
 
   /** Ground slope angle (radians) under a vehicle's footprint. */
@@ -1409,6 +1481,7 @@ export class AttackRunScene extends Phaser.Scene {
 
   shutdown(): void {
     gameUi.contextualHint = null;
+    gameUi.hullMax = 0; // hide the hull gauge outside flying stages
     gameUi.stageResult    = null;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.touchControls?.destroy();

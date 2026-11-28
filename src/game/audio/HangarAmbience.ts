@@ -1,27 +1,42 @@
-// HangarAmbience — distant crew chatter over a low room hum.
-// Each "voice" is a sawtooth through two vowel-formant bandpass filters, gated into
-// syllables with phrase pauses, then muffled with a lowpass. Routed on the music bus so
-// it quiets on pause along with the music. (Math.random here only shapes sound texture.)
+// HangarAmbience — room hum, a faint distant murmur, and the crew's spoken lines.
+// Speech is synthesised to sound like real (unintelligible) talking rather than beeps:
+// words of 1–3 syllables with consonant onsets (fricative hiss, plosive clicks), vowels shaped
+// by three formant filters that glide between vowels, a sentence pitch contour that drifts down
+// and rises at the end of a question, stressed syllables, and short pauses between words.
+// 'radio' voices (Moon) are band-limited, slightly distorted and wrapped in squelch clicks.
+// Routed on the music bus so it quiets on pause with the music.
+// (Math.random here only shapes sound texture, never game logic.)
 
 import { getAudioCtx, getBus } from './audioCtx';
 
-const VOICES   = 3;
-const INTERVAL = 100;  // scheduler tick, ms
-const AHEAD    = 0.3;  // schedule this far ahead, s
-const FORMANTS: [number, number][] = [[700, 1200], [400, 2000], [300, 900], [500, 1700], [600, 1000]];
-const PITCHES  = [105, 130, 175];
+interface VoiceSpec { f0: number; formant: number }
+/** A mix of lower and higher voices; crew index picks one. */
+const VOICES: VoiceSpec[] = [
+  { f0: 112, formant: 1 }, { f0: 196, formant: 1.17 }, { f0: 98, formant: 0.95 },
+  { f0: 132, formant: 1.03 }, { f0: 214, formant: 1.2 }, { f0: 120, formant: 0.98 },
+];
+/** Vowel formants F1, F2, F3 (Hz, adult male reference). */
+const VOWELS: [number, number, number][] = [
+  [730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410],
+  [300, 870, 2240], [500, 1500, 2500], [660, 1720, 2410],
+];
+const MURMUR_EVERY = [2.5, 6];
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
+const pick = <T,>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
 
 export class HangarAmbience {
-  private timer: ReturnType<typeof setInterval> | null = null;
   private out: GainNode | null = null;
   private room: AudioBufferSourceNode | null = null;
-  private next: number[] = [];
+  private noise: AudioBuffer | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private nextMurmur = 0;
+
+  constructor(private readonly radio = false) {}
 
   start(): void {
     if (this.timer !== null) return;
-    this.timer = setInterval(() => this.tick(), INTERVAL);
+    this.timer = setInterval(() => this.tick(), 200);
   }
 
   stop(): void {
@@ -32,7 +47,23 @@ export class HangarAmbience {
       const out = this.out, room = this.room;
       setTimeout(() => { try { room?.stop(); } catch { /* stopped */ } out.disconnect(); }, 800);
     }
-    this.out = null; this.room = null; this.next = [];
+    this.out = null; this.room = null;
+  }
+
+  /** Suit-radio key click + squelch (Moon), played around each spoken line. */
+  squelch(release: boolean): void {
+    const ctx = getAudioCtx();
+    if (!ctx || !this.out) return;
+    if (release) this.burst(ctx, this.out, ctx.currentTime + 0.02, 'bandpass', 2000, 0.16, 0.09, 1.0);
+    else this.burst(ctx, this.out, ctx.currentTime + 0.02, 'bandpass', 2400, 0.12, 0.06, 1.2);
+  }
+
+  /** Fallback when the browser has no speech voices: babble lasting about `secs`. */
+  speak(who: number, secs: number, question: boolean): void {
+    const ctx = getAudioCtx();
+    if (!ctx || !this.out) return;
+    const v = VOICES[who % VOICES.length];
+    this.utterance(ctx, this.out, v, ctx.currentTime + 0.05, secs, question, this.radio, 0.55, 3800);
   }
 
   private tick(): void {
@@ -40,11 +71,11 @@ export class HangarAmbience {
     const bus = getBus('music');
     if (!ctx || !bus) return;
     if (!this.out) this.build(ctx, bus);
-    const out = this.out!;
-    for (let v = 0; v < VOICES; v++) {
-      while (this.next[v] < ctx.currentTime + AHEAD) {
-        this.next[v] = this.syllable(ctx, out, v, Math.max(this.next[v], ctx.currentTime + 0.02));
-      }
+    // Faint conversation somewhere else in the hangar, heavily muffled.
+    if (ctx.currentTime >= this.nextMurmur) {
+      const secs = rand(0.8, 2.2);
+      this.utterance(ctx, this.out!, pick(VOICES), ctx.currentTime + 0.05, secs, Math.random() < 0.25, this.radio, 0.12, 700);
+      this.nextMurmur = ctx.currentTime + secs + rand(MURMUR_EVERY[0], MURMUR_EVERY[1]);
     }
   }
 
@@ -53,8 +84,7 @@ export class HangarAmbience {
     this.out.gain.value = 0;
     this.out.gain.setTargetAtTime(1, ctx.currentTime, 0.4);
     this.out.connect(bus);
-
-    // Room hum: looped noise, heavily lowpassed.
+    // Room hum: looped brown noise, heavily lowpassed.
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
@@ -66,36 +96,109 @@ export class HangarAmbience {
     const rg = ctx.createGain(); rg.gain.value = 0.5;
     this.room.connect(lp); lp.connect(rg); rg.connect(this.out);
     this.room.start();
-
-    this.next = Array.from({ length: VOICES }, (_, i) => ctx.currentTime + 0.3 + i * rand(0.3, 0.9));
+    this.nextMurmur = ctx.currentTime + rand(1, 3);
   }
 
-  /** Schedules one syllable for voice v at time t; returns when the next one should start. */
-  private syllable(ctx: AudioContext, out: AudioNode, v: number, t: number): number {
-    const dur = rand(0.08, 0.22);
-    const f0  = PITCHES[v] * rand(0.92, 1.1);
-    const [f1, f2] = FORMANTS[Math.floor(Math.random() * FORMANTS.length)];
+  private white(ctx: AudioContext): AudioBuffer {
+    if (!this.noise) {
+      const n = Math.floor(ctx.sampleRate * 0.5);
+      this.noise = ctx.createBuffer(1, n, ctx.sampleRate);
+      const d = this.noise.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return this.noise;
+  }
 
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(f0, t);
-    osc.frequency.linearRampToValueAtTime(f0 * rand(0.9, 1.08), t + dur);
+  /** One spoken phrase from t lasting about `secs`. */
+  private utterance(
+    ctx: AudioContext, dest: AudioNode, v: VoiceSpec, t0: number, secs: number,
+    question: boolean, radio: boolean, level: number, bright: number,
+  ): void {
+    // Per-utterance output chain: brightness lowpass, optional radio colouring.
+    const out = ctx.createGain(); out.gain.value = level;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = bright;
+    out.connect(lp);
+    if (radio) {
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 420;
+      const bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 2600;
+      const shape = ctx.createWaveShaper();
+      const curve = new Float32Array(256);
+      for (let i = 0; i < 256; i++) { const x = (i / 255) * 2 - 1; curve[i] = Math.tanh(x * 2.2); }
+      shape.curve = curve;
+      lp.connect(hp); hp.connect(shape); shape.connect(bp); bp.connect(dest);
+      this.burst(ctx, dest, t0 - 0.04, 'bandpass', 2400, 0.12, 0.06, 1.2);          // key-up squelch
+      this.burst(ctx, dest, t0 + secs + 0.05, 'bandpass', 2000, 0.16, 0.09, 1.0);   // release squelch
+    } else {
+      lp.connect(dest);
+    }
 
-    const b1 = ctx.createBiquadFilter(); b1.type = 'bandpass'; b1.frequency.value = f1; b1.Q.value = 6;
-    const b2 = ctx.createBiquadFilter(); b2.type = 'bandpass'; b2.frequency.value = f2; b2.Q.value = 8;
-    const muffle = ctx.createBiquadFilter(); muffle.type = 'lowpass'; muffle.frequency.value = 1600;
-    const g = ctx.createGain();
-    const peak = rand(0.25, 0.45);
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(peak, t + 0.03);
-    g.gain.setValueAtTime(peak, t + dur - 0.04);
-    g.gain.linearRampToValueAtTime(0, t + dur);
+    // Voice source: one sawtooth for the whole phrase, pitch automated; formant filters glide.
+    const osc = ctx.createOscillator(); osc.type = 'sawtooth';
+    const amp = ctx.createGain(); amp.gain.value = 0;
+    const forms = [0, 1, 2].map(k => {
+      const b = ctx.createBiquadFilter(); b.type = 'bandpass'; b.Q.value = [7, 9, 10][k];
+      const g = ctx.createGain(); g.gain.value = [1, 0.7, 0.35][k];
+      amp.connect(b); b.connect(g); g.connect(out);
+      return b;
+    });
+    osc.connect(amp);
 
-    osc.connect(b1); osc.connect(b2); b1.connect(muffle); b2.connect(muffle);
-    muffle.connect(g); g.connect(out);
-    osc.start(t); osc.stop(t + dur + 0.02);
+    let t = t0;
+    const end = t0 + secs;
+    let vowel = pick(VOWELS);
+    const pitchAt = (p: number) => v.f0 * (1.12 - 0.22 * p);
+    osc.frequency.setValueAtTime(pitchAt(0), t);
+    for (const b of forms) b.frequency.setValueAtTime(1000, t);
 
-    // Mostly short gaps between syllables, sometimes a pause between phrases.
-    return t + dur + (Math.random() < 0.8 ? rand(0.03, 0.12) : rand(0.6, 1.8));
+    let wordLeft = Math.floor(rand(1, 4));
+    while (t < end - 0.08) {
+      const p = (t - t0) / secs;
+      const last = end - t < 0.32;
+      const stressed = Math.random() < 0.3;
+      const dur = rand(0.1, 0.19) * (stressed ? 1.25 : 1) * (last ? 1.3 : 1);
+
+      // Onset consonant.
+      const c = Math.random();
+      if (c < 0.22) this.burst(ctx, out, t, 'highpass', rand(4200, 6500), rand(0.05, 0.09), 0.09, 0.7);    // s / sh / f
+      else if (c < 0.5) this.burst(ctx, out, t, 'bandpass', rand(1500, 3800), 0.018, 0.16, 1.5);       // t / k / p
+      const vt = t + (c < 0.22 ? 0.05 : c < 0.5 ? 0.015 : 0);
+
+      // Vowel: glide formants to the new vowel, set pitch (stress lifts it), envelope in.
+      vowel = Math.random() < 0.8 ? pick(VOWELS) : vowel;
+      vowel.forEach((fr, k) => forms[k].frequency.linearRampToValueAtTime(fr * v.formant, vt + 0.04));
+      let f0 = pitchAt(p) * (stressed ? 1.12 : 1) * rand(0.97, 1.03);
+      osc.frequency.linearRampToValueAtTime(f0, vt + 0.03);
+      if (last) {
+        f0 = f0 * (question ? 1.35 : 0.8);
+        osc.frequency.linearRampToValueAtTime(f0, vt + dur);
+      }
+      const peak = stressed ? 0.42 : 0.3;
+      amp.gain.setValueAtTime(0.0001, vt);
+      amp.gain.linearRampToValueAtTime(peak, vt + 0.02);
+      amp.gain.linearRampToValueAtTime(peak * 0.7, vt + dur * 0.75);
+      amp.gain.linearRampToValueAtTime(0.0001, vt + dur);
+
+      // Occasional closing consonant.
+      if (Math.random() < 0.25) this.burst(ctx, out, vt + dur - 0.01, 'bandpass', rand(2000, 4500), 0.02, 0.1, 1.5);
+
+      t = vt + dur;
+      if (--wordLeft <= 0) {
+        wordLeft = Math.floor(rand(1, 4));
+        t += Math.random() < 0.12 ? rand(0.16, 0.28) : rand(0.03, 0.08);   // comma pause / word gap
+      }
+    }
+    osc.start(t0); osc.stop(Math.max(t, end) + 0.1);
+  }
+
+  /** Short filtered noise burst (consonants, radio squelch). */
+  private burst(ctx: AudioContext, out: AudioNode, t: number, type: BiquadFilterType, f: number, len: number, level: number, q: number): void {
+    const src = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = this.white(ctx);
+    fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(level, t + Math.min(0.01, len * 0.3));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    src.connect(fl); fl.connect(g); g.connect(out);
+    src.start(t, Math.random() * 0.3); src.stop(t + len + 0.02);
   }
 }

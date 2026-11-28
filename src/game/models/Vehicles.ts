@@ -22,6 +22,7 @@ export interface JetOpts {
  * Nose cone, bubble canopy, intake, swept wing, tail fin, stabilizer, nozzle, afterburner.
  */
 export function drawJet(g: Phaser.GameObjects.Graphics, x: number, y: number, pal: JetPalette, o: JetOpts): void {
+  if (pal.ufo) { drawUfo(g, x, y, pal, o); return; }
   const t = new Xform(g, x, y, o.rot ?? 0, o.facing, o.scale ?? 1);
   const time = o.time ?? 0;
   const thrust = o.thrust ?? 0;
@@ -97,10 +98,16 @@ export interface GroundVehicleOpts {
 
 /** Turret pivot in local coordinates (above the ground point). */
 export const TURRET_PIVOT_Y = -34;
+/** Gun pivot height per vehicle kind (the swamp truck is taller, the humvee a bit lower). */
+export function turretPivotY(kind: VehiclePalette['kind']): number {
+  return kind === 'hauler' ? -47 : kind === 'humvee' ? -35 : TURRET_PIVOT_Y;
+}
 
 /** Tank sitting on (x, gy). Local y is up-negative, origin at the ground under its centre. */
 export function drawTank(g: Phaser.GameObjects.Graphics, x: number, gy: number, pal: VehiclePalette, o: GroundVehicleOpts): void {
   if (pal.kind === 'rover') { drawRover(g, x, gy, pal, o); return; }
+  if (pal.kind === 'humvee') { drawHumvee(g, x, gy, pal, o); return; }
+  if (pal.kind === 'hauler') { drawHauler(g, x, gy, pal, o); return; }
   const t = new Xform(g, x, gy, o.tilt);
 
   // Tracks + road wheels.
@@ -169,6 +176,121 @@ function drawRover(g: Phaser.GameObjects.Graphics, x: number, gy: number, pal: V
   g.lineBetween(piv.x, piv.y, piv.x + c * len, piv.y + s * len);
   g.fillStyle(pal.marking, 1);
   g.fillCircle(piv.x + c * len, piv.y + s * len, 2.6); // emitter tip
+}
+
+/**
+ * Flying saucer, about the size of a jet: metal disc with a rim of chasing lights, a glass dome
+ * with a pilot silhouette, and a glowing underside. Tilts with `rot` (banking when diving/climbing).
+ */
+function drawUfo(g: Phaser.GameObjects.Graphics, x: number, y: number, pal: JetPalette, o: JetOpts): void {
+  // Saucers hover level-ish: only a gentle tilt toward the direction of travel.
+  const tilt = Math.max(-0.3, Math.min(0.3, (o.rot ?? 0) * 0.5));
+  const t = new Xform(g, x, y, tilt, o.facing, o.scale ?? 1);
+  const time = o.time ?? 0;
+  const thrust = o.thrust ?? 0;
+  // Underside glow / tractor shimmer.
+  const pulse = 0.5 + 0.5 * Math.sin(time * 0.012);
+  t.ellipse(pal.canopy, 0, 7, 20, 5, (0.18 + 0.2 * pulse) * (0.4 + thrust));
+  // Dome (behind the disc rim) with the pilot.
+  t.ellipse(pal.canopy, 2, -6, 13, 11, 0.75, Math.PI, Math.PI * 2);
+  t.ellipse(pal.dark, 2, -6, 4, 5, 0.85, Math.PI, Math.PI * 2);
+  t.circle(pal.dark, 2, -10, 2.6, 0.85);
+  t.ellipse(0xffffff, -3, -12, 4, 2, 0.45);
+  // Disc: lower hull, upper hull, rim.
+  t.ellipse(pal.dark, 0, 2, 38, 7);
+  t.ellipse(pal.body, 0, -1, 38, 6.5);
+  t.ellipse(pal.dark, 0, -4, 24, 3.5, 0.6);
+  t.line(pal.dark, 1, -37, 0.5, 37, 0.5, 0.8);
+  // Chasing rim lights.
+  for (let k = 0; k < 7; k++) {
+    const lx = -30 + k * 10;
+    const on = (Math.floor(time / 90) + k) % 3 === 0;
+    t.circle(on ? pal.marking : pal.markingCore, lx, 1.5, on ? 2.2 : 1.6, on ? 1 : 0.8);
+  }
+  // Bottom emitter.
+  t.circle(pal.canopy, 0, 7, 3.5, 0.6 + 0.4 * pulse);
+}
+
+/** Desert humvee: four big tyres, sloped bonnet, armoured roof ring with a heavy gun (the gunner is drawn by the scene). */
+function drawHumvee(g: Phaser.GameObjects.Graphics, x: number, gy: number, pal: VehiclePalette, o: GroundVehicleOpts): void {
+  const t = new Xform(g, x, gy, o.tilt);
+  // Tyres with turning hub spokes.
+  for (const wx of [-20, 20]) {
+    t.circle(pal.tread, wx, -8, 8.5);
+    t.circle(pal.wheel, wx, -8, 4.2);
+    const a = o.travel / 8.5;
+    t.line(pal.tread, 1.4, wx - Math.cos(a) * 3.6, -8 - Math.sin(a) * 3.6, wx + Math.cos(a) * 3.6, -8 + Math.sin(a) * 3.6);
+  }
+  // Body: low wide hull, bonnet sloping to the front grille, cab, wheel arches.
+  t.poly(pal.hull, [[-33, -10], [-33, -26], [-8, -27], [-4, -31], [14, -31], [18, -24], [33, -21], [34, -10]]);
+  t.poly(pal.dark, [[-33, -10], [34, -10], [34, -14], [-33, -14]]);
+  t.ellipse(pal.dark, -20, -11, 11, 6, 1, Math.PI, Math.PI * 2);
+  t.ellipse(pal.dark, 20, -11, 11, 6, 1, Math.PI, Math.PI * 2);
+  camo(t, pal, o.seed, -30, -28, 58, 14);
+  // Windscreen (armoured slit), door line, grille, spare jerrycan at the back.
+  t.poly(0x2a3238, [[0, -30], [12, -30], [16, -24.5], [2, -24.5]], 0.9);
+  t.line(pal.dark, 1, -6, -26, -6, -14, 0.8);
+  t.rect(pal.dark, 31, -20, 3, 7);
+  t.rect(pal.dark, -36, -24, 4, 9);
+  // Roof gun ring.
+  t.rect(pal.dark, -10, -34, 16, 3.5);
+  // Red marking on the door.
+  t.rect(pal.marking, -18, -22, 5, 3);
+  gunBarrel(g, t, pal, o, 3, 2.2);
+}
+
+/**
+ * Swamp armoured truck: a towering boxy armoured hull on three huge flotation tyres,
+ * with a cage-guarded cab, exhaust stacks, and a cannon on a roof mount.
+ */
+function drawHauler(g: Phaser.GameObjects.Graphics, x: number, gy: number, pal: VehiclePalette, o: GroundVehicleOpts): void {
+  const t = new Xform(g, x, gy, o.tilt);
+  // Huge tyres with chunky tread blocks.
+  for (const wx of [-24, 0, 24]) {
+    t.circle(pal.tread, wx, -11, 11.5);
+    const a = o.travel / 11.5;
+    for (let k = 0; k < 6; k++) {
+      const b = a + k * Math.PI / 3;
+      t.circle(pal.dark, wx + Math.cos(b) * 10, -11 + Math.sin(b) * 10, 2.2);
+    }
+    t.circle(pal.wheel, wx, -11, 5);
+    t.circle(pal.tread, wx, -11, 1.8);
+  }
+  // Mud splashed on the lower hull.
+  t.poly(pal.dark, [[-36, -18], [36, -18], [36, -24], [-36, -24]]);
+  // Tall armoured hull with a stepped cab at the front.
+  t.poly(pal.hull, [[-36, -22], [-36, -40], [8, -42], [12, -48], [26, -48], [34, -36], [36, -22]]);
+  camo(t, pal, o.seed, -32, -42, 60, 16);
+  // Armour plate seams and rivets.
+  t.line(pal.dark, 1, -14, -40, -14, -22, 0.7);
+  t.line(pal.dark, 1, 6, -42, 6, -22, 0.7);
+  for (let k = 0; k < 5; k++) t.circle(pal.dark, -30 + k * 12, -37, 1);
+  // Cab window behind a protective cage.
+  t.poly(0x2a3238, [[14, -46], [24, -46], [30, -38], [14, -38]], 0.9);
+  for (let k = 0; k < 4; k++) t.line(pal.dark, 1, 15 + k * 4, -46, 16 + k * 4.5, -38);
+  // Exhaust stacks with a puff of smoke.
+  t.rect(pal.dark, -32, -50, 3, 10); t.rect(pal.dark, -27, -48, 3, 8);
+  t.circle(0x8a8a80, -30, -54 - (o.travel % 20) * 0.2, 3, 0.35);
+  // Front bull bar and a winch.
+  t.rect(pal.dark, 35, -30, 3, 10);
+  t.circle(pal.dark, 37, -24, 2);
+  // Roof mount and red marking.
+  t.rect(pal.dark, -8, -48, 18, 4);
+  t.rect(pal.marking, -26, -33, 8, 4);
+  gunBarrel(g, t, pal, o, 5, 3.2);
+}
+
+/** Main gun from the turret pivot, aimed in screen space. */
+function gunBarrel(g: Phaser.GameObjects.Graphics, t: Xform, pal: VehiclePalette, o: GroundVehicleOpts, w: number, muzzle: number): void {
+  const piv = t.p(0, turretPivotY(pal.kind));
+  const len = o.barrelLen - o.recoil * o.recoilPx;
+  const c = Math.cos(o.aim), s = Math.sin(o.aim);
+  g.lineStyle(w + 2, pal.dark, 1);
+  g.lineBetween(piv.x, piv.y, piv.x + c * len, piv.y + s * len);
+  g.lineStyle(w, pal.hull, 1);
+  g.lineBetween(piv.x, piv.y, piv.x + c * (len - 1), piv.y + s * (len - 1));
+  g.fillStyle(pal.dark, 1);
+  g.fillCircle(piv.x + c * len, piv.y + s * len, muzzle);
 }
 
 /** Deterministic camo blotches inside a local box. */

@@ -10,8 +10,10 @@ import Phaser from 'phaser';
 import { BATTLE } from '../../state/tuning';
 import type { Rng } from '../../state/rng';
 import {
-  SOLDIER_BLUE, SOLDIER_RED, TRACER_BLUE, TRACER_RED, PLAYER_JET, type SoldierPalette, type JetPalette,
+  TRACER_BLUE, TRACER_RED, PLAYER_JET, type SoldierPalette, type JetPalette,
 } from '../theme/factions';
+import type { Troops } from '../theme/troops';
+import { trooperHead, trooperPack, trooperTorso } from '../models/Trooper';
 import { drawJet } from '../models/Vehicles';
 import { Xform } from '../models/shapes';
 import { FX_PALETTE } from '../theme/coldFront';
@@ -65,6 +67,8 @@ export class BattleLayer {
   constructor(
     private readonly rng: Rng,
     private readonly redJet: JetPalette,
+    /** Regional uniforms for both sides. */
+    private readonly troops: Troops,
     /** Layer offset (screen x + offset = layer x) and floor y for the current camera. */
     private readonly layer: { offset(): number; floorY(sx: number): number },
   ) {
@@ -259,7 +263,7 @@ export class BattleLayer {
   }
 
   private drawSoldier(g: Phaser.GameObjects.Graphics, s: Soldier, off: number): void {
-    const pal: SoldierPalette = s.side === 'blue' ? SOLDIER_BLUE : SOLDIER_RED;
+    const pal: SoldierPalette = s.side === 'blue' ? this.troops.blue : this.troops.red;
     const x = s.wx - off, fy = this.footY(s, off), h = this.height(s), k = h / 16;
     const face = s.side === 'blue' ? 1 : -1;
     if (!s.alive) {
@@ -267,7 +271,7 @@ export class BattleLayer {
       const tip = Math.min(1, s.deadT / 0.4) * (Math.PI / 2) * -face;
       const a = s.deadT > 9 ? Math.max(0, 1 - (s.deadT - 9) / 3) : 1;
       const t = new Xform(g, x, fy, tip, face, k);
-      t.rect(pal.dark, -1.5, -8, 3, 8, a); t.rect(pal.uniform, -2.5, -14, 5, 7, a); t.circle(pal.helmet, 0, -15.5, 2.6, a);
+      t.rect(pal.dark, -1.5, -8, 3, 8, a); trooperTorso(t, pal, -2.5, -14, 5, 7, a); trooperHead(t, pal, 0, -15.5, 2, a);
       return;
     }
     const walking = Math.abs(s.targetWx - s.wx) > 1.5;
@@ -277,16 +281,16 @@ export class BattleLayer {
     if (s.kneel) {
       t.line(pal.dark, 2.4, 0, -5, 3, -1); t.line(pal.dark, 2.4, 3, -1, 3, 0); // front leg
       t.line(pal.dark, 2.4, 0, -5, -4, 0);                                       // knee down
-      t.rect(pal.uniform, -2.5, -11, 5, 7);
+      trooperPack(t, pal, -4, -10.5, 2, 4.5);
+      trooperTorso(t, pal, -2.5, -11, 5, 7);
       this.arms(t, pal, -9, s, face);
-      t.circle(pal.skin, 0.5, -12.5, 2);
-      t.ellipse(pal.helmet, 0.3, -13.6, 2.8, 1.8);
+      trooperHead(t, pal, 0.5, -12.8, 2);
     } else {
       t.line(pal.dark, 2.4, 0, -7, sw, 0); t.line(pal.dark, 2.4, 0, -7, -sw, 0);
-      t.rect(pal.uniform, -2.5, -14, 5, 8);
+      trooperPack(t, pal, -4, -13.5, 2, 5);
+      trooperTorso(t, pal, -2.5, -14, 5, 8);
       this.arms(t, pal, -12, s, face);
-      t.circle(pal.skin, 0.5, -15.5, 2);
-      t.ellipse(pal.helmet, 0.3, -16.6, 2.8, 1.8);
+      trooperHead(t, pal, 0.5, -15.8, 2);
     }
     if (s.flash > 0) {
       const sh = s.kneel ? -9 : -12;
