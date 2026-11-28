@@ -1,12 +1,13 @@
 // Soldier kit — what the pilot wears and carries on foot, chosen in the Inventory: three side-tool
-// slots, a character look and armor. Guns live in armory.ts. Plain TypeScript (no Phaser);
+// slots and armor (plus the character, only the starter soldier for now). Guns live in armory.ts. Plain TypeScript (no Phaser);
 // saved to localStorage with every access guarded. Unit-tested in tests/soldierKit.test.ts.
 import { armory, spendCredits } from './armory';
 import { KIT } from './tuning';
 
 export type ToolId = 'frag' | 'molotov' | 'medkit' | 'smoke';
 export type ArmorId = 'none' | 'light' | 'heavy';
-export type CharacterId = 'rook' | 'vale' | 'mara' | 'dex';
+/** Only the starter soldier for now (more looks may come back later). */
+export type CharacterId = 'rook';
 
 export interface ToolDef { id: ToolId; name: string; desc: string }
 export const TOOLS: readonly ToolDef[] = [
@@ -24,9 +25,6 @@ export interface CharacterDef {
 }
 export const CHARACTERS: readonly CharacterDef[] = [
   { id: 'rook', name: 'Rook', desc: 'Steady, by the book. Steel helmet.',      skin: 0xd9a77c, headgear: 'helmet' },
-  { id: 'vale', name: 'Vale', desc: 'Jungle scout. Soft bush hat.',            skin: 0xb98a62, headgear: 'boonie' },
-  { id: 'mara', name: 'Mara', desc: 'Desert veteran. Wrapped head scarf.',     skin: 0x8a5a3a, headgear: 'shemagh' },
-  { id: 'dex',  name: 'Dex',  desc: 'Cold-weather specialist. Parka hood.',    skin: 0xe0b090, headgear: 'hood' },
 ];
 
 export interface ArmorDef { id: ArmorId; name: string; desc: string }

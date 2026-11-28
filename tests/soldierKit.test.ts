@@ -41,8 +41,9 @@ describe('soldier kit', () => {
     expect(armory.credits).toBe(0);
   });
 
-  it('character can be changed', () => {
-    setCharacter('mara');
-    expect(kit.character).toBe('mara');
+  it('only the starter character exists for now', () => {
+    expect(CHARACTERS.map(c => c.id)).toEqual(['rook']);
+    setCharacter('rook');
+    expect(kit.character).toBe('rook');
   });
 });

@@ -464,7 +464,7 @@ Finish by running tests and opening a Vercel preview.
   trigger guard, highlight edge). Muzzle lengths unchanged.
 - **Dogfights:** blue-side jets are grey fighters with a little blue (`ALLY_JET`).
 - **Inventory:** two rows. Plane: jet, gun, bomb (as before). Soldier: Guns (the 4 gun slots page),
-  Side tools (3 slots from frag / firebomb / medkit / smoke, counts `KIT.toolCount`), Character (4
-  looks: face and headgear, looks only; spacesuit on the Moon), Armor (none / light vest +1 hit /
+  Side tools (3 slots from frag / firebomb / medkit / smoke, counts `KIT.toolCount`), Armor (none / light vest +1 hit /
   heavy armor +2 hits and `KIT.heavySpeed` walk speed; bought once with credits, `KIT.armorPrice`).
-  Saved in `state/soldierKit.ts` (`cm_kit_v1`).
+  Saved in `state/soldierKit.ts` (`cm_kit_v1`). Characters: only the starter soldier (Rook) for now; the
+  extra looks and the Character page were removed at the user's request (may return later).

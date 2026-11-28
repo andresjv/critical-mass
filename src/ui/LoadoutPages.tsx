@@ -7,7 +7,7 @@ import { JET_SKINS } from '../game/theme/loadoutTheme';
 import { PLAYER_JET, type JetPalette } from '../game/theme/factions';
 import { ACCENT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
 import { armory, gunDef, SLOT_COUNT, type GunId } from '../state/armory';
-import { ArmorIcon, CharacterPortrait, kitSummary } from './KitPages';
+import { ArmorIcon, kitSummary } from './KitPages';
 import { ItemIcon } from './WeaponHud';
 
 const SLOTS: { slot: PartSlot; label: string }[] = [
@@ -20,7 +20,7 @@ const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 // ── Inventory: the plane's parts, then the soldier's kit ────────────────────
 
-export type KitSection = 'guns' | 'tools' | 'character' | 'armor';
+export type KitSection = 'guns' | 'tools' | 'armor';
 
 const invCard = {
   ...resetBtn, textAlign: 'left' as const, borderRadius: 10, padding: '10px 14px 12px',
@@ -67,7 +67,7 @@ export function InventoryPage({ onBack, onOpenSlot, onOpenKit }: {
         })}
       </div>
       <SectionLabel>SOLDIER</SectionLabel>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
         <button data-nav onClick={() => onOpenKit('guns')} className="cm-card" style={invCard}>
           <CardHead label="Guns" right={`${guns.length}/${SLOT_COUNT}`} />
           <div style={{ minHeight: 72, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
@@ -81,14 +81,6 @@ export function InventoryPage({ onBack, onOpenSlot, onOpenKit }: {
             {k.tools.map((t, i) => t
               ? <ItemIcon key={i} kind={t} size={40} />
               : <span key={i} style={{ width: 40, height: 40, borderRadius: 6, border: '2px dashed rgba(136,204,255,0.25)' }} />)}
-          </div>
-          <div style={{ fontSize: 16, color: ACCENT, letterSpacing: 2 }}>CHANGE ›</div>
-        </button>
-        <button data-nav onClick={() => onOpenKit('character')} className="cm-card" style={invCard}>
-          <CardHead label="Character" />
-          <div style={{ minHeight: 72, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CharacterPortrait c={k.character} size={64} />
-            <span style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{k.character.name}</span>
           </div>
           <div style={{ fontSize: 16, color: ACCENT, letterSpacing: 2 }}>CHANGE ›</div>
         </button>

@@ -11,10 +11,10 @@ import { ACCENT, FONT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
 import { AchievementsPage, InventoryPage, PartsPage } from './LoadoutPages';
 import { TutorialPage } from './TutorialPage';
 import { GunsPage, StorePage } from './ArmoryPages';
-import { ArmorPage, CharacterPage, ToolsPage } from './KitPages';
+import { ArmorPage, ToolsPage } from './KitPages';
 import { isTutorialDone, markTutorialDone } from '../state/tutorial';
 
-type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial' | 'guns' | 'store' | 'tools' | 'character' | 'armor';
+type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial' | 'guns' | 'store' | 'tools' | 'armor';
 
 
 const DIFFICULTIES: { id: Difficulty; label: string; note: string }[] = [
@@ -75,7 +75,7 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       } else if (e.key === 'Enter' || e.key === ' ') {
         if (i >= 0 && items[i].tagName === 'BUTTON') { e.preventDefault(); items[i].click(); }
       } else if (e.key === 'Escape' && page !== 'title') {
-        e.preventDefault(); setPage(page === 'parts' || page === 'tools' || page === 'character' || page === 'armor' ? 'inventory' : page === 'guns' ? gunsBack : page === 'store' ? 'guns' : page === 'tutorial' && replay ? 'settings' : 'title');
+        e.preventDefault(); setPage(page === 'parts' || page === 'tools' || page === 'armor' ? 'inventory' : page === 'guns' ? gunsBack : page === 'store' ? 'guns' : page === 'tutorial' && replay ? 'settings' : 'title');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -253,7 +253,6 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       {page === 'guns' && <GunsPage onBack={() => setPage(gunsBack)} onStore={() => setPage('store')} />}
 
       {page === 'tools' && <ToolsPage onBack={() => setPage('inventory')} />}
-      {page === 'character' && <CharacterPage onBack={() => setPage('inventory')} />}
       {page === 'armor' && <ArmorPage onBack={() => setPage('inventory')} />}
 
       {page === 'store' && <StorePage onBack={() => setPage('guns')} />}

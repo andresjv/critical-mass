@@ -60,7 +60,7 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
     lines: [
       'Beating a level earns its medal and unlocks a new jet, gun or bomb, plus a ground gun.',
       'Endless mode (in Select level) runs random biomes back to back: reach the hangar to fly again. Every enemy is 100 points and each 1000 points earns 5 credits for the daily store (Guns & store), new every day; rarer guns show up less often. On foot you start with only the Service Pistol; buy guns there or earn them with medals.',
-      'Inventory on the main menu has your plane parts and your soldier kit: guns, 3 side-tool slots, your character, and armor (light vest = 1 extra hit, heavy armor = 2 extra hits but a little slower; buy armor once with credits). {pause} pauses the game.',
+      'Inventory on the main menu has your plane parts and your soldier kit: guns, 3 side-tool slots and armor (light vest = 1 extra hit, heavy armor = 2 extra hits but a little slower; buy armor once with credits). {pause} pauses the game.',
     ],
   },
 ];

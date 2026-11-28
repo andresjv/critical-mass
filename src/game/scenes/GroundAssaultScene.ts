@@ -36,7 +36,7 @@ import { trooperHead, trooperTorso } from '../models/Trooper';
 import { drawGun } from '../models/Guns';
 import { basePose, drawSoldierRig, rigHand, rigHead, rigJoints, rigMuzzle, type SoldierPose } from '../models/SoldierRig';
 import { Ragdoll, type RagdollWorld } from '../models/Ragdoll';
-import { characterDef, kit, toolLoadout, toolDef } from '../../state/soldierKit';
+import { kit, toolLoadout, toolDef } from '../../state/soldierKit';
 import type { SoldierPalette } from '../theme/factions';
 import { MusicTrack } from '../audio/MusicTrack';
 import { playExplosion } from '../audio/ExplosionSound';
@@ -225,9 +225,8 @@ export class GroundAssaultScene extends Phaser.Scene {
 
   create(): void {
     this.biome = getBiome(missionState.level);
-    // The chosen character's face and headgear (everyone wears a pressure suit on the Moon).
-    const blue = this.biome.troops.blue, ch = characterDef();
-    this.pal = blue.headgear === 'spacesuit' ? blue : { ...blue, skin: ch.skin, headgear: ch.headgear };
+    // The player wears the region's kit (only the starter character for now).
+    this.pal = this.biome.troops.blue;
     this.rng = createRng(missionState.seed + this.launchIndex * 977 + 5150);
     this.buildLevel();
 
