@@ -55,7 +55,8 @@ export class MenuScene extends Phaser.Scene {
     const req = gameUi.menuRequest;
     if (req) {
       gameUi.menuRequest = null;
-      updateSettings({ lastLevel: req.level, lastDifficulty: req.difficulty });
+      // The practice run is a one-off: don't remember it as the player's difficulty.
+      if (req.difficulty !== 'tutorial') updateSettings({ lastLevel: req.level, lastDifficulty: req.difficulty });
       missionState.startMission({ theme: 'coldfront', level: req.level, difficulty: req.difficulty, seed: Date.now() });
       gameUi.screen = 'game';
       this.scene.start('MapScene', { launchIndex: 0 });

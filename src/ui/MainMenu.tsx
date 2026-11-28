@@ -9,8 +9,10 @@ import type { Difficulty } from '../state/tuning';
 import type { PartSlot } from '../state/progress';
 import { ACCENT, FONT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
 import { AchievementsPage, InventoryPage, PartsPage } from './LoadoutPages';
+import { TutorialPage } from './TutorialPage';
+import { isTutorialDone, markTutorialDone } from '../state/tutorial';
 
-type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements';
+type Page = 'title' | 'levels' | 'settings' | 'inventory' | 'parts' | 'achievements' | 'tutorial';
 
 
 const DIFFICULTIES: { id: Difficulty; label: string; note: string }[] = [
@@ -27,6 +29,8 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
   const [diff, setDiff]   = useState<Difficulty>(settings.lastDifficulty);
   const [prefs, setPrefs] = useState<Settings>({ ...settings });
   const [slot, setSlot]   = useState<PartSlot>('jet');
+  /** Tutorial opened again from Settings (no game starts afterwards). */
+  const [replay, setReplay] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Scenery behind the menu shows the chosen level, or the one being browsed.
@@ -67,12 +71,12 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
       } else if (e.key === 'Enter' || e.key === ' ') {
         if (i >= 0 && items[i].tagName === 'BUTTON') { e.preventDefault(); items[i].click(); }
       } else if (e.key === 'Escape' && page !== 'title') {
-        e.preventDefault(); setPage(page === 'parts' ? 'inventory' : 'title');
+        e.preventDefault(); setPage(page === 'parts' ? 'inventory' : page === 'tutorial' && replay ? 'settings' : 'title');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [show, page]);
+  }, [show, page, replay]);
 
   if (!show) return null;
 
@@ -80,7 +84,16 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
     updateSettings(patch);
     setPrefs({ ...settings });
   };
-  const play = () => { gameUi.menuRequest = { level, difficulty: diff }; };
+  // First Play ever: the tutorial, then an easier practice run.
+  const play = () => {
+    if (!isTutorialDone()) { setReplay(false); setPage('tutorial'); return; }
+    gameUi.menuRequest = { level, difficulty: diff };
+  };
+  const finishTutorial = (practice: boolean) => {
+    markTutorialDone();
+    if (replay) { setPage('settings'); return; }
+    gameUi.menuRequest = { level, difficulty: practice ? 'tutorial' : diff };
+  };
   const chooseLevel = (id: LevelId) => {
     setLevel(id);
     updateSettings({ lastLevel: id, lastDifficulty: diff });
@@ -193,8 +206,21 @@ export function MainMenu({ show, device }: { show: boolean; device: 'keyboard' |
             <Toggle label="Reduced flashing" note="No white explosion flashes or screen shake"
               value={prefs.reducedFlashing} onChange={v => setPref({ reducedFlashing: v })} />
           </div>
-          <MenuButton onClick={() => setPage('title')}>Done</MenuButton>
+          <div style={{ display: 'flex', gap: 14 }}>
+            <MenuButton onClick={() => setPage('title')} style={{ flex: 1 }}>Done</MenuButton>
+            <MenuButton onClick={() => { setReplay(true); setPage('tutorial'); }} style={{ flex: 1 }}>How to play</MenuButton>
+          </div>
         </Panel>
+      )}
+
+      {page === 'tutorial' && (
+        <TutorialPage
+          device={device}
+          finishLabel={replay ? 'Done' : 'Start practice run'}
+          onDone={() => finishTutorial(true)}
+          onSkip={() => (replay ? setPage('settings') : finishTutorial(false))}
+          onCancel={() => setPage(replay ? 'settings' : 'title')}
+        />
       )}
 
       {page === 'inventory' && (
