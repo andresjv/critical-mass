@@ -114,6 +114,15 @@ export function grantMedalGun(level: LevelId): GunId | null {
   return g.id;
 }
 
+/** Spends store credits if there are enough. */
+export function spendCredits(n: number): boolean {
+  const c = Math.max(0, Math.floor(n));
+  if (armory.credits < c) return false;
+  armory.credits -= c;
+  save();
+  return true;
+}
+
 export function addCredits(n: number): void {
   armory.credits += Math.max(0, Math.floor(n));
   save();

@@ -156,11 +156,17 @@ function itemKey(device: HudState['device']): { use: string; next: string } {
 }
 
 /** Small drawn icon for each side item. */
-function ItemIcon({ kind, size = 26 }: { kind: string; size?: number }) {
+export function ItemIcon({ kind, size = 26 }: { kind: string; size?: number }) {
   if (kind === 'medkit') return (
     <svg width={size} height={size} viewBox="0 0 26 26" aria-hidden>
       <rect x="2" y="5" width="22" height="17" rx="3" fill="#f2f2f2" />
       <rect x="10.5" y="8" width="5" height="11" fill="#e0302a" /><rect x="7.5" y="11" width="11" height="5" fill="#e0302a" />
+    </svg>
+  );
+  if (kind === 'smoke') return (
+    <svg width={size} height={size} viewBox="0 0 26 26" aria-hidden>
+      <rect x="7" y="8" width="12" height="16" rx="2" fill="#7a8088" /><rect x="7" y="13" width="12" height="3" fill="#e0e4e8" />
+      <rect x="10" y="4" width="6" height="4" fill="#55595e" /><circle cx="20" cy="5" r="3" fill="#d8dcdc" opacity="0.8" />
     </svg>
   );
   if (kind === 'molotov') return (
