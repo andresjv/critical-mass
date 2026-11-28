@@ -418,7 +418,7 @@ export const GROUND = {
   wheelTimeScale: 0.25,
   /** Enemy soldiers: count per 1000 px, hit points, sight range px, fire interval s,
    *  bullet speed px/s, walk speed px/s. */
-  enemiesPer1000: 2.2,
+  enemiesPer1000: 1.3,
   enemyHp: 4,
   enemySight: 760,
   enemyFireInterval: 1.5,
@@ -566,7 +566,9 @@ export const FOE_AI = {
   /** A crouched soldier this close to a crate/sandbags counts as in cover. */
   coverGap: 30,
   /** Troops keep at least this far from each other and from the player. */
-  personalSpace: 46,
+  personalSpace: 72,
+  /** …and this far from a machine-gun nest. */
+  nestSpace: 110,
 } as const;
 
 /** Side items (J). Speeds px/s, gravity px/s², radii px. */

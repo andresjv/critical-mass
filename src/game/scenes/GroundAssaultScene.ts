@@ -293,7 +293,7 @@ export class GroundAssaultScene extends Phaser.Scene {
       ex < len - 200 &&
       !this.boxes.some(b => ex + FOE_HALF_W + 30 > b.x && ex - FOE_HALF_W - 30 < b.x + b.w) &&
       !nestXs.some(nx => Math.abs(ex - nx) < 140) &&
-      !this.enemies.some(o => Math.abs(o.x - ex) < 70);
+      !this.enemies.some(o => Math.abs(o.x - ex) < 220);
     roster.forEach((kind, i) => {
       const want = 1000 + (i + this.rng.next() * 0.7) * ((len - 1300) / count);
       let ex = want;
@@ -304,6 +304,13 @@ export class GroundAssaultScene extends Phaser.Scene {
       if (clear(ex)) this.enemies.push(this.newEnemy(kind, ex));
     });
     for (const nx of nestXs) this.enemies.push(this.newEnemy('nest', nx));
+    // Patrol stretches never reach a neighbour's.
+    const troops = this.enemies.filter(e => e.kind !== 'nest').sort((a, b) => a.x - b.x);
+    troops.forEach((e, i) => {
+      const prev = troops[i - 1], next = troops[i + 1];
+      if (prev) e.lo = Math.max(e.lo, (prev.x + e.x) / 2 + FOE_AI.personalSpace / 2);
+      if (next) e.hi = Math.min(e.hi, (e.x + next.x) / 2 - FOE_AI.personalSpace / 2);
+    });
   }
 
   private newEnemy(kind: FoeKind | 'nest', x: number): Enemy {
@@ -903,11 +910,20 @@ export class GroundAssaultScene extends Phaser.Scene {
         else if (e.state === 'patrol') { e.state = 'idle'; e.stateT = 1; }
       }
     }
-    // Keep a body's width from other troops and from the player (no standing inside each other).
+    // Never overlap: keep at least personalSpace from other troops and from the player. Moving
+    // toward someone stops at that distance; if already too close, step apart.
     for (const o of this.enemies) {
       if (o === e || o.hp <= 0 || o.kind === 'nest') continue;
+      const space = FOE_AI.personalSpace;
       const d = nx - o.x;
-      if (Math.abs(d) < FOE_AI.personalSpace) nx += Math.sign(d || (e.home - o.home) || 1) * Math.min(60 * dt, FOE_AI.personalSpace - Math.abs(d));
+      if (Math.abs(d) >= space) continue;
+      const side = Math.sign(d || (e.home - o.home) || 1);
+      const was = Math.abs(e.x - o.x);
+      nx = was >= space ? o.x + side * space : e.x + side * Math.min(120 * dt, space - was);
+      if (e.state === 'move' && Math.abs(e.goal - o.x) < space) { e.state = 'fight'; e.coverBox = null; e.stateT = 1; }
+    }
+    for (const o of this.enemies) {
+      if (o.kind === 'nest' && o.hp > 0 && Math.abs(nx - o.x) < FOE_AI.nestSpace) nx = e.x;
     }
     if (this.playerOk() && Math.abs(nx - this.px) < FOE_AI.personalSpace && Math.abs(this.py - e.y) < 40) {
       nx = this.px + Math.sign(nx - this.px || -this.face) * FOE_AI.personalSpace;

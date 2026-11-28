@@ -425,7 +425,8 @@ Finish by running tests and opening a Vercel preview.
   join in); run to the far side of a crate/sandbags and duck/peek; reload after 3 bursts; flinch and
   get knocked back; run from grenades and fire; fall away from the shot, dropping their gun.
   Troops spawn and move on open ground only: never on or in front of cover (cover draws over them)
-  and they keep `personalSpace` apart.
+  and they never overlap: a hard `personalSpace` (72 px) between troops, `nestSpace` from nests.
+  Fewer troops: `GROUND.enemiesPer1000` 1.3 (about 5 on the first launch).
 - **SoldierRig** (`models/SoldierRig.ts`): shared animated soldier with IK legs/arms: walk/run, idle
   breathing, crouch and crouch-walk, jump tuck, landing squash, recoil, flinch, reload, throw, death
   fall. Feet follow the slope. Each enemy gets a personal look (`soldierLook`: skin, kit shade,
