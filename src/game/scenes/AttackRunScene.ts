@@ -21,6 +21,7 @@ import { getBiome, type Biome } from '../theme/biomes';
 import { Backdrop, hash01 } from '../effects/Backdrop';
 import { drawJet, drawTank, TURRET_PIVOT_Y } from '../models/Vehicles';
 import { drawBuilding } from '../models/Buildings';
+import { drawSamSite, drawTower } from '../models/Structures';
 import { drawTracer, drawShell, drawMissile } from '../models/Weapons';
 import { BattleLayer } from '../effects/BattleLayer';
 import { SOLDIER_RED } from '../theme/factions';
@@ -48,6 +49,7 @@ const SAM_W  = 40;   const SAM_H  = 55;
 const INTERC_W = 55; const INTERC_H = 22;
 const HEATSEEK_W = 28; const HEATSEEK_H = 10;
 const BLDG_W = 90;   const BLDG_H = 140;
+const PYLON_H = 180;
 
 interface SceneData {
   launchIndex: number;
@@ -458,7 +460,7 @@ export class AttackRunScene extends Phaser.Scene {
       if (sx < -BLDG_W || sx > W + BLDG_W) continue;
       const obsTopY = obs.type === 'building'
         ? this.groundYAtWorldX(obs.worldX) - BLDG_H
-        : this.groundYAtWorldX(obs.worldX) - 180; // pylon taller
+        : this.groundYAtWorldX(obs.worldX) - PYLON_H; // pylon taller
       const obsW = obs.type === 'building' ? BLDG_W : 20;
       if (
         Math.abs(sx - this.planeX) < (PLANE_HIT_W + obsW / 2) &&
@@ -925,43 +927,13 @@ export class AttackRunScene extends Phaser.Scene {
         });
         if (enemy.gunner) this.drawGunner(enemy, enemy.gunner);
       } else { // sam
-        // Launch: the box kicks and its warning light flares, then settles.
+        // Launch: the site kicks and its warning light flares, then settles.
         const lk = enemy.fireAnim / ATTACK_RUN.samLaunchAnimTime;      // 1 → 0
         const shake = lk > 0 ? Math.sin(time * 0.09) * 3 * lk : 0;
-        const bx = sx + shake;
-        this.enemyGfx.fillStyle(this.biome.sam.box, 1);
-        this.enemyGfx.fillRect(bx - SAM_W / 2, gy - SAM_H, SAM_W, SAM_H);
-        this.enemyGfx.fillStyle(0x000000, 0.3);
-        this.enemyGfx.fillRect(bx - SAM_W / 2 + 6, gy - SAM_H + 10, SAM_W - 12, 6);
-        // Warning light: slow blink while tracking, bright flare on launch.
-        const blink = 0.35 + 0.35 * Math.sin(time * 0.008 + enemy.worldX);
-        this.enemyGfx.fillStyle(0xff3322, Math.min(1, blink + lk));
-        this.enemyGfx.fillCircle(bx + SAM_W / 2 - 8, gy - SAM_H + 26, 3 + lk * 4);
-        if (lk > 0) {
-          this.enemyGfx.fillStyle(0xffaa33, 0.35 * lk);
-          this.enemyGfx.fillCircle(bx, gy - SAM_H, 30 * lk);
-        }
-        // Launch rail (tracks the plane).
-        const base = this.samRailBase(enemy);
-        const rl   = ATTACK_RUN.samRailLength;
-        const tipX = base.x + shake + Math.cos(enemy.aim) * rl;
-        const tipY = base.y + Math.sin(enemy.aim) * rl;
-        this.enemyGfx.lineStyle(6, this.biome.sam.rail, 1);
-        this.enemyGfx.lineBetween(base.x + shake, base.y, tipX, tipY);
-        this.enemyGfx.fillStyle(this.biome.sam.rail, 1);
-        this.enemyGfx.fillCircle(base.x + shake, base.y, 6);
-        // Missile sits on the rail while reloaded (none in flight).
-        if (!enemy.missile) {
-          const c = Math.cos(enemy.aim), s = Math.sin(enemy.aim);
-          const mx = base.x + shake + c * rl * 0.55, my = base.y + s * rl * 0.55;
-          const hx = c * 13, hy = s * 13, px = -s * 4, py = c * 4;
-          this.enemyGfx.fillStyle(0xcc4422, 1);
-          this.enemyGfx.fillPoints(pts([
-            { x: mx - hx + px, y: my - hy + py }, { x: mx + hx + px, y: my + hy + py },
-            { x: mx + hx * 1.5, y: my + hy * 1.5 },
-            { x: mx + hx - px, y: my + hy - py }, { x: mx - hx - px, y: my - hy - py },
-          ]), true);
-        }
+        drawSamSite(this.enemyGfx, sx + shake, gy, SAM_W, SAM_H, this.biome, {
+          aim: enemy.aim, railLen: ATTACK_RUN.samRailLength, kick: lk, loaded: !enemy.missile,
+          t: time / 1000, seed: Math.floor(enemy.worldX) % 97,
+        });
       }
 
       // SAM missile in flight.
@@ -1232,7 +1204,7 @@ export class AttackRunScene extends Phaser.Scene {
 
   /** Buildings and pylons; their base reaches below the lowest ground under them. */
   private drawObstacles(): void {
-    const g = this.terrainGfx, py = this.biome.pylon;
+    const g = this.terrainGfx;
     for (const obs of this.obstacles) {
       const sx = obs.worldX - this.cameraX;
       if (sx < -BLDG_W || sx > W + BLDG_W) continue;
@@ -1240,15 +1212,10 @@ export class AttackRunScene extends Phaser.Scene {
       const halfW = obs.type === 'building' ? BLDG_W / 2 : 10;
       const base = Math.max(this.groundYAtWorldX(obs.worldX - halfW), this.groundYAtWorldX(obs.worldX + halfW), gy) + 12;
       if (obs.type === 'building') {
-        drawBuilding(g, sx, gy - BLDG_H, base, BLDG_W, BLDG_H, this.biome, Math.floor(obs.worldX), this.time.now);
+        drawBuilding(g, sx, gy - BLDG_H, base, BLDG_W, BLDG_H, this.biome, Math.floor(obs.worldX), this.time.now,
+          x => this.groundYAtWorldX(x + this.cameraX));
       } else {
-        const top = gy - 180;
-        g.fillStyle(py.body, 1);
-        g.fillRect(sx - 6, top, 12, base - top);
-        g.lineStyle(2, py.body, 1);
-        for (let y = top + 20; y < gy - 10; y += 26) { g.lineBetween(sx - 14, y, sx + 14, y); }
-        g.fillStyle(py.beacon, 0.9);
-        g.fillRect(sx - 8, top - 4, 16, 8);
+        drawTower(g, sx, gy, base, PYLON_H, this.biome, this.time.now / 1000, Math.floor(obs.worldX) % 89);
       }
     }
   }

@@ -8,6 +8,10 @@ export type TreeKind = 'pine' | 'snowpine' | 'swamp' | 'cactus' | 'rocks';
 export type PoolKind = 'lake' | 'ice' | 'bog' | 'oasis' | 'crater';
 export type SkyBodyKind = 'moon' | 'sun' | 'earth';
 export type BuildingKind = 'block' | 'cabin' | 'adobe' | 'logcabin' | 'dome';
+/** Look of the SAM launch site ("ground cannon"). Same hitbox for every kind. */
+export type SamKind = 'bunker' | 'raft' | 'sandbag' | 'snowdome' | 'pod';
+/** Look of the tall thin obstacle (pylon). Same hitbox for every kind. */
+export type TowerKind = 'mast' | 'watchtower' | 'derrick' | 'turbine' | 'antenna';
 export type Weather = 'none' | 'rain' | 'fireflies' | 'dust' | 'snow' | 'meteors';
 export type Landmark = 'tower' | 'shack' | 'arch' | 'radar' | 'dish';
 export type GroundDecor = 'grass' | 'reeds' | 'stones' | 'snow' | 'craters';
@@ -30,11 +34,15 @@ export interface Biome {
   /** Low mist band over the forest (swamp); null = none. */
   fog: { color: number; alpha: number } | null;
   ground: { fill: number; band: number; surface: number; decor: GroundDecor; decorColor: number };
-  building: { kind: BuildingKind; wall: number; edge: number; roof: number; window: number; windowAlpha: number };
+  building: {
+    kind: BuildingKind; wall: number; edge: number; roof: number; window: number; windowAlpha: number;
+    /** Window colour while its light is on, and the colour of the people living there. */
+    lamp: number; person: number; smoke: number;
+  };
   vehicle: VehiclePalette;
   enemyJet: JetPalette;
-  /** SAM launcher box colours. */
-  sam: { box: number; rail: number };
+  /** SAM launch site: style and colours (box, rail, trim = second material, light = indicator). */
+  sam: { kind: SamKind; box: number; rail: number; trim: number; light: number };
   /** Hangar interior and the top-down view outside its doors. */
   hangar: {
     floor: number; floorLine: number; wall: number; wallRib: number; lamp: number;
@@ -42,7 +50,8 @@ export interface Biome {
     drift: number | null;
     outside: number; outsideDetail: number;
   };
-  pylon: { body: number; beacon: number };
+  /** Tall obstacle: style, main colour, beacon light, second detail colour. */
+  pylon: { kind: TowerKind; body: number; beacon: number; detail: number };
   /** Background atmosphere: drifting clouds, weather particles, landmark silhouettes. */
   atmos: {
     clouds: { color: number; shade: number; alpha: number } | null;
@@ -62,12 +71,12 @@ const BIOMES: Record<LevelId, Biome> = {
     forest: { kind: 'pine', floor: 0x0d2017, dark: 0x0a1a12, light: 0x163a26, accent: 0x2a1d12 },
     fog: null,
     ground:   { fill: 0x1a3020, band: 0x15281a, surface: 0x2a5030, decor: 'grass', decorColor: 0x2f5a34 },
-    building: { kind: 'block', wall: 0x334455, edge: 0x446688, roof: 0x2a3644, window: 0x88aacc, windowAlpha: 0.5 },
+    building: { kind: 'block', wall: 0x334455, edge: 0x446688, roof: 0x2a3644, window: 0x88aacc, windowAlpha: 0.5, lamp: 0xffe6a0, person: 0x1c2630, smoke: 0x8a96a6 },
     vehicle:  { kind: 'tank', hull: 0x4a5a36, dark: 0x34401f, camo: [0x2f3a1e, 0x5f6e44], tread: 0x22281a, wheel: 0x3a4430, marking: RED },
     enemyJet: { body: 0x56606c, dark: 0x3a424c, camo: [], canopy: 0x9ad0e8, marking: RED, markingCore: 0xffffff },
-    sam:      { box: 0x443322, rail: 0x556644 },
+    sam:      { kind: 'bunker', box: 0x443322, rail: 0x556644, trim: 0x6a7480, light: 0xff3322 },
     hangar:   { floor: 0x2a3138, floorLine: 0x384048, wall: 0x1c2430, wallRib: 0x2c3846, lamp: 0xfff2c8, drift: null, outside: 0x1a3020, outsideDetail: 0x0f2216 },
-    pylon:    { body: 0x445566, beacon: 0xffaa00 },
+    pylon:    { kind: 'mast', body: 0x445566, beacon: 0xffaa00, detail: 0x2c3a48 },
     atmos:    { clouds: { color: 0x2c3e58, shade: 0x1a2638, alpha: 0.55 }, weather: 'rain', weatherColor: 0x9fb8d8, landmark: 'tower', beacon: 0xff3a2a },
   },
   swamp: {
@@ -80,12 +89,12 @@ const BIOMES: Record<LevelId, Biome> = {
     forest: { kind: 'swamp', floor: 0x121d13, dark: 0x0f1a10, light: 0x22361f, accent: 0x5a6b3a },
     fog: { color: 0x9aaa88, alpha: 0.14 },
     ground:   { fill: 0x24301a, band: 0x1c2614, surface: 0x3c4a26, decor: 'reeds', decorColor: 0x4f6030 },
-    building: { kind: 'cabin', wall: 0x5a4430, edge: 0x3a2c1e, roof: 0x5c6260, window: 0xffc860, windowAlpha: 0.85 },
+    building: { kind: 'cabin', wall: 0x5a4430, edge: 0x3a2c1e, roof: 0x5c6260, window: 0xffc860, windowAlpha: 0.85, lamp: 0xffc860, person: 0x2a2018, smoke: 0x9aa094 },
     vehicle:  { kind: 'tank', hull: 0x56592e, dark: 0x3c3e1f, camo: [0x3a3020, 0x6e6a3a, 0x2c3a22], tread: 0x24261a, wheel: 0x3a3c26, marking: RED },
     enemyJet: { body: 0x4e5638, dark: 0x343a24, camo: [0x3a3020, 0x6a6e44], canopy: 0xb8d8a0, marking: RED, markingCore: 0xffffff },
-    sam:      { box: 0x4a3a26, rail: 0x5a5a34 },
+    sam:      { kind: 'raft', box: 0x4a3a26, rail: 0x5a5a34, trim: 0x2f4a22, light: 0xffcc55 },
     hangar:   { floor: 0x2c3029, floorLine: 0x3a3f34, wall: 0x22261e, wallRib: 0x343a2c, lamp: 0xf4e8a8, drift: 0x3a3322, outside: 0x24301a, outsideDetail: 0x16220f },
-    pylon:    { body: 0x4a4a3a, beacon: 0xffcc33 },
+    pylon:    { kind: 'watchtower', body: 0x4a4a3a, beacon: 0xffcc33, detail: 0x6a5434 },
     atmos:    { clouds: { color: 0x3c4a3a, shade: 0x262f24, alpha: 0.45 }, weather: 'fireflies', weatherColor: 0xd8ff6a, landmark: 'shack', beacon: 0xffb84a },
   },
   desert: {
@@ -98,12 +107,12 @@ const BIOMES: Record<LevelId, Biome> = {
     forest: { kind: 'cactus', floor: 0xd8a464, dark: 0x4a7a3a, light: 0x6a9a4a, accent: 0xb07840 },
     fog: null,
     ground:   { fill: 0xc8935a, band: 0xb27f4a, surface: 0xe0b078, decor: 'stones', decorColor: 0x8a6440 },
-    building: { kind: 'adobe', wall: 0xc8996a, edge: 0xe0b888, roof: 0xa87a50, window: 0x3a2618, windowAlpha: 0.9 },
+    building: { kind: 'adobe', wall: 0xc8996a, edge: 0xe0b888, roof: 0xa87a50, window: 0x3a2618, windowAlpha: 0.9, lamp: 0xffc070, person: 0x5a3020, smoke: 0xd8c8b0 },
     vehicle:  { kind: 'tank', hull: 0xc8a870, dark: 0x9a7c4c, camo: [0xa0784a, 0xe2cc98, 0x7a5c38], tread: 0x5a4a34, wheel: 0x7a6448, marking: RED },
     enemyJet: { body: 0xc0a478, dark: 0x8e7650, camo: [0x9c7a4c, 0xdcc498], canopy: 0x6ab0d0, marking: RED, markingCore: 0xffffff },
-    sam:      { box: 0xa8885a, rail: 0x8a7048 },
+    sam:      { kind: 'sandbag', box: 0xa8885a, rail: 0x8a7048, trim: 0xc9b07a, light: 0xff5522 },
     hangar:   { floor: 0x6a6458, floorLine: 0x7a7466, wall: 0x4a4236, wallRib: 0x5e5446, lamp: 0xfff4d8, drift: 0xd2a868, outside: 0xc8935a, outsideDetail: 0x4a7a3a },
-    pylon:    { body: 0x8a7458, beacon: 0xff5522 },
+    pylon:    { kind: 'derrick', body: 0x8a7458, beacon: 0xff5522, detail: 0x3a2c20 },
     atmos:    { clouds: { color: 0xfff4e4, shade: 0xe8c8a0, alpha: 0.8 }, weather: 'dust', weatherColor: 0xe8c48a, landmark: 'arch', beacon: 0xff3a2a },
   },
   snow: {
@@ -116,12 +125,12 @@ const BIOMES: Record<LevelId, Biome> = {
     forest: { kind: 'snowpine', floor: 0xcfdce8, dark: 0x1f3a32, light: 0x2c4c40, accent: 0xf4f8fc },
     fog: { color: 0xffffff, alpha: 0.12 },
     ground:   { fill: 0xe6eef5, band: 0xcfdce8, surface: 0xffffff, decor: 'snow', decorColor: 0xb8c8d8 },
-    building: { kind: 'logcabin', wall: 0x7a5236, edge: 0x5a3a24, roof: 0xf4f8fc, window: 0xffd070, windowAlpha: 0.9 },
+    building: { kind: 'logcabin', wall: 0x7a5236, edge: 0x5a3a24, roof: 0xf4f8fc, window: 0xffd070, windowAlpha: 0.9, lamp: 0xffd070, person: 0x8a2a2a, smoke: 0xc8d0d8 },
     vehicle:  { kind: 'tank', hull: 0xdfe6ec, dark: 0xaab6c2, camo: [0x8c98a6, 0xbfc9d2, 0x6e7a88], tread: 0x4a525a, wheel: 0x6a747e, marking: RED },
     enemyJet: { body: 0xd2d9e0, dark: 0x9aa6b2, camo: [0x8c98a6, 0xb4bec8], canopy: 0x5a8ab0, marking: RED, markingCore: 0xffffff },
-    sam:      { box: 0xc8d0d8, rail: 0x8a96a2 },
+    sam:      { kind: 'snowdome', box: 0xc8d0d8, rail: 0x8a96a2, trim: 0xf4f8fc, light: 0xff3322 },
     hangar:   { floor: 0x4a525c, floorLine: 0x5a636e, wall: 0x2e3640, wallRib: 0x3e4854, lamp: 0xe8f4ff, drift: 0xeef4fa, outside: 0xe6eef5, outsideDetail: 0x1f3a32 },
-    pylon:    { body: 0x5a6a7a, beacon: 0xff3322 },
+    pylon:    { kind: 'turbine', body: 0x5a6a7a, beacon: 0xff3322, detail: 0xe8eef4 },
     atmos:    { clouds: { color: 0xe4ecf4, shade: 0xb8c6d4, alpha: 0.6 }, weather: 'snow', weatherColor: 0xffffff, landmark: 'radar', beacon: 0xff3a2a },
   },
   moon: {
@@ -134,12 +143,12 @@ const BIOMES: Record<LevelId, Biome> = {
     forest: { kind: 'rocks', floor: 0x55575d, dark: 0x3a3c41, light: 0x6a6c72, accent: 0x2a2b2f },
     fog: null,
     ground:   { fill: 0x6b6e75, band: 0x5a5c62, surface: 0x8a8d94, decor: 'craters', decorColor: 0x4e5056 },
-    building: { kind: 'dome', wall: 0xc8ccd4, edge: 0x8a8f99, roof: 0xe4e8ee, window: 0x66ddff, windowAlpha: 0.85 },
+    building: { kind: 'dome', wall: 0xc8ccd4, edge: 0x8a8f99, roof: 0xe4e8ee, window: 0x66ddff, windowAlpha: 0.85, lamp: 0x9af0ff, person: 0xf0f2f6, smoke: 0xc8ccd4 },
     vehicle:  { kind: 'rover', hull: 0xd4d8e0, dark: 0x8a909a, camo: [], tread: 0x3a3c42, wheel: 0x55585f, marking: RED },
     enemyJet: { body: 0x9aa0aa, dark: 0x5e646e, camo: [], canopy: 0xff6a5a, marking: RED, markingCore: 0x222222 },
-    sam:      { box: 0xb8bcc4, rail: 0x6a6e76 },
+    sam:      { kind: 'pod', box: 0xb8bcc4, rail: 0x6a6e76, trim: 0x4c525c, light: 0x66ddff },
     hangar:   { floor: 0x3a3e46, floorLine: 0x4c525c, wall: 0x262a32, wallRib: 0x3a404a, lamp: 0xbfeaff, drift: null, outside: 0x6b6e75, outsideDetail: 0x4e5056 },
-    pylon:    { body: 0x9aa0aa, beacon: 0x66ddff },
+    pylon:    { kind: 'antenna', body: 0x9aa0aa, beacon: 0x66ddff, detail: 0x5a606a },
     atmos:    { clouds: null, weather: 'meteors', weatherColor: 0xfff2d0, landmark: 'dish', beacon: 0x6af0ff },
   },
 };
