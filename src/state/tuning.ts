@@ -5,7 +5,8 @@
 // All px-based values (speeds, sizes, distances, accelerations) are pre-multiplied by 10/3.
 export const WORLD_SCALE = 10 / 3;
 
-export type Difficulty = 'cadet' | 'pilot' | 'suicidal';
+/** 'tutorial' is the easier first-play practice run; it is never offered in the level picker. */
+export type Difficulty = 'tutorial' | 'cadet' | 'pilot' | 'suicidal';
 
 // ─── Per-difficulty settings ─────────────────────────────────────────────────
 
@@ -31,6 +32,17 @@ export interface DifficultyTuning {
 }
 
 export const TUNING: Record<Difficulty, DifficultyTuning> = {
+  tutorial: {
+    timeToImpact: 240,
+    startingPlanes: 7,
+    groundContactCrash: false,
+    enemyFireRate: 0.4,
+    sniperPool: 5,
+    robots: 1,
+    meltdownTimer: 200,
+    mortarArcPreview: true,
+    scoreMultiplier: 1,
+  },
   cadet: {
     timeToImpact: 180,
     startingPlanes: 5,

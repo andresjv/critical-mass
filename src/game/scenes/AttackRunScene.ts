@@ -21,6 +21,7 @@ import { getBiome, type Biome } from '../theme/biomes';
 import { Backdrop, hash01 } from '../effects/Backdrop';
 import { drawJet, drawTank, TURRET_PIVOT_Y } from '../models/Vehicles';
 import { drawBuilding } from '../models/Buildings';
+import { TUTORIAL_HINTS, TUTORIAL_HINT_SECS, withControls } from '../../state/tutorial';
 import { drawSamSite, drawTower } from '../models/Structures';
 import { drawTracer, drawShell, drawMissile } from '../models/Weapons';
 import { BattleLayer } from '../effects/BattleLayer';
@@ -174,6 +175,8 @@ export class AttackRunScene extends Phaser.Scene {
   // ── Pre-run briefing & pause ───────────────────────────────────────────────
   /** Seconds into the fly-in from the takeoff (player input ignored until it ends). */
   private entryT = 0;
+  /** Seconds into the practice run (drives the tutorial hints). */
+  private tutorialT = 0;
 
   // ── Input ─────────────────────────────────────────────────────────────────
   private prevFire   = false;
@@ -235,6 +238,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.musicTrack.stop();
     this.firstInterceptorVoiced = false;
     this.entryT        = 0;
+    this.tutorialT     = 0;
     this.hintTimer     = 0;
   }
 
@@ -433,8 +437,12 @@ export class AttackRunScene extends Phaser.Scene {
     }
     this.thrusting = Math.abs(mx) > 0.05 || Math.abs(my) > 0.05;
 
-    // Contextual hint after 5s without movement.
-    if (this.thrusting) {
+    // Practice run (first play): timed step-by-step hints replace the idle hint.
+    if (missionState.difficulty === 'tutorial' && this.launchIndex === 0) {
+      this.tutorialT += dt;
+      const cur = TUTORIAL_HINTS.find(([at]) => this.tutorialT >= at && this.tutorialT < at + TUTORIAL_HINT_SECS);
+      gameUi.contextualHint = cur ? withControls(cur[1], gameUi.device) : null;
+    } else if (this.thrusting) {
       this.hintTimer = 0;
       gameUi.contextualHint = null;
     } else {
