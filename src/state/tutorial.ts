@@ -6,7 +6,7 @@ import type { DeviceHint } from './gameUi';
 
 export interface TutorialSlide {
   /** Which illustration the menu draws for this slide. */
-  art: 'mission' | 'fly' | 'weapons' | 'danger' | 'silo' | 'loadout';
+  art: 'mission' | 'fly' | 'weapons' | 'danger' | 'ground' | 'loadout';
   title: string;
   /** Short lines; `{move}`, `{fire}`, `{action}`, `{pause}` are replaced with the device's controls. */
   lines: string[];
@@ -17,7 +17,7 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
     art: 'mission', title: 'Your mission',
     lines: [
       'Enemy missiles are about to launch. Fly four strikes to stop them.',
-      'Each strike: take off from the hangar, fight through the attack run, then hit the missile silo.',
+      'Each strike: take off from the hangar, fight through the attack run, then eject and fight on foot to the launch button.',
       'Beat all four on a level to win it.',
     ],
   },
@@ -44,16 +44,18 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
     ],
   },
   {
-    art: 'silo', title: 'Silo strike',
+    art: 'ground', title: 'Ground assault',
     lines: [
-      'At the end of each run, aim at the central silo and {fire} to launch a rocket.',
-      'Hitting the side silos earns an extra plane.',
+      'At the end of each run you eject and parachute in. Fight to the bunker and reach the big red button.',
+      '{move} to walk and crouch, {action} or up to jump, {fire} to shoot. You can take 5 hits.',
+      'Hold H (Y on a pad, GUNS on touch) to pick from the 4 guns you carry.',
     ],
   },
   {
     art: 'loadout', title: 'Medals and parts',
     lines: [
-      'Beating a level earns its medal and unlocks a new jet, gun or bomb.',
+      'Beating a level earns its medal and unlocks a new jet, gun or bomb, plus a ground gun.',
+      'Fights earn credits: spend them in the daily store (Guns & store). Your stock is new every day and rarer guns show up less often.',
       'Equip parts from Inventory on the main menu. {pause} pauses the game.',
     ],
   },
@@ -65,7 +67,7 @@ export const TUTORIAL_HINTS: readonly [number, string][] = [
   [8, '{fire} to shoot enemy jets'],
   [15, '{action} to drop a bomb on a tank'],
   [22, 'Fly over buildings and towers. You can take 3 hits'],
-  [29, 'Reach the end of the run to strike the silo'],
+  [29, 'Reach the end of the run, then eject'],
 ];
 /** Seconds each practice hint stays up. */
 export const TUTORIAL_HINT_SECS = 5.5;

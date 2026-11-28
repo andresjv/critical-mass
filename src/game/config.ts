@@ -6,6 +6,7 @@ import { MapScene } from './scenes/MapScene';
 import { HangarScene } from './scenes/HangarScene';
 import { AttackRunScene } from './scenes/AttackRunScene';
 import { SiloScene } from './scenes/SiloScene';
+import { GroundAssaultScene } from './scenes/GroundAssaultScene';
 import { PlaceholderAttackRunScene } from './scenes/PlaceholderAttackRunScene';
 import { PlaceholderSiloScene } from './scenes/PlaceholderSiloScene';
 import { PlaceholderAssaultScene } from './scenes/PlaceholderAssaultScene';
@@ -53,6 +54,7 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
       HangarScene,
       AttackRunScene,
       SiloScene,
+      GroundAssaultScene,
       PlaceholderAttackRunScene,
       PlaceholderSiloScene,
       PlaceholderAssaultScene,

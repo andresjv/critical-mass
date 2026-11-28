@@ -8,7 +8,7 @@ import type { LevelId } from './levels';
 import type { Difficulty } from './tuning';
 
 export type DeviceHint = 'keyboard' | 'touch' | 'gamepad';
-export type ProgressStep = 'map' | 'hangar' | 'attack_run' | 'silos';
+export type ProgressStep = 'map' | 'hangar' | 'attack_run' | 'silos' | 'ground';
 export type { ChallengerData, HowToPlayStage };
 
 export interface StageIntroData {
@@ -28,6 +28,8 @@ export interface TouchLabels {
   move: string;
   fire: string;
   action: string; // '' hides the label
+  /** Weapon-wheel button label; absent = no such button in this scene. */
+  inventory?: string;
 }
 
 export type UiScreen = 'menu' | 'game' | 'gameover';
@@ -42,9 +44,17 @@ export const gameUi = {
   /** Level whose scenery scrolls behind the menu (follows the highlighted card). */
   menuPreview: 'coldfront' as LevelId,
 
-  /** Attack run hull: hits left on the current plane, and the maximum. */
+  /** Attack run hull / ground-assault health: hits left and the maximum (0 hides the gauge). */
   hull: 3,
   hullMax: 0,
+  hullLabel: 'Hull' as 'Hull' | 'Health',
+
+  /** Ground assault: the gun in hand (null outside the mode). reload = 0..1 while reloading, else -1. */
+  weapon: null as { name: string; rarity: string; ammo: number; mag: number; reload: number; slot: number } | null,
+  /** Ground assault weapon wheel while H is held: carried guns, highlighted and equipped slot. */
+  wheel: null as { slots: { name: string; rarity: string; ammo: number; mag: number }[]; highlight: number; equipped: number } | null,
+  /** Credits earned in the current ground assault (shown in the HUD). */
+  creditsEarned: 0,
 
   /** Last active input device — drives key-hint labels in the HUD. */
   device: 'keyboard' as DeviceHint,

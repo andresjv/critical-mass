@@ -386,3 +386,19 @@ All numbers from tuning.ts. Placeholder art: rectangles.
 Add a debug overlay toggled with F1 showing speed, angle, door timer.
 Finish by running tests and opening a Vercel preview.
 ```
+
+## t19 — Ground Assault (replaces the Silo Strike)
+- When the attack run timer ends the pilot **ejects** (seat rocket, then parachute) and the game
+  crossfades into `GroundAssaultScene`: a 2D side-scroller on foot.
+- Goal: reach the big red button in the launch bunker at `GROUND.levelLength`. Walking into it
+  presses it (the action key is jump). The soldier takes `GROUND.playerHits` (5) hits; at 0 a life
+  is lost and the stage restarts. The impact clock keeps running (city lost at 0).
+- Enemies: patrolling soldiers (some on crates) and machine-gun nests near the bunker. Crates,
+  sandbags and barrels block movement and bullets; stacks always have a step up.
+- Guns: 4 carried slots (`src/state/armory.ts`). **Hold H** (pad Y, touch GUNS) opens the weapon wheel
+  (time slows to 0.25×), stick/arrows pick, release equips; keys 1–4 swap directly. Auto-aim within
+  `GROUND.autoAimAngle`; auto-reload on empty. Stats in `GUN_STATS`.
+- Credits: earned per kill / nest / button press, saved in localStorage (`cm_armory_v1`).
+- **Daily store**: 4 offers per player per day (player id + local date seeded), rarity-weighted
+  (`STORE.weight`); chance % is shown. Level medals also unlock specific guns for free.
+- `SiloScene` is no longer reached but kept in the build for now.

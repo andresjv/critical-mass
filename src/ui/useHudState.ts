@@ -19,6 +19,10 @@ export interface HudState {
   planes: number;
   hull: number;
   hullMax: number;
+  hullLabel: string;
+  weapon: typeof gameUi.weapon;
+  wheel: typeof gameUi.wheel;
+  creditsEarned: number;
   hudCue: string;
   fps: number;
   speed: number;
@@ -67,6 +71,10 @@ function snapshot(): HudState {
     planes:       missionState.planes,
     hull:         gameUi.hull,
     hullMax:      gameUi.hullMax,
+    hullLabel:    gameUi.hullLabel,
+    weapon:       gameUi.weapon,
+    wheel:        gameUi.wheel,
+    creditsEarned: gameUi.creditsEarned,
     hudCue:       missionState.hudCue,
     fps:          debugInfo.fps,
     speed:        debugInfo.speed,

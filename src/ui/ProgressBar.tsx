@@ -11,10 +11,10 @@ type StepDef = { key: ProgressStep; label: string };
 const STEPS: StepDef[] = [
   { key: 'hangar',     label: 'HANGAR' },
   { key: 'attack_run', label: 'ATTACK RUN' },
-  { key: 'silos',      label: 'SILOS' },
+  { key: 'ground',     label: 'GROUND ASSAULT' },
 ];
 
-const STEP_ORDER: ProgressStep[] = ['map', 'hangar', 'attack_run', 'silos'];
+const STEP_ORDER: ProgressStep[] = ['map', 'hangar', 'attack_run', 'silos', 'ground'];
 
 function stepColor(key: ProgressStep, current: ProgressStep): string {
   const ci = STEP_ORDER.indexOf(current);

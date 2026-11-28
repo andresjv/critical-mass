@@ -140,9 +140,6 @@ export const HANGAR = {
   chatterLineBase: 0.5,
   chatterPerWord: 0.27,
   chatterLineMax: 3.6,
-  /** Spoken crew lines: volume (× SFX setting), and a safety cap before moving on (s). */
-  crewVoiceVolume: 0.45,
-  chatterLineTimeout: 8,
   /** Rotation speed, degrees/s. */
   rotateSpeed: 210,
   /** Thrust acceleration, px/s² (70 × WORLD_SCALE). */
@@ -247,6 +244,14 @@ export const ATTACK_RUN = {
   hitInvuln: 1.6,
   /** Pushed back up after scraping the ground or an obstacle, px/s. */
   hitBounce: 380,
+  /** End-of-run eject: seconds before the cut to the ground assault, seat launch speed and
+   *  gravity, when the chute opens (s), chute sink speed and the jet's climb-away speed (px/s). */
+  ejectSecs: 2.4,
+  ejectSeatSpeed: 820,
+  ejectGravity: 1500,
+  ejectChuteAt: 0.55,
+  ejectChuteSink: 120,
+  ejectJetSpeed: 620,
   /** Seconds bomb travels to ground. */
   bombArcTime: 1.4,
   /** Max simultaneous bombs in flight. */
@@ -410,4 +415,104 @@ export const LOADOUT = {
   /** Cluster bomb: blast radius multiplier and extra reload seconds. */
   clusterBlastMult: 1.6,
   clusterReloadAdd: 0.3,
+} as const;
+
+// ─── Ground assault (on foot, after ejecting) ────────────────────────────────
+
+export const GROUND = {
+  /** Hits the soldier can take before going down (costs a life, like a lost plane). */
+  playerHits: 5,
+  /** Invulnerable seconds after a hit. */
+  hitInvuln: 1.1,
+  /** Level length (px) from the landing zone to the launch-control bunker. */
+  levelLength: 5200,
+  /** Walk speed px/s, acceleration (1/s easing), gravity px/s², jump speed px/s. */
+  walkSpeed: 330,
+  walkResponse: 12,
+  gravity: 2300,
+  jumpSpeed: 880,
+  /** Grace after walking off a ledge in which a jump still works, s. */
+  coyoteTime: 0.1,
+  /** Parachute descent: start height above ground (px), sink speed (px/s), drift speed (px/s). */
+  chuteStartHeight: 560,
+  chuteSinkSpeed: 210,
+  chuteDrift: 90,
+  /** Soldier drawn at this scale (trooper parts are ~16 px tall at scale 1). */
+  soldierScale: 4.6,
+  /** Player hitbox half-width and height, px. */
+  playerHalfW: 20,
+  playerH: 74,
+  /** Camera keeps the player this far from the left edge (fraction of width). */
+  cameraLead: 0.36,
+  /** Weapon wheel: game speed while it is open. */
+  wheelTimeScale: 0.25,
+  /** Enemy soldiers: count per 1000 px, hit points, sight range px, fire interval s,
+   *  bullet speed px/s, walk speed px/s. */
+  enemiesPer1000: 2.2,
+  enemyHp: 4,
+  enemySight: 760,
+  enemyFireInterval: 1.5,
+  enemyBulletSpeed: 560,
+  enemyWalk: 70,
+  /** Machine-gun nests: count per level, hit points, burst size, burst gap s, shot gap s. */
+  nests: 2,
+  nestHp: 14,
+  nestBurst: 4,
+  nestBurstGap: 2.2,
+  nestShotGap: 0.12,
+  /** Auto-aim: max vertical angle toward a target in front, rad. */
+  autoAimAngle: 0.42,
+  /** Credits: per enemy soldier, per nest, for pressing the button. */
+  creditsPerKill: 5,
+  creditsPerNest: 15,
+  creditsButton: 50,
+  /** Score: per kill, per nest, for pressing the button. */
+  scoreKill: 250,
+  scoreNest: 750,
+  scoreButton: 5000,
+  /** Distance from the button that lets the soldier press it, px. */
+  buttonReach: 70,
+} as const;
+
+/** Per-gun handling. Speeds in px/s (already in world scale), times in seconds. */
+export interface GunStats {
+  damage: number;
+  /** Seconds between shots (between bursts for burst guns). */
+  fireInterval: number;
+  /** Hold fire to keep shooting. */
+  auto: boolean;
+  mag: number;
+  reload: number;
+  bulletSpeed: number;
+  /** Random spread per pellet, rad. */
+  spread: number;
+  pellets: number;
+  /** Bullet lifetime, s (short for shotguns). */
+  life: number;
+  /** Rounds per trigger pull (burst rifles). */
+  burst: number;
+  /** Goes through enemies. */
+  pierce: boolean;
+  /** Explosion radius on impact, px (0 = none). */
+  splash: number;
+}
+
+export const GUN_STATS = {
+  pistol:  { damage: 2, fireInterval: 0.28, auto: false, mag: 12, reload: 1.0, bulletSpeed: 1250, spread: 0.02, pellets: 1, life: 1.1, burst: 1, pierce: false, splash: 0 },
+  smg:     { damage: 1, fireInterval: 0.08, auto: true,  mag: 32, reload: 1.4, bulletSpeed: 1250, spread: 0.07, pellets: 1, life: 0.9, burst: 1, pierce: false, splash: 0 },
+  shotgun: { damage: 1, fireInterval: 0.72, auto: false, mag: 6,  reload: 1.8, bulletSpeed: 1050, spread: 0.2,  pellets: 7, life: 0.32, burst: 1, pierce: false, splash: 0 },
+  rifle:   { damage: 2, fireInterval: 0.12, auto: true,  mag: 28, reload: 1.6, bulletSpeed: 1600, spread: 0.035, pellets: 1, life: 1.1, burst: 1, pierce: false, splash: 0 },
+  burst:   { damage: 3, fireInterval: 0.42, auto: false, mag: 24, reload: 1.5, bulletSpeed: 1700, spread: 0.02, pellets: 1, life: 1.1, burst: 3, pierce: false, splash: 0 },
+  sniper:  { damage: 10, fireInterval: 1.0, auto: false, mag: 5,  reload: 2.0, bulletSpeed: 2600, spread: 0,    pellets: 1, life: 1.2, burst: 1, pierce: true,  splash: 0 },
+  lmg:     { damage: 2, fireInterval: 0.07, auto: true,  mag: 90, reload: 3.0, bulletSpeed: 1500, spread: 0.09, pellets: 1, life: 1.0, burst: 1, pierce: false, splash: 0 },
+  rocket:  { damage: 9, fireInterval: 1.2, auto: false, mag: 3,  reload: 2.2, bulletSpeed: 760,  spread: 0,    pellets: 1, life: 2.0, burst: 1, pierce: false, splash: 110 },
+  laser:   { damage: 3, fireInterval: 0.09, auto: true,  mag: 45, reload: 1.6, bulletSpeed: 2800, spread: 0.01, pellets: 1, life: 0.8, burst: 1, pierce: true,  splash: 0 },
+} as const satisfies Record<string, GunStats>;
+
+/** Daily store: offers per day, chance weight and price per rarity, credits for a new profile. */
+export const STORE = {
+  offers: 4,
+  weight: { common: 40, uncommon: 30, rare: 18, epic: 9, legendary: 3 },
+  price:  { common: 80, uncommon: 150, rare: 260, epic: 450, legendary: 800 },
+  startingCredits: 150,
 } as const;

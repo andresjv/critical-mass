@@ -25,8 +25,9 @@ import { TUTORIAL_HINTS, TUTORIAL_HINT_SECS, withControls } from '../../state/tu
 import { drawSamSite, drawTower } from '../models/Structures';
 import { drawTracer, drawShell, drawMissile } from '../models/Weapons';
 import { BattleLayer } from '../effects/BattleLayer';
-import { trooperHead, trooperTorso } from '../models/Trooper';
-import { fadeFromCapture, takeJetHandoff } from '../crossfade';
+import { trooperHead, trooperPack, trooperTorso } from '../models/Trooper';
+import { captureFrame, fadeFromCapture, takeJetHandoff } from '../crossfade';
+import { GROUND_FX } from '../theme/groundAssault';
 import { playerJet } from '../theme/loadoutTheme';
 import { progress } from '../../state/progress';
 import { Xform } from '../models/shapes';
@@ -57,7 +58,7 @@ interface SceneData {
   launchIndex: number;
 }
 
-type PlaneState = 'flying' | 'crashed' | 'gameover';
+type PlaneState = 'flying' | 'eject' | 'crashed' | 'gameover';
 type HeatSeekerPhase = 'warning' | 'active' | 'passed';
 
 interface GroundEnemy {
@@ -158,6 +159,9 @@ export class AttackRunScene extends Phaser.Scene {
   private planeX    = ATTACK_RUN.planeXMin + 100; // screen X
   private planeAlt  = ATTACK_RUN.altitudeMax * 0.4;
   private planeState: PlaneState = 'flying';
+  /** End-of-run eject: time since the seat fired, and the seat/pilot position (screen). */
+  private ejectT = 0;
+  private seat = { x: 0, y: 0, vx: 0, vy: 0 };
   private stageTimer = ATTACK_RUN.duration;
   private thrusting  = false;
   /** Flight feel: screen-x speed, climb rate (px/s) and nose pitch (rad, + = nose up). */
@@ -430,6 +434,7 @@ export class AttackRunScene extends Phaser.Scene {
   // ── Fixed step ────────────────────────────────────────────────────────────
 
   private fixedStep(dt: number, mx: number, my: number, fireJust: boolean, actionJust: boolean): void {
+    if (this.planeState === 'eject') { this.stepEject(dt); return; }
     if (this.planeState !== 'flying') return;
 
     // Scroll camera.
@@ -922,25 +927,73 @@ export class AttackRunScene extends Phaser.Scene {
       return;
     }
 
-    if (this.stageTimer <= 0) {
-      gameUi.attackRunSecsLeft = 0;
-      gameUi.contextualHint = null;
-      // Show stage result card for 2s before transitioning.
-      this.musicTrack.fadeOut(1.5);
-      this.engineSound.stop();
-      this.proximityBeep.stop();
-      this.voice.say('Mission complete', 'complete', true);
-      gameUi.stageResult = {
-        headline: 'ATTACK RUN COMPLETE',
-        details: [],
-        next: 'SILO STRIKE — target the central silo',
-      };
-      this.time.delayedCall(2000, () => {
-        gameUi.stageResult = null;
-        this.scene.start('SiloScene', { launchIndex: this.launchIndex });
-      });
-      this.planeState = 'gameover'; // freeze updates
+    if (this.stageTimer <= 0) this.startEject();
+  }
+
+  /** Run complete: the pilot ejects over the target and parachutes down for the ground assault. */
+  private startEject(): void {
+    gameUi.attackRunSecsLeft = 0;
+    gameUi.contextualHint = null;
+    this.musicTrack.fadeOut(1.5);
+    this.engineSound.stop();
+    this.proximityBeep.stop();
+    this.voice.say('Eject, eject', 'complete', true);
+    missionState.hudCue = 'ATTACK RUN COMPLETE: EJECT!';
+    const sy = this.groundYAtWorldX(this.cameraX + this.planeX) - this.planeAlt;
+    this.seat = { x: this.planeX, y: sy - 10, vx: 60, vy: -ATTACK_RUN.ejectSeatSpeed };
+    this.fx.smokePuff(this.cameraX + this.planeX, sy - 14, 12);
+    this.fx.muzzleFlash(this.cameraX + this.planeX, sy - 14, -Math.PI / 2);
+    playExplosion(12);
+    haptic(80);
+    this.ejectT = 0;
+    this.planeState = 'eject';
+  }
+
+  private stepEject(dt: number): void {
+    this.ejectT += dt;
+    this.cameraX += ATTACK_RUN.scrollSpeed * dt * 0.5;
+    // The empty jet climbs away to the right.
+    this.planeX += ATTACK_RUN.ejectJetSpeed * dt;
+    this.planeAlt += ATTACK_RUN.ejectJetSpeed * 0.35 * dt;
+    this.planePitch += (0.35 - this.planePitch) * Math.min(1, dt * 3);
+    // Seat rockets up, then the chute opens and the pilot floats down.
+    const s = this.seat;
+    if (this.ejectT < ATTACK_RUN.ejectChuteAt) {
+      s.vy += ATTACK_RUN.ejectGravity * dt;
+      if (Math.floor(this.ejectT * 30) % 2 === 0) this.fx.smokePuff(this.cameraX + s.x, s.y + 16, 5);
+    } else {
+      s.vy += (ATTACK_RUN.ejectChuteSink - s.vy) * Math.min(1, dt * 4);
+      s.vx += (20 - s.vx) * Math.min(1, dt * 2);
     }
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    if (this.ejectT >= ATTACK_RUN.ejectSecs) {
+      this.planeState = 'gameover'; // freeze while the frame is captured
+      captureFrame(this, () => this.scene.start('GroundAssaultScene', { launchIndex: this.launchIndex }));
+    }
+  }
+
+  /** Ejected pilot: seat with a rocket flame, then a canopy once it opens. */
+  private drawEjectPilot(time: number): void {
+    const g = this.planeGfx, s = this.seat, pal = this.biome.troops.blue, k = 3.2;
+    const chute = this.ejectT >= ATTACK_RUN.ejectChuteAt;
+    if (chute) {
+      const open = Math.min(1, (this.ejectT - ATTACK_RUN.ejectChuteAt) / 0.25);
+      const sway = Math.sin(time * 0.003) * 5, r = 17 * k * open, top = s.y - 23 * k;
+      g.lineStyle(2.5, GROUND_FX.chuteLine, 0.9);
+      g.lineBetween(s.x - 2.5 * k, s.y - 13 * k, s.x - r + sway, top + 4);
+      g.lineBetween(s.x + 2.5 * k, s.y - 13 * k, s.x + r + sway, top + 4);
+      g.fillStyle(GROUND_FX.chute, 1); g.beginPath(); g.slice(s.x + sway, top + 4, r, Math.PI, 0, false); g.fillPath();
+      g.fillStyle(GROUND_FX.chuteStripe, 1); g.beginPath(); g.slice(s.x + sway, top + 4, r, Math.PI * 1.4, Math.PI * 1.6, false); g.closePath(); g.fillPath();
+    } else {
+      g.fillStyle(GROUND_FX.rocketFlame, 0.9); g.fillTriangle(s.x - 8, s.y + 2, s.x + 8, s.y + 2, s.x, s.y + 26 + Math.sin(time * 0.06) * 6);
+      g.fillStyle(GROUND_FX.gunMetal, 1); g.fillRect(s.x - 12, s.y - 44, 6, 46); g.fillRect(s.x - 12, s.y - 6, 26, 8);
+    }
+    const t = new Xform(g, s.x, s.y, 0, 1, k);
+    t.line(pal.dark, 2.4, 0, -7, 2.5, -3); t.line(pal.dark, 2.4, 2.5, -3, chute ? 1 : 5, chute ? 0 : -3);
+    t.line(pal.dark, 2.4, 0, -7, -2, 0);
+    trooperPack(t, pal, -4, -13.5, 2, 5);
+    trooperTorso(t, pal, -2.5, -14, 5, 8);
+    trooperHead(t, pal, 0.5, -15.8, 2);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1080,6 +1133,10 @@ export class AttackRunScene extends Phaser.Scene {
 
     // ── Plane (side view) ─────────────────────────────────────────────────────
     this.planeGfx.clear();
+    if (this.planeState === 'eject') {
+      drawJet(this.planeGfx, this.planeX, planeScreenY, playerJet(), { facing: 1, rot: -this.planePitch, thrust: 1, time });
+      this.drawEjectPilot(time);
+    }
     if (this.planeState === 'flying') {
       this.drawSidePlane(planeScreenY, time);
 

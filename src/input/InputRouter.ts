@@ -7,10 +7,21 @@ export interface InputState {
   fire: boolean;
   action: boolean;
   pause: boolean;
+  /** Held: weapon wheel open (H / gamepad Y / touch bag button). */
+  inventory: boolean;
+  /** Weapon slot picked directly this frame (1–4 keys), 0 = none. */
+  slot: number;
 }
 
+/** What a device reports; the wheel fields are optional for devices that lack them. */
+export type DeviceInput = Omit<InputState, 'inventory' | 'slot'> & Partial<Pick<InputState, 'inventory' | 'slot'>>;
+
 function zero(): InputState {
-  return { moveX: 0, moveY: 0, fire: false, action: false, pause: false };
+  return { moveX: 0, moveY: 0, fire: false, action: false, pause: false, inventory: false, slot: 0 };
+}
+
+function full(d: DeviceInput): InputState {
+  return { ...d, inventory: d.inventory ?? false, slot: d.slot ?? 0 };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -22,16 +33,16 @@ class InputRouterSingleton {
   private touch: InputState = zero();
   private pad: InputState = zero();
 
-  setKeyboard(state: InputState): void {
-    this.kb = state;
+  setKeyboard(state: DeviceInput): void {
+    this.kb = full(state);
   }
 
-  setTouch(state: InputState): void {
-    this.touch = state;
+  setTouch(state: DeviceInput): void {
+    this.touch = full(state);
   }
 
-  setGamepad(state: InputState): void {
-    this.pad = state;
+  setGamepad(state: DeviceInput): void {
+    this.pad = full(state);
   }
 
   read(): Readonly<InputState> {
@@ -41,6 +52,8 @@ class InputRouterSingleton {
       fire: this.kb.fire || this.touch.fire || this.pad.fire,
       action: this.kb.action || this.touch.action || this.pad.action,
       pause: this.kb.pause || this.touch.pause || this.pad.pause,
+      inventory: this.kb.inventory || this.touch.inventory || this.pad.inventory,
+      slot: this.kb.slot || this.touch.slot || this.pad.slot,
     };
   }
 }

@@ -1,4 +1,5 @@
 import { HudState } from './useHudState';
+import { WeaponHud } from './WeaponHud';
 
 interface Props {
   s: HudState;
@@ -48,16 +49,16 @@ function JetIcon({ dim }: { dim?: boolean }) {
 }
 
 /** Segmented hull gauge: green → amber → red as hits land. */
-function HullGauge({ hull, max }: { hull: number; max: number }) {
+function HullGauge({ hull, max, label }: { hull: number; max: number; label: string }) {
   const color = hull >= max ? '#4ee08a' : hull > 1 ? '#ffc23d' : '#ff4b3e';
   const critical = hull <= 1;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={LABEL}>Hull</span>
+      <span style={LABEL}>{label}</span>
       <div style={{ display: 'flex', gap: 4 }}>
         {Array.from({ length: max }, (_, i) => (
           <div key={i} style={{
-            width: 26, height: 12, borderRadius: 3,
+            width: max > 3 ? 18 : 26, height: 12, borderRadius: 3,
             background: i < hull ? color : 'rgba(255,255,255,0.08)',
             border: `1px solid ${i < hull ? color : 'rgba(255,255,255,0.15)'}`,
             boxShadow: i < hull ? `0 0 8px ${color}88` : 'none',
@@ -122,7 +123,7 @@ export function GameHud({ s }: Props) {
 
         {/* Planes + hull */}
         <div style={{ ...PANEL, justifySelf: 'end', padding: '9px 16px 8px', display: 'flex', gap: 18, alignItems: 'flex-start' }}>
-          {showHull && <HullGauge hull={s.hull} max={s.hullMax} />}
+          {showHull && <HullGauge hull={s.hull} max={s.hullMax} label={s.hullLabel} />}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
             <span style={{ ...LABEL, textAlign: 'right' }}>Planes</span>
             <div style={{ display: 'flex', gap: 3 }}>
@@ -187,6 +188,8 @@ export function GameHud({ s }: Props) {
           {'◆'.repeat(s.silosDestroyed)}
         </div>
       )}
+
+      <WeaponHud s={s} />
 
       {/* ── Map info panel ──────────────────────────────────────────────── */}
       {s.mapActive && s.launchSite && (

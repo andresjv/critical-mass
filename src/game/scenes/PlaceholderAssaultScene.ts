@@ -1,7 +1,8 @@
 // Placeholder for Stages 5 + 6 (implemented in T8 + T9).
 // For now: shows the results screen, then starts a new mission.
 import Phaser from 'phaser';
-import { earnLevelAchievement } from '../../state/progress';
+import { earnLevelAchievement, progress } from '../../state/progress';
+import { syncUnlocks, gunDef } from '../../state/armory';
 import { missionState } from '../../state/MissionState';
 import { gameUi } from '../../state/gameUi';
 import { InputRouter } from '../../input/InputRouter';
@@ -35,8 +36,9 @@ export class PlaceholderAssaultScene extends Phaser.Scene {
 
     // Beating the level earns its achievement (and unlocks a part) the first time.
     const earned = earnLevelAchievement(missionState.level);
+    const newGuns = syncUnlocks(progress.achieved);
     if (earned) {
-      gameUi.callout = `ACHIEVEMENT UNLOCKED: ${earned.name.toUpperCase()}`;
+      gameUi.callout = `ACHIEVEMENT UNLOCKED: ${earned.name.toUpperCase()}${newGuns.length ? ` · NEW GUN: ${gunDef(newGuns[0]).name.toUpperCase()}` : ''}`;
       gameUi.calloutExpiry = Date.now() + 4000;
     }
 

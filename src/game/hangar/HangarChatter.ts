@@ -1,13 +1,11 @@
 // HangarChatter — runs short conversations between pairs of crew: picks an exchange from the
-// location's script, has the two stop and face each other, and has each line spoken out loud
-// (CrewVoice). The next line starts when the speaker actually finishes, after a short beat,
-// so it sounds like people talking rather than timed captions. No text is shown.
+// location's script, has the two stop and face each other and murmur back and forth (synthesised
+// unintelligible babble from HangarAmbience, timed by each line's length). No text is shown.
 import type { HangarLocal } from '../theme/hangarLocal';
 import type { Rng } from '../../state/rng';
 import { HANGAR } from '../../state/tuning';
 import { TALK_PAIRS, type HangarCrew } from './HangarDecor';
 import type { HangarAmbience } from '../audio/HangarAmbience';
-import { hushCrew, speakLine } from '../audio/CrewVoice';
 
 /** Seconds a line takes to say (used for the gesture/face timing and as a no-speech fallback). */
 export function lineSecs(text: string): number {
@@ -22,9 +20,6 @@ export class HangarChatter {
   private idx = 0;
   /** Seconds until the next line (or next exchange when idle). */
   private wait: number;
-  /** True while a spoken line is still playing; `talking` counts how long. */
-  private speaking = false;
-  private talking = 0;
   private speaker = -1;
 
   constructor(
@@ -36,18 +31,10 @@ export class HangarChatter {
 
   /** Stop talking now (pause, tab hidden, takeoff, leaving the hangar). */
   hush(): void {
-    if (this.speaking) { this.speaking = false; hushCrew(); }
     if (this.speaker >= 0) this.crew.setSpeaking(this.speaker, false);
   }
 
   update(dt: number): void {
-    if (this.speaking) {
-      this.talking += dt;
-      // Keep the pair facing each other while the line plays.
-      this.crew.converse(this.pair[0], this.pair[1], 0.5);
-      if (this.talking < HANGAR.chatterLineTimeout) return;
-      this.hush();
-    }
     this.wait -= dt;
     if (this.wait > 0) return;
     if (!this.lines) this.startExchange();
@@ -67,21 +54,9 @@ export class HangarChatter {
     this.crew.converse(speaker, listener, secs + HANGAR.chatterReplyGap + 0.2);
     const radio = this.local.voice === 'radio';
     if (radio) this.voice.squelch(false);
-    const spoken = speakLine(speaker, text, radio, () => {
-      if (!this.speaking) return;
-      this.speaking = false;
-      this.crew.setSpeaking(speaker, false);
-      if (radio) this.voice.squelch(true);
-    });
-    if (spoken) {
-      this.speaking = true;
-      this.talking = 0;
-      this.wait = HANGAR.chatterReplyGap;
-    } else {
-      // No speech voices (or muted): murmur instead and time the line by its length.
-      this.voice.speak(speaker, secs, text.trim().endsWith('?'));
-      this.wait = secs + HANGAR.chatterReplyGap;
-    }
+    this.voice.speak(speaker, secs, text.trim().endsWith('?'));
+    if (radio) this.voice.squelchAfter(secs);
+    this.wait = secs + HANGAR.chatterReplyGap;
     this.idx++;
   }
 

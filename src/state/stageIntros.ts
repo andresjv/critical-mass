@@ -4,7 +4,7 @@
 
 import { gameUi, type StageIntroData } from './gameUi';
 
-export type StageKey = 'map' | 'hangar' | 'attack_run' | 'silos';
+export type StageKey = 'map' | 'hangar' | 'attack_run' | 'silos' | 'ground';
 
 const INTRO_DATA: Record<StageKey, StageIntroData> = {
   map: {
@@ -30,6 +30,12 @@ const INTRO_DATA: Record<StageKey, StageIntroData> = {
     goal: 'Destroy the central silo to stop the launch',
     keyboard: ['Arrows — aim reticle', 'Space — fire rocket', 'Diamond = locked on target'],
     touch: ['Stick — aim', 'Fire — shoot', 'Diamond = locked'],
+  },
+  ground: {
+    stageName: 'GROUND ASSAULT',
+    goal: 'Fight to the bunker and hit the red button. You can take 5 hits',
+    keyboard: ['← → — move, ↓ — crouch', '↑ or Shift K X — jump', 'Space — shoot', 'Hold H — pick a gun (1–4 also swap)'],
+    touch: ['Stick — move / crouch', 'JUMP — jump', 'SHOOT — fire', 'Hold GUNS — pick a gun'],
   },
 };
 

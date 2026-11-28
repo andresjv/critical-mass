@@ -1,4 +1,4 @@
-// HangarAmbience — room hum, a faint distant murmur, and the crew's spoken lines.
+// HangarAmbience — room hum, a crowd murmur in the background, and the crew's babbled lines.
 // Speech is synthesised to sound like real (unintelligible) talking rather than beeps:
 // words of 1–3 syllables with consonant onsets (fricative hiss, plosive clicks), vowels shaped
 // by three formant filters that glide between vowels, a sentence pitch contour that drifts down
@@ -20,7 +20,8 @@ const VOWELS: [number, number, number][] = [
   [730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410],
   [300, 870, 2240], [500, 1500, 2500], [660, 1720, 2410],
 ];
-const MURMUR_EVERY = [2.5, 6];
+/** Gap between background crowd voices (s); short so they overlap into a crowd murmur. */
+const MURMUR_EVERY = [0.15, 0.9];
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 const pick = <T,>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
@@ -58,7 +59,14 @@ export class HangarAmbience {
     else this.burst(ctx, this.out, ctx.currentTime + 0.02, 'bandpass', 2400, 0.12, 0.06, 1.2);
   }
 
-  /** Fallback when the browser has no speech voices: babble lasting about `secs`. */
+  /** Squelch release `secs` from now (end of a radio line). */
+  squelchAfter(secs: number): void {
+    const ctx = getAudioCtx();
+    if (!ctx || !this.out) return;
+    this.burst(ctx, this.out, ctx.currentTime + 0.05 + secs, 'bandpass', 2000, 0.16, 0.09, 1.0);
+  }
+
+  /** A crew member talking: babble lasting about `secs`. */
   speak(who: number, secs: number, question: boolean): void {
     const ctx = getAudioCtx();
     if (!ctx || !this.out) return;
@@ -71,11 +79,12 @@ export class HangarAmbience {
     const bus = getBus('music');
     if (!ctx || !bus) return;
     if (!this.out) this.build(ctx, bus);
-    // Faint conversation somewhere else in the hangar, heavily muffled.
+    // Crowd murmur: several muffled conversations elsewhere in the hangar, overlapping.
     if (ctx.currentTime >= this.nextMurmur) {
-      const secs = rand(0.8, 2.2);
-      this.utterance(ctx, this.out!, pick(VOICES), ctx.currentTime + 0.05, secs, Math.random() < 0.25, this.radio, 0.12, 700);
-      this.nextMurmur = ctx.currentTime + secs + rand(MURMUR_EVERY[0], MURMUR_EVERY[1]);
+      const secs = rand(0.9, 2.6);
+      const v = pick(VOICES);
+      this.utterance(ctx, this.out!, { f0: v.f0 * rand(0.9, 1.1), formant: v.formant }, ctx.currentTime + 0.05, secs, Math.random() < 0.25, this.radio, rand(0.07, 0.13), rand(650, 1100));
+      this.nextMurmur = ctx.currentTime + rand(MURMUR_EVERY[0], MURMUR_EVERY[1]);
     }
   }
 
