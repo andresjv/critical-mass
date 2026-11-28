@@ -20,7 +20,7 @@ import {
   FOE_AI, FOES, GROUND, ITEMS, SCORE, SOLDIER_ANIM, TUNING, type FoeKind, type FoeStats, type GunStats,
 } from '../../state/tuning';
 import { createRng, type Rng } from '../../state/rng';
-import { armory, gunDef, gunStats, syncUnlocks, SLOT_COUNT, type GunId } from '../../state/armory';
+import { armory, gunDef, gunStats, startingLoadout, syncUnlocks, SLOT_COUNT, type GunId } from '../../state/armory';
 import { earnLevelAchievement, progress } from '../../state/progress';
 import { foeRoster, foeTier } from '../../state/foes';
 import { settings, haptic } from '../../state/settings';
@@ -211,13 +211,10 @@ export class GroundAssaultScene extends Phaser.Scene {
     this.fxGfx     = this.add.graphics().setDepth(4);
     this.fx = new Effects(this.fxGfx, (wx) => this.groundY(wx), createRng(missionState.seed + 77), () => undefined, this.biome.enemyJet);
 
-    // Carried guns, each with a full magazine.
-    this.guns = Array.from({ length: SLOT_COUNT }, (_, i) => {
-      const id = armory.slots[i];
-      return id ? { id, ammo: gunStats(id).mag, reloadT: 0 } : null;
-    });
-    if (!this.guns.some(g => g)) this.guns[0] = { id: 'pistol', ammo: gunStats('pistol').mag, reloadT: 0 };
-    this.cur = this.guns.findIndex(g => g !== null);
+    // Carried guns, each with a full magazine; you always start with the Service Pistol in hand.
+    const load = startingLoadout(armory.slots);
+    this.guns = load.slots.map(id => (id ? { id, ammo: gunStats(id).mag, reloadT: 0 } : null));
+    this.cur = load.start;
 
     // Parachute in from above the landing zone.
     this.px = START_X;

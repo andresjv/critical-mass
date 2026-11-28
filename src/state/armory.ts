@@ -127,6 +127,20 @@ export function carried(): GunId[] {
   return c.length ? c : ['pistol'];
 }
 
+/** Guns for one ground assault: the wheel slots, always including the Service Pistol (it takes
+ *  the first empty slot, or the last slot for this run if all are full), and the slot of the
+ *  pistol, which is the gun you start with. Does not change the saved loadout. */
+export function startingLoadout(slots: readonly (GunId | null)[]): { slots: (GunId | null)[]; start: number } {
+  const out = Array.from({ length: SLOT_COUNT }, (_, i) => slots[i] ?? null);
+  let start = out.indexOf('pistol');
+  if (start < 0) {
+    start = out.indexOf(null);
+    if (start < 0) start = SLOT_COUNT - 1;
+    out[start] = 'pistol';
+  }
+  return { slots: out, start };
+}
+
 // ── Daily store ─────────────────────────────────────────────────────────────
 
 /** Local calendar day, e.g. "2026-11-27". */

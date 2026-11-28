@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+  startingLoadout,
   armory, buy, carried, dailyOffers, GUNS, gunPrice, rarityChance, RARITIES, resetArmory, setSlot,
   syncUnlocks, addCredits, SLOT_COUNT, msUntilRefresh, dayKey,
 } from '../src/state/armory';
@@ -80,5 +81,12 @@ describe('armory', () => {
     const d = new Date(2026, 10, 27, 23, 0, 0);
     expect(msUntilRefresh(d)).toBe(60 * 60 * 1000);
     expect(dayKey(d)).toBe('2026-11-27');
+  });
+
+  it('every ground assault starts with the Service Pistol in hand', () => {
+    expect(startingLoadout(['smg', 'pistol', null, null])).toEqual({ slots: ['smg', 'pistol', null, null], start: 1 });
+    expect(startingLoadout(['smg', null, 'rifle', null])).toEqual({ slots: ['smg', 'pistol', 'rifle', null], start: 1 });
+    expect(startingLoadout(['smg', 'rifle', 'shotgun', 'lmg'])).toEqual({ slots: ['smg', 'rifle', 'shotgun', 'pistol'], start: 3 });
+    expect(startingLoadout([null, null, null, null]).start).toBe(0);
   });
 });
