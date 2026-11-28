@@ -33,7 +33,7 @@ export interface DifficultyTuning {
 
 export const TUNING: Record<Difficulty, DifficultyTuning> = {
   tutorial: {
-    timeToImpact: 240,
+    timeToImpact: 360,
     startingPlanes: 7,
     groundContactCrash: false,
     enemyFireRate: 0.4,
@@ -44,7 +44,7 @@ export const TUNING: Record<Difficulty, DifficultyTuning> = {
     scoreMultiplier: 1,
   },
   cadet: {
-    timeToImpact: 180,
+    timeToImpact: 270,
     startingPlanes: 5,
     groundContactCrash: false,
     enemyFireRate: 0.7,
@@ -55,7 +55,7 @@ export const TUNING: Record<Difficulty, DifficultyTuning> = {
     scoreMultiplier: 1,
   },
   pilot: {
-    timeToImpact: 150,
+    timeToImpact: 225,
     startingPlanes: 4,
     groundContactCrash: true,
     enemyFireRate: 1.0,
@@ -66,7 +66,7 @@ export const TUNING: Record<Difficulty, DifficultyTuning> = {
     scoreMultiplier: 1.5,
   },
   suicidal: {
-    timeToImpact: 120,
+    timeToImpact: 180,
     startingPlanes: 3,
     groundContactCrash: true,
     enemyFireRate: 1.3,
@@ -394,6 +394,8 @@ export const GROUND = {
   hitInvuln: 1.1,
   /** Level length (px) from the landing zone to the launch-control bunker. */
   levelLength: 5200,
+  /** Rolling hills: total rise between the lowest and highest ground point, px. */
+  hillHeight: 36,
   /** Walk speed px/s, acceleration (1/s easing), gravity px/s², jump speed px/s. */
   walkSpeed: 330,
   walkResponse: 12,
@@ -416,7 +418,7 @@ export const GROUND = {
   wheelTimeScale: 0.25,
   /** Enemy soldiers: count per 1000 px, hit points, sight range px, fire interval s,
    *  bullet speed px/s, walk speed px/s. */
-  enemiesPer1000: 2.2,
+  enemiesPer1000: 1.3,
   enemyHp: 4,
   enemySight: 760,
   enemyFireInterval: 1.5,
@@ -493,4 +495,114 @@ export const ENDLESS = {
   /** Every this many points earns `creditsPerStep` store credits. */
   pointsPerStep: 1000,
   creditsPerStep: 5,
+} as const;
+
+// ─── Ground assault: enemy types, side items and cover (t20) ────────────────
+
+export type FoeKind = 'rifleman' | 'smg' | 'shotgun' | 'gunner' | 'grenadier';
+
+/** How each enemy type fights. Speeds px/s, times s, ranges px. Enemy guns are only
+ *  assault rifles, SMGs, shotguns, machine guns and pistols (drawn black). */
+export interface FoeStats {
+  /** Gun drawn in their hands (and its sound). */
+  gun: 'rifle' | 'smg' | 'shotgun' | 'lmg' | 'pistol';
+  hp: number;
+  /** Starts shooting inside this range. */
+  range: number;
+  /** Seconds between bursts, shots per burst, seconds between burst shots. */
+  fireInterval: number;
+  burst: number;
+  burstGap: number;
+  spread: number;
+  pellets: number;
+  bulletSpeed: number;
+  /** Hits each bullet costs the player. */
+  damage: number;
+  moveSpeed: number;
+  /** 'cover': runs next to cover and peeks; 'rush': charges the player; 'hold': stays put. */
+  style: 'cover' | 'rush' | 'hold';
+  /** Seconds between grenade throws; 0 = never throws. */
+  throwInterval: number;
+}
+
+export const FOES: Record<FoeKind, FoeStats> = {
+  rifleman:  { gun: 'rifle',   hp: 4, range: 760, fireInterval: 1.4, burst: 3, burstGap: 0.12, spread: 0.05, pellets: 1, bulletSpeed: 600, damage: 1, moveSpeed: 150, style: 'cover', throwInterval: 0 },
+  smg:       { gun: 'smg',     hp: 3, range: 520, fireInterval: 1.6, burst: 5, burstGap: 0.08, spread: 0.12, pellets: 1, bulletSpeed: 560, damage: 1, moveSpeed: 210, style: 'rush',  throwInterval: 0 },
+  shotgun:   { gun: 'shotgun', hp: 5, range: 340, fireInterval: 1.5, burst: 1, burstGap: 0,    spread: 0.2,  pellets: 4, bulletSpeed: 620, damage: 1, moveSpeed: 190, style: 'rush',  throwInterval: 0 },
+  gunner:    { gun: 'lmg',     hp: 7, range: 820, fireInterval: 2.6, burst: 8, burstGap: 0.09, spread: 0.1,  pellets: 1, bulletSpeed: 620, damage: 1, moveSpeed: 90,  style: 'hold',  throwInterval: 0 },
+  grenadier: { gun: 'pistol',  hp: 4, range: 620, fireInterval: 1.8, burst: 1, burstGap: 0,    spread: 0.06, pellets: 1, bulletSpeed: 560, damage: 1, moveSpeed: 140, style: 'cover', throwInterval: 3.8 },
+};
+
+/** Enemy mix per difficulty tier (0 = first launch … 3 = deep in Endless): relative weights. */
+export const FOE_WEIGHTS: readonly Record<FoeKind, number>[] = [
+  { rifleman: 6, smg: 3, shotgun: 2, gunner: 0, grenadier: 0 },
+  { rifleman: 5, smg: 3, shotgun: 2, gunner: 1, grenadier: 1 },
+  { rifleman: 4, smg: 3, shotgun: 2, gunner: 2, grenadier: 2 },
+  { rifleman: 3, smg: 3, shotgun: 3, gunner: 2, grenadier: 3 },
+];
+
+/** Enemy behaviour timing (s) and distances (px). */
+export const FOE_AI = {
+  /** "!" reaction before acting after spotting the player. */
+  alertTime: 0.55,
+  /** Ducked behind cover, between peeks. */
+  coverDuckMin: 0.9,
+  coverDuckMax: 1.9,
+  /** Standing up out of cover to shoot. */
+  peekTime: 1.0,
+  /** Bursts before a reload, and how long it takes. */
+  burstsPerReload: 3,
+  reloadTime: 1.6,
+  /** Idle: seconds between glancing the other way. */
+  lookMin: 1.8,
+  lookMax: 4,
+  /** Runs from a live grenade inside this distance. */
+  fleeRadius: 190,
+  /** Hit flinch duration and knock-back speed. */
+  flinchTime: 0.28,
+  knockback: 140,
+  /** Rushers stop this far from the player. */
+  rushStop: 120,
+  /** A crouched soldier this close to a crate/sandbags counts as in cover. */
+  coverGap: 30,
+  /** Troops keep at least this far from each other and from the player. */
+  personalSpace: 72,
+  /** …and this far from a machine-gun nest. */
+  nestSpace: 110,
+} as const;
+
+/** Side items (J). Speeds px/s, gravity px/s², radii px. */
+export const ITEMS = {
+  /** Uses carried into each ground assault (refilled on a new life). */
+  start: { frag: 3, molotov: 2, medkit: 1 },
+  /** Delay between uses. */
+  cooldown: 0.6,
+  throwSpeed: 640,
+  throwLift: 560,
+  gravity: 1700,
+  /** Frag grenade: fuse, blast radius, damage to enemies, hits to the player inside it. */
+  fragFuse: 1.4,
+  fragRadius: 150,
+  fragDamage: 9,
+  fragPlayerHits: 2,
+  /** Firebomb: burn time, fire width, damage per tick to enemies, tick seconds. */
+  burnSecs: 4.5,
+  burnWidth: 180,
+  burnDamage: 2,
+  burnTick: 0.45,
+  /** Medkit: health restored. */
+  medkitHeal: 3,
+  /** Enemy grenadier throws: flight time to the target. */
+  foeThrowTime: 1.05,
+} as const;
+
+/** Player animation and cover. */
+export const SOLDIER_ANIM = {
+  /** Seconds the player stays up after the last shot when popping out of cover. */
+  peekHold: 0.45,
+  /** Landing squash time and recoil kick time. */
+  landTime: 0.18,
+  recoilTime: 0.09,
+  /** Throw arm swing time. */
+  throwTime: 0.32,
 } as const;

@@ -9,8 +9,9 @@ export const MUZZLE: Record<GunId, number> = {
   pistol: 6, smg: 9, shotgun: 13, rifle: 12, burst: 11, sniper: 17, lmg: 14, rocket: 12, laser: 13,
 };
 
-export function drawGun(t: Xform, id: GunId, time = 0): void {
-  const { body, accent } = GUN_LOOK[id];
+/** `tint` repaints the gun in one colour family (enemy guns are plain black). */
+export function drawGun(t: Xform, id: GunId, time = 0, tint?: { body: number; accent: number }): void {
+  const { body, accent } = tint ?? GUN_LOOK[id];
   switch (id) {
     case 'pistol':
       t.rect(body, -1, -2.2, 7, 2.2); t.rect(body, -1, -0.2, 1.8, 3); t.rect(accent, 0.5, -2.2, 4, 0.7);

@@ -6,7 +6,7 @@ const DEFAULT_LABELS: TouchLabels = { move: 'STEER', fire: 'FIRE', action: 'ACTI
 
 import {
   FIRE_CENTER, ACTION_CENTER, FIRE_VISUAL_RADIUS, ACTION_VISUAL_RADIUS, JOYSTICK_ZONE_X,
-  INVENTORY_CENTER, INVENTORY_VISUAL_RADIUS,
+  INVENTORY_CENTER, INVENTORY_VISUAL_RADIUS, ITEM_CENTER, ITEM_VISUAL_RADIUS,
 } from './touchLayout';
 
 const FIRE_TOUCH_RADIUS = 120;   // px — touch hit zone
@@ -38,6 +38,8 @@ export class TouchControls {
   /** Weapon-wheel button (only when the labels name one). */
   private readonly invArc: Phaser.GameObjects.Arc;
   private invPointerId = -1;
+  private readonly itemArc: Phaser.GameObjects.Arc;
+  private itemPointerId = -1;
 
   // Per-pointer tracking (pointer.id == -1 means unassigned)
   private joystickPointerId = -1;
@@ -93,6 +95,11 @@ export class TouchControls {
       .setVisible(this.shown && !!labels.inventory)
       .setDepth(10);
 
+    this.itemArc = scene.add
+      .arc(ITEM_CENTER.x, ITEM_CENTER.y, ITEM_VISUAL_RADIUS, 0, 360, false, 0x7a8a9a, 0.7)
+      .setVisible(this.shown && !!labels.item)
+      .setDepth(10);
+
     if (this.isTouchDevice) {
       scene.input.on('pointerdown', this.onPointerDown);
       scene.input.on('pointermove', this.onPointerMove);
@@ -114,6 +121,14 @@ export class TouchControls {
       dist2d(pointer.x, pointer.y, FIRE_CENTER.x, FIRE_CENTER.y) <= FIRE_TOUCH_RADIUS
     ) {
       this.firePointerId = pointer.id;
+      return;
+    }
+
+    if (
+      this.labels.item && this.itemPointerId === -1 &&
+      dist2d(pointer.x, pointer.y, ITEM_CENTER.x, ITEM_CENTER.y) <= ITEM_VISUAL_RADIUS + 18
+    ) {
+      this.itemPointerId = pointer.id;
       return;
     }
 
@@ -175,6 +190,7 @@ export class TouchControls {
     if (pointer.id === this.firePointerId) this.firePointerId = -1;
     if (pointer.id === this.actionPointerId) this.actionPointerId = -1;
     if (pointer.id === this.invPointerId) this.invPointerId = -1;
+    if (pointer.id === this.itemPointerId) this.itemPointerId = -1;
   };
 
   /** Show or hide the on-screen buttons and their labels. */
@@ -184,6 +200,7 @@ export class TouchControls {
     this.fireArc.setVisible(on);
     this.actionArc.setVisible(on);
     this.invArc.setVisible(on && !!this.labels.inventory);
+    this.itemArc.setVisible(on && !!this.labels.item);
     if (!on) { this.baseArc.setVisible(false); this.thumbArc.setVisible(false); }
     if (on) gameUi.touchLabels = this.labels;
     else if (gameUi.touchLabels === this.labels) gameUi.touchLabels = null;
@@ -215,6 +232,7 @@ export class TouchControls {
       action: touchAction,
       pause: false,
       inventory: this.invPointerId !== -1,
+      item: this.itemPointerId !== -1,
     });
 
     // Fade idle controls.
@@ -223,6 +241,7 @@ export class TouchControls {
     this.fireArc.setAlpha(alpha);
     this.actionArc.setAlpha(alpha);
     this.invArc.setAlpha(alpha);
+    this.itemArc.setAlpha(alpha);
   }
 
   /** Change button labels mid-scene (e.g. hangar: OPEN DOORS → LAUNCH). */
@@ -230,6 +249,7 @@ export class TouchControls {
     this.labels = labels;
     if (this.shown && !this.destroyed) gameUi.touchLabels = labels;
     this.invArc.setVisible(this.shown && !!labels.inventory);
+    this.itemArc.setVisible(this.shown && !!labels.item);
   }
 
   destroy(): void {
@@ -247,5 +267,6 @@ export class TouchControls {
     this.fireArc.destroy();
     this.actionArc.destroy();
     this.invArc.destroy();
+    this.itemArc.destroy();
   }
 }

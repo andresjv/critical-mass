@@ -49,13 +49,16 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
       'At the end of each run you eject and parachute in. Fight to the bunker; at the big red button a pop-up says press T (tap it on touch).',
       '{move} to walk and crouch, {action} or up to jump, {fire} to shoot. You can take 5 hits.',
       'Hold H (Y on a pad, GUNS on touch) to pick from the 4 guns you carry.',
+      'Crouch right next to a crate or sandbags to take cover; hold fire to pop up and shoot over it.',
+      'J throws your side item: frag grenades, firebombs, or use a medkit. Q switches item (RB / LB on a pad, ITEM button on touch).',
+      'Enemies carry rifles, SMGs, shotguns, machine guns or pistols, and some throw grenades: run from the blinking ones.',
     ],
   },
   {
     art: 'loadout', title: 'Medals and parts',
     lines: [
       'Beating a level earns its medal and unlocks a new jet, gun or bomb, plus a ground gun.',
-      'Endless mode (in Select level) runs random biomes back to back: reach the hangar to fly again. Every enemy is 100 points and each 1000 points earns 5 credits for the daily store (Guns & store), new every day; rarer guns show up less often.',
+      'Endless mode (in Select level) runs random biomes back to back: reach the hangar to fly again. Every enemy is 100 points and each 1000 points earns 5 credits for the daily store (Guns & store), new every day; rarer guns show up less often. On foot you start with only the Service Pistol; buy guns there or earn them with medals.',
       'Equip parts from Inventory on the main menu. {pause} pauses the game.',
     ],
   },

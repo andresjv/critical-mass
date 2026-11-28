@@ -366,6 +366,7 @@ export class AttackRunScene extends Phaser.Scene {
       this.biome.enemyJet,
       this.biome.troops,
       { offset: () => this.backdrop.forestOffset(this.cameraX), floorY: (sx) => this.backdrop.forestY(sx, this.cameraX) },
+      { fill: this.biome.ground.fill, edge: this.biome.ground.surface },
     );
 
     // ── Graphics layers ──────────────────────────────────────────────────────

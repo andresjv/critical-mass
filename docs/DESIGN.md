@@ -411,3 +411,33 @@ Finish by running tests and opening a Vercel preview.
   plane" → next stage's hangar in a new biome. No missile clock. Runs until the planes run out.
 - More health: `ATTACK_RUN.endlessPlaneHits` (4) and `GROUND.endlessHits` (8). Enemy count grows by
   `GROUND.endlessStageScale` per stage up to `GROUND.endlessMaxScale`.
+
+## t20 — Alive soldiers
+- **No end screens:** the MISSION COMPLETE / coming-soon screens are gone. Pressing the button shows a
+  "LAUNCH ABORTED" card (score, gold/silver/bronze medal by health left) for ~3 s, then the menu.
+  Running out of clock: "LAUNCH SUCCEEDED: CITY LOST", then the menu (or Game Over).
+- **More time:** impact clock +50% (tutorial 360 s, cadet 270, pilot 225, suicidal 180).
+- **Enemy types** (`FOES`, `FOE_WEIGHTS`, `state/foes.ts`): rifleman (assault rifle, takes cover),
+  SMG and shotgun rushers, machine gunner (holds ground, long bursts), grenadier (pistol, lobs
+  grenades). Enemy guns are only rifles, SMGs, shotguns, machine guns and pistols, all drawn black.
+  The mix gets harder with each launch / Endless stage.
+- **Enemy AI** (`FOE_AI`): patrol open ground and glance around; "!" on spotting you (nearby troops
+  join in); run to the far side of a crate/sandbags and duck/peek; reload after 3 bursts; flinch and
+  get knocked back; run from grenades and fire; fall away from the shot, dropping their gun.
+  Troops spawn and move on open ground only: never on or in front of cover (cover draws over them)
+  and they never overlap: a hard `personalSpace` (72 px) between troops, `nestSpace` from nests.
+  Fewer troops: `GROUND.enemiesPer1000` 1.3 (about 5 on the first launch).
+- **SoldierRig** (`models/SoldierRig.ts`): shared animated soldier with IK legs/arms: walk/run, idle
+  breathing, crouch and crouch-walk, jump tuck, landing squash, recoil, flinch, reload, throw, death
+  fall. Feet follow the slope. Each enemy gets a personal look (`soldierLook`: skin, kit shade,
+  hat, height, pack) from the side's kit.
+- **Grounding fixes:** ground hills are smooth (smoothstep) and gentler (`GROUND.hillHeight`), crates
+  sit on the lowest ground under their whole width, the drawn ground matches the physics exactly,
+  bunker/hangar/nests sink into the ground. Attack run: background troops stand on a lit field strip.
+- **Cover:** crouch right next to a crate/sandbags/barrel you face = in cover ("In cover" badge);
+  hold fire to pop up and shoot over it (`SOLDIER_ANIM.peekHold`).
+- **Side items (J)** (`ITEMS`): frag ×3 (bounces, 1.4 s fuse, blast hurts you too), firebomb ×2
+  (fire patch burns enemies), medkit ×1 (+3 health). Q / pad LB / tapping the item card switches;
+  pad RB / touch ITEM uses. Refilled each life. J no longer fires (Space only).
+- **Start gun:** every ground assault starts with the Service Pistol in hand (`startingLoadout`); if it is not on the wheel it rides along in the first empty slot (or the last slot) for that run, without changing the saved loadout.
+- **Guns economy:** everyone owns only the Service Pistol (save format v2). Other guns come from the daily store (which never offers the pistol) or from a level medal, granted only when that medal is newly earned (`grantMedalGun`). Older saves keep only guns they bought.

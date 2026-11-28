@@ -12,7 +12,7 @@ import type { Rng } from '../../state/rng';
 import {
   TRACER_BLUE, TRACER_RED, PLAYER_JET, type SoldierPalette, type JetPalette,
 } from '../theme/factions';
-import type { Troops } from '../theme/troops';
+import { soldierLook, type Troops } from '../theme/troops';
 import { trooperHead, trooperPack, trooperTorso } from '../models/Trooper';
 import { drawJet } from '../models/Vehicles';
 import { Xform } from '../models/shapes';
@@ -43,6 +43,8 @@ export interface Soldier {
   /** Last aim angle on screen (for drawing the rifle), radians. */
   aim: number;
   flash: number;
+  /** Seed for this soldier's own look (skin, kit shade, hat, height). */
+  look: number;
 }
 
 interface Tracer { x1: number; y1: number; x2: number; y2: number; life: number; color: number; layer: 'ground' | 'sky' | 'fg' }
@@ -71,6 +73,8 @@ export class BattleLayer {
     private readonly troops: Troops,
     /** Layer offset (screen x + offset = layer x) and floor y for the current camera. */
     private readonly layer: { offset(): number; floorY(sx: number): number },
+    /** Field the infantry stand on (so they read as on the ground, not floating). */
+    private readonly field: { fill: number; edge: number },
   ) {
     for (let i = 0; i < BATTLE.dogfightPairs; i++) this.pairs.push(this.newPair(i * 400));
   }
@@ -169,6 +173,7 @@ export class BattleLayer {
   drawGround(g: Phaser.GameObjects.Graphics): void {
     g.clear();
     const off = this.layer.offset();
+    this.drawField(g);
     this.drawEarthworks(g, off);
     // Far soldiers first so nearer ones overlap them.
     const vis = this.soldiers.filter(s => s.wx - off > -30 && s.wx - off < W + 30).sort((a, b) => a.depth - b.depth);
@@ -220,6 +225,7 @@ export class BattleLayer {
       wx: running ? front + dir * 520 : spot, targetWx: spot,
       fireT: this.rng.next() * BATTLE.fireMax, stanceT: 1 + this.rng.next() * 3,
       phase: this.rng.next() * 6, deadT: 0, aim: side === 'blue' ? 0 : Math.PI, flash: 0,
+      look: this.rng.nextInt(100000),
     });
   }
 
@@ -238,6 +244,22 @@ export class BattleLayer {
       this.tracers.push({ x1: mx, y1: my, x2: b.x, y2: b.y + 2, life: 0.07, color: s.side === 'blue' ? TRACER_BLUE : TRACER_RED, layer: 'ground' });
     }
     if (this.rng.chance(BATTLE.hitChance)) this.kill(t);
+  }
+
+  /** Trodden field strip along the tree line: the ground the infantry stand on. */
+  private drawField(g: Phaser.GameObjects.Graphics): void {
+    const top: { x: number; y: number }[] = [];
+    for (let sx = -20; sx <= W + 20; sx += 20) top.push({ x: sx, y: this.layer.floorY(sx) - 1 });
+    const bot = BATTLE.stripDepth + 12;
+    g.fillStyle(this.field.fill, 1);
+    g.beginPath(); g.moveTo(top[0].x, top[0].y);
+    for (const p of top) g.lineTo(p.x, p.y);
+    for (let i = top.length - 1; i >= 0; i--) g.lineTo(top[i].x, top[i].y + bot);
+    g.closePath(); g.fillPath();
+    g.lineStyle(2, this.field.edge, 0.8);
+    g.beginPath(); g.moveTo(top[0].x, top[0].y);
+    for (const p of top) g.lineTo(p.x, p.y);
+    g.strokePath();
   }
 
   private drawEarthworks(g: Phaser.GameObjects.Graphics, off: number): void {
@@ -263,8 +285,9 @@ export class BattleLayer {
   }
 
   private drawSoldier(g: Phaser.GameObjects.Graphics, s: Soldier, off: number): void {
-    const pal: SoldierPalette = s.side === 'blue' ? this.troops.blue : this.troops.red;
-    const x = s.wx - off, fy = this.footY(s, off), h = this.height(s), k = h / 16;
+    const look = soldierLook(s.side === 'blue' ? this.troops.blue : this.troops.red, s.look);
+    const pal: SoldierPalette = look.pal;
+    const x = s.wx - off, fy = this.footY(s, off), h = this.height(s) * look.scale, k = h / 16;
     const face = s.side === 'blue' ? 1 : -1;
     if (!s.alive) {
       // Fallen: topples backwards over ~0.4 s, then lies still and fades.
@@ -281,13 +304,13 @@ export class BattleLayer {
     if (s.kneel) {
       t.line(pal.dark, 2.4, 0, -5, 3, -1); t.line(pal.dark, 2.4, 3, -1, 3, 0); // front leg
       t.line(pal.dark, 2.4, 0, -5, -4, 0);                                       // knee down
-      trooperPack(t, pal, -4, -10.5, 2, 4.5);
+      if (look.pack) trooperPack(t, pal, -4, -10.5, 2, 4.5);
       trooperTorso(t, pal, -2.5, -11, 5, 7);
       this.arms(t, pal, -9, s, face);
       trooperHead(t, pal, 0.5, -12.8, 2);
     } else {
       t.line(pal.dark, 2.4, 0, -7, sw, 0); t.line(pal.dark, 2.4, 0, -7, -sw, 0);
-      trooperPack(t, pal, -4, -13.5, 2, 5);
+      if (look.pack) trooperPack(t, pal, -4, -13.5, 2, 5);
       trooperTorso(t, pal, -2.5, -14, 5, 8);
       this.arms(t, pal, -12, s, face);
       trooperHead(t, pal, 0.5, -15.8, 2);

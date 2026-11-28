@@ -30,6 +30,8 @@ export interface TouchLabels {
   action: string; // '' hides the label
   /** Weapon-wheel button label; absent = no such button in this scene. */
   inventory?: string;
+  /** Side-item button label; absent = no such button in this scene. */
+  item?: string;
 }
 
 export type UiScreen = 'menu' | 'game' | 'gameover';
@@ -59,6 +61,10 @@ export const gameUi = {
   endlessStage: 0,
   /** On-screen interact prompt ("Press T to …"), null = hidden. Tapping it on touch interacts. */
   interactPrompt: null as string | null,
+  /** Ground assault side item (J): the selected one and how many of each are left. */
+  item: null as { kind: string; name: string; count: number; all: { kind: string; count: number }[] } | null,
+  /** Ground assault: the player is crouched behind cover. */
+  inCover: false,
 
   /** Last active input device — drives key-hint labels in the HUD. */
   device: 'keyboard' as DeviceHint,
@@ -84,8 +90,6 @@ export const gameUi = {
   howToPlayStage: null as HowToPlayStage | null,
 
   // ── Results screen (shown by PlaceholderAssaultScene at mission end) ────
-  showResults: false,
-  finalScore: 0,
   /** Challenger data loaded from URL at startup. */
   challengerData: null as ChallengerData | null,
   /** Current player's display name (editable on results screen). */
@@ -121,5 +125,4 @@ export const gameUi = {
   stageResult: null as StageResultData | null,
 
   /** Layer 9: "Coming soon" card for placeholder stages. */
-  showComingSoon: false,
 };

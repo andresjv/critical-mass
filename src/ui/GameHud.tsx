@@ -1,5 +1,5 @@
 import { HudState } from './useHudState';
-import { InteractPrompt, WeaponHud } from './WeaponHud';
+import { InteractPrompt, ItemHud, WeaponHud } from './WeaponHud';
 
 interface Props {
   s: HudState;
@@ -180,6 +180,7 @@ export function GameHud({ s }: Props) {
       )}
 
       <WeaponHud s={s} />
+      <ItemHud s={s} />
       <InteractPrompt s={s} />
 
       {/* ── Map info panel ──────────────────────────────────────────────── */}

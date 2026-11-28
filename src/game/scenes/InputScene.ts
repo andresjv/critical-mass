@@ -5,7 +5,7 @@ import Phaser from 'phaser';
 import { InputRouter } from '../../input/InputRouter';
 import { gameUi } from '../../state/gameUi';
 
-const { LEFT, RIGHT, UP, DOWN, W, A, S, D, SPACE, J, SHIFT, K, X, ESC, P, F1, H, T, ONE, TWO, THREE, FOUR } =
+const { LEFT, RIGHT, UP, DOWN, W, A, S, D, SPACE, J, SHIFT, K, X, ESC, P, F1, H, T, Q, ONE, TWO, THREE, FOUR } =
   Phaser.Input.Keyboard.KeyCodes;
 
 export class InputScene extends Phaser.Scene {
@@ -27,7 +27,9 @@ export class InputScene extends Phaser.Scene {
   private keyF1!:    Phaser.Input.Keyboard.Key;
   private keyH!:     Phaser.Input.Keyboard.Key;
   private keyT!:     Phaser.Input.Keyboard.Key;
+  private keyQ!:     Phaser.Input.Keyboard.Key;
   private keySlots!: Phaser.Input.Keyboard.Key[];
+  private prevPadNext = false;
 
   constructor() {
     super({ key: 'InputScene', active: false });
@@ -53,6 +55,7 @@ export class InputScene extends Phaser.Scene {
     this.keyF1    = kb.addKey(F1);
     this.keyH     = kb.addKey(H);
     this.keyT     = kb.addKey(T);
+    this.keyQ     = kb.addKey(Q);
     this.keySlots = [ONE, TWO, THREE, FOUR].map(k => kb.addKey(k));
   }
 
@@ -72,12 +75,14 @@ export class InputScene extends Phaser.Scene {
     InputRouter.setKeyboard({
       moveX,
       moveY,
-      fire: this.keySpace.isDown || this.keyJ.isDown,
+      fire: this.keySpace.isDown,
       action: this.keyShift.isDown || this.keyK.isDown || this.keyX.isDown,
       pause: Phaser.Input.Keyboard.JustDown(this.keyEsc) ||
              Phaser.Input.Keyboard.JustDown(this.keyP),
       inventory: this.keyH.isDown,
       interact: this.keyT.isDown,
+      item: this.keyJ.isDown,
+      itemNext: Phaser.Input.Keyboard.JustDown(this.keyQ),
       slot: this.keySlots.findIndex(k => Phaser.Input.Keyboard.JustDown(k)) + 1,
     });
 
@@ -94,7 +99,11 @@ export class InputScene extends Phaser.Scene {
       const padPause  = pad.isButtonDown(9); // Start
       const padWheel  = pad.isButtonDown(3); // Y / Triangle (hold: weapon wheel)
       const padUse    = pad.isButtonDown(2); // X / Square (interact)
+      const padItem   = pad.isButtonDown(5); // RB / R1 (side item)
+      const padNext   = pad.isButtonDown(4); // LB / L1 (switch item)
 
+      const nextEdge = padNext && !this.prevPadNext;
+      this.prevPadNext = padNext;
       InputRouter.setGamepad({
         moveX: padMoveX,
         moveY: padMoveY,
@@ -103,6 +112,8 @@ export class InputScene extends Phaser.Scene {
         pause: padPause,
         inventory: padWheel,
         interact: padUse,
+        item: padItem,
+        itemNext: nextEdge,
       });
 
       if (Math.abs(padMoveX) > 0.1 || Math.abs(padMoveY) > 0.1 || padFire || padAction) {

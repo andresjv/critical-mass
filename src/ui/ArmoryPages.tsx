@@ -7,6 +7,7 @@ import {
 } from '../state/armory';
 
 import { levelInfo } from '../state/levels';
+import { progress } from '../state/progress';
 import { RARITY_COLOR } from '../game/theme/groundAssault';
 import { ACCENT, MONO, MenuButton, Panel, resetBtn } from './menuKit';
 
@@ -132,7 +133,8 @@ export function GunsPage({ onBack, onStore }: { onBack: () => void; onStore: () 
         {GUNS.map(g => {
           const owned = armory.owned.includes(g.id), here = armory.slots[active] === g.id;
           const col = RARITY_COLOR[g.rarity];
-          const how = g.unlock ? `Beat ${levelInfo(g.unlock).name} or buy` : 'Daily store only';
+          const how = g.id === 'pistol' ? 'Starting gun'
+            : g.unlock && !progress.achieved.includes(g.unlock) ? `Beat ${levelInfo(g.unlock).name} or buy` : 'Daily store only';
           return (
             <button key={g.id} data-nav onClick={() => owned && place(here ? null : g.id)} style={{
               ...resetBtn, textAlign: 'left', borderRadius: 8, padding: '8px 12px',

@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+  startingLoadout,
   armory, buy, carried, dailyOffers, GUNS, gunPrice, rarityChance, RARITIES, resetArmory, setSlot,
-  syncUnlocks, addCredits, SLOT_COUNT, msUntilRefresh, dayKey,
+  grantMedalGun, addCredits, SLOT_COUNT, msUntilRefresh, dayKey,
 } from '../src/state/armory';
 import { GUN_STATS, STORE } from '../src/state/tuning';
 
@@ -15,12 +16,16 @@ describe('armory', () => {
     }
   });
 
-  it('starts with pistol and SMG carried, two empty slots and starting credits', () => {
-    expect(armory.owned).toEqual(['pistol', 'smg']);
-    expect(armory.slots).toEqual(['pistol', 'smg', null, null]);
+  it('starts with only the Service Pistol, three empty slots and starting credits', () => {
+    expect(armory.owned).toEqual(['pistol']);
+    expect(armory.slots).toEqual(['pistol', null, null, null]);
     expect(armory.slots).toHaveLength(SLOT_COUNT);
     expect(armory.credits).toBe(STORE.startingCredits);
-    expect(carried()).toEqual(['pistol', 'smg']);
+    expect(carried()).toEqual(['pistol']);
+  });
+
+  it('the store never offers the Service Pistol (everyone has it)', () => {
+    for (let i = 0; i < 300; i++) expect(dailyOffers(`p${i}`, '2026-11-27')).not.toContain('pistol');
   });
 
   it('daily offers are the same for the same player and day', () => {
@@ -37,10 +42,11 @@ describe('armory', () => {
   });
 
   it('rarer guns show up less often', () => {
+    // Per gun: how often each gun of a rarity appears (rarities have different numbers of guns).
     const count: Record<string, number> = {};
     for (let i = 0; i < 3000; i++) for (const id of dailyOffers(`player${i}`, '2026-11-27')) {
       const r = GUNS.find(g => g.id === id)!.rarity;
-      count[r] = (count[r] ?? 0) + 1;
+      count[r] = (count[r] ?? 0) + 1 / GUNS.filter(g => g.rarity === r && g.id !== 'pistol').length;
     }
     expect(count.common).toBeGreaterThan(count.rare);
     expect(count.rare).toBeGreaterThan(count.legendary);
@@ -53,7 +59,7 @@ describe('armory', () => {
     expect(buy('lmg', ['lmg'], '2026-11-27')).toBe('ok');
     expect(armory.credits).toBe(before - gunPrice('lmg'));
     expect(armory.owned).toContain('lmg');
-    expect(armory.slots[2]).toBe('lmg');
+    expect(armory.slots[1]).toBe('lmg');
     expect(buy('lmg', ['lmg'], '2026-11-27')).toBe('owned');
   });
 
@@ -63,15 +69,15 @@ describe('armory', () => {
     expect(armory.owned).not.toContain('laser');
   });
 
-  it('level medals unlock their guns for free', () => {
-    expect(syncUnlocks(['desert'])).toEqual(['shotgun']);
+  it('a newly earned level medal grants its gun once', () => {
+    expect(grantMedalGun('desert')).toBe('shotgun');
     expect(armory.owned).toContain('shotgun');
-    expect(syncUnlocks(['desert'])).toEqual([]);
+    expect(grantMedalGun('desert')).toBeNull();
   });
 
   it('moving a gun to another slot swaps it', () => {
     setSlot(3, 'pistol');
-    expect(armory.slots).toEqual([null, 'smg', null, 'pistol']);
+    expect(armory.slots).toEqual([null, null, null, 'pistol']);
     setSlot(0, 'laser'); // not owned
     expect(armory.slots[0]).toBeNull();
   });
@@ -80,5 +86,12 @@ describe('armory', () => {
     const d = new Date(2026, 10, 27, 23, 0, 0);
     expect(msUntilRefresh(d)).toBe(60 * 60 * 1000);
     expect(dayKey(d)).toBe('2026-11-27');
+  });
+
+  it('every ground assault starts with the Service Pistol in hand', () => {
+    expect(startingLoadout(['smg', 'pistol', null, null])).toEqual({ slots: ['smg', 'pistol', null, null], start: 1 });
+    expect(startingLoadout(['smg', null, 'rifle', null])).toEqual({ slots: ['smg', 'pistol', 'rifle', null], start: 1 });
+    expect(startingLoadout(['smg', 'rifle', 'shotgun', 'lmg'])).toEqual({ slots: ['smg', 'rifle', 'shotgun', 'pistol'], start: 3 });
+    expect(startingLoadout([null, null, null, null]).start).toBe(0);
   });
 });
