@@ -25,7 +25,9 @@ import { drawGun, MUZZLE } from '../models/Guns';
 import { MusicTrack } from '../audio/MusicTrack';
 import { playExplosion } from '../audio/ExplosionSound';
 import { playReload, playShot } from '../audio/GunSound';
-import { fadeFromCapture } from '../crossfade';
+import { captureFrame, fadeFromCapture } from '../crossfade';
+import { drawJet } from '../models/Vehicles';
+import { playerJet } from '../theme/loadoutTheme';
 import type { SoldierPalette } from '../theme/factions';
 
 const W = 1280, H = 720;
@@ -99,6 +101,8 @@ export class GroundAssaultScene extends Phaser.Scene {
   private crouch = false;
   private state: 'chute' | 'live' | 'down' | 'won' = 'chute';
   private hits: number = GROUND.playerHits;
+  private maxHits: number = GROUND.playerHits;
+  private prevInteract = false;
   private invuln = 0;
   private phase = 0;
   private aim = 0;
@@ -125,13 +129,15 @@ export class GroundAssaultScene extends Phaser.Scene {
     this.bullets = [];
     this.accumulator = 0;
     this.state = 'chute';
-    this.hits = GROUND.playerHits;
+    this.maxHits = missionState.endless ? GROUND.endlessHits : GROUND.playerHits;
+    this.hits = this.maxHits;
     this.invuln = 0;
+    this.prevInteract = true;
     this.vx = 0; this.vy = 0; this.face = 1; this.crouch = false;
     this.fireT = 0; this.burstLeft = 0; this.wheelHi = -1; this.endT = 0;
     this.prevFire = true; this.prevAction = true; this.prevUp = true; this.prevWheel = false;
-    gameUi.hull = this.hits; gameUi.hullMax = GROUND.playerHits; gameUi.hullLabel = 'Health';
-    gameUi.creditsEarned = 0;
+    gameUi.hull = this.hits; gameUi.hullMax = this.maxHits; gameUi.hullLabel = 'Health';
+    gameUi.interactPrompt = null;
     gameUi.wheel = null;
     gameUi.stageResult = null;
     gameUi.showComingSoon = false;
@@ -171,10 +177,10 @@ export class GroundAssaultScene extends Phaser.Scene {
     gameUi.mapActive = false;
     gameUi.progressStep = 'ground';
     gameUi.launchNumber = this.launchIndex + 1;
-    gameUi.objective = 'Fight to the launch bunker and hit the button';
+    gameUi.objective = missionState.endless ? 'Fight through to the hangar and board your plane' : 'Fight to the launch bunker and hit the button';
     gameUi.contextualHint = null;
-    missionState.hudCue = 'EJECTED! FIGHT TO THE LAUNCH BUTTON';
-    showStageIntro('ground');
+    missionState.hudCue = missionState.endless ? 'EJECTED! FIGHT TO THE HANGAR' : 'EJECTED! FIGHT TO THE LAUNCH BUTTON';
+    showStageIntro(missionState.endless ? 'ground_endless' : 'ground');
     this.syncWeaponUi();
 
     this.visibilityHandler = () => { if (document.hidden) this.scene.pause(); else this.scene.resume(); };
@@ -217,7 +223,10 @@ export class GroundAssaultScene extends Phaser.Scene {
 
     // Enemy soldiers on the ground and on top of cover; machine-gun nests near the bunker.
     this.enemies = [];
-    const count = Math.round((len / 1000) * GROUND.enemiesPer1000 * (0.8 + this.launchIndex * 0.15));
+    const harder = missionState.endless
+      ? Math.min(GROUND.endlessMaxScale, 0.8 + missionState.endlessStage * GROUND.endlessStageScale)
+      : 0.8 + this.launchIndex * 0.15;
+    const count = Math.round((len / 1000) * GROUND.enemiesPer1000 * harder);
     for (let i = 0; i < count; i++) {
       const ex = 1000 + (i + this.rng.next() * 0.7) * ((len - 1300) / count);
       const perch = this.boxes.find(b => ex > b.x + 10 && ex < b.x + b.w - 10);
@@ -276,7 +285,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     const scale = wheel ? GROUND.wheelTimeScale : 1;
     this.accumulator += delta * 0.001 * scale;
     while (this.accumulator >= FIXED_DT) {
-      this.step(FIXED_DT, wheel ? 0 : input.moveX, wheel ? 0 : input.moveY, input.fire && !wheel, input.action && !wheel);
+      this.step(FIXED_DT, wheel ? 0 : input.moveX, wheel ? 0 : input.moveY, input.fire && !wheel, input.action && !wheel, input.interact && !wheel);
       this.fx.update(FIXED_DT, this.camX);
       this.accumulator -= FIXED_DT;
     }
@@ -286,8 +295,10 @@ export class GroundAssaultScene extends Phaser.Scene {
     debugInfo.fps = Math.round(this.game.loop.actualFps);
   }
 
-  private step(dt: number, mx: number, my: number, fire: boolean, action: boolean): void {
+  private step(dt: number, mx: number, my: number, fire: boolean, action: boolean, interact = false): void {
     const fireJust = fire && !this.prevFire, actionJust = action && !this.prevAction;
+    const interactJust = interact && !this.prevInteract;
+    this.prevInteract = interact;
     const up = my < -0.6, upJust = up && !this.prevUp;
     this.prevFire = fire; this.prevAction = action; this.prevUp = up;
 
@@ -320,8 +331,10 @@ export class GroundAssaultScene extends Phaser.Scene {
     const want = Phaser.Math.Clamp(this.px - W * GROUND.cameraLead, 0, this.bunkerX + 380 - W);
     this.camX += (want - this.camX) * (1 - Math.exp(-6 * dt));
 
-    // Reached the button?
-    if (this.state === 'live' && this.onGround && Math.abs(this.px - this.buttonX()) < GROUND.buttonReach) this.win();
+    // At the button (or, in Endless, the hangar)? Show the "Press T" pop-up; T presses it.
+    const near = this.state === 'live' && this.onGround && Math.abs(this.px - this.buttonX()) < GROUND.buttonReach;
+    gameUi.interactPrompt = near ? (missionState.endless ? 'Board your plane' : 'Press the launch abort button') : null;
+    if (near && interactJust) this.win();
   }
 
   private stepPlayer(dt: number, mx: number, my: number, jump: boolean): void {
@@ -506,10 +519,16 @@ export class GroundAssaultScene extends Phaser.Scene {
     e.deadT = 0;
     const nest = e.kind === 'nest';
     missionState.addScore(nest ? GROUND.scoreNest : GROUND.scoreKill);
-    const cr = nest ? GROUND.creditsPerNest : GROUND.creditsPerKill;
-    addCredits(cr);
-    gameUi.creditsEarned += cr;
-    missionState.hudCue = `+${nest ? GROUND.scoreNest : GROUND.scoreKill}  ·  +${cr} CREDITS`;
+    const pts = nest ? GROUND.scoreNest : GROUND.scoreKill;
+    if (missionState.endless) {
+      // Credits are only earned in Endless.
+      const cr = nest ? GROUND.creditsPerNest : GROUND.creditsPerKill;
+      addCredits(cr);
+      gameUi.creditsEarned += cr;
+      missionState.hudCue = `+${pts}  ·  +${cr} CREDITS`;
+    } else {
+      missionState.hudCue = `+${pts}`;
+    }
     if (nest) { this.fx.explosion(e.x, e.y - 30, 50, 10, false, true); playExplosion(45); }
   }
 
@@ -590,15 +609,32 @@ export class GroundAssaultScene extends Phaser.Scene {
     this.state = 'won';
     this.endT = 0;
     this.vx = 0;
+    gameUi.interactPrompt = null;
     missionState.addScore(GROUND.scoreButton);
+    if (missionState.endless) { this.boardPlane(); return; }
     missionState.siteDestroyed();
-    addCredits(GROUND.creditsButton);
-    gameUi.creditsEarned += GROUND.creditsButton;
     missionState.hudCue = '';
     gameUi.callout = 'LAUNCH ABORTED';
     gameUi.calloutExpiry = Date.now() + 1800;
     haptic(150);
     this.time.delayedCall(2200, () => this.finish(true));
+  }
+
+  /** Endless: stage cleared at the hangar. Credits, then on to the next random biome's hangar. */
+  private boardPlane(): void {
+    addCredits(GROUND.creditsStage);
+    gameUi.creditsEarned += GROUND.creditsStage;
+    const cleared = missionState.endlessStage + 1;
+    missionState.hudCue = '';
+    gameUi.callout = `STAGE ${cleared} CLEARED  ·  +${GROUND.creditsStage} CREDITS`;
+    gameUi.calloutExpiry = Date.now() + 1800;
+    haptic(150);
+    this.music.fadeOut(1);
+    this.time.delayedCall(1600, () => {
+      missionState.nextEndlessStage();
+      gameUi.endlessStage = missionState.endlessStage + 1;
+      captureFrame(this, () => this.scene.start('HangarScene', { launchIndex: missionState.endlessStage }));
+    });
   }
 
   /** End of the stage: launch aborted (button pressed) or the clock ran out (city lost). */
@@ -617,7 +653,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     if (missionState.isGameOver) { this.scene.start('GameOverScene'); return; }
     gameUi.stageResult = {
       headline: aborted ? 'LAUNCH ABORTED' : 'LAUNCH SUCCEEDED',
-      details: [aborted ? 'You hit the button in time' : 'The clock ran out', `+${gameUi.creditsEarned} credits`],
+      details: [aborted ? 'You hit the button in time' : 'The clock ran out'],
       next: 'Mission results',
     };
     this.time.delayedCall(2000, () => {
@@ -648,7 +684,8 @@ export class GroundAssaultScene extends Phaser.Scene {
     const g = this.worldGfx;
     g.clear();
     this.drawGround(g, cx);
-    this.drawBunker(g, this.bunkerX - cx, time);
+    if (missionState.endless) this.drawHangar(g, this.bunkerX - cx, time);
+    else this.drawBunker(g, this.bunkerX - cx, time);
     for (const b of this.boxes) if (b.x + b.w > cx - 20 && b.x < cx + W + 20) this.drawBox(g, b, cx);
 
     const a = this.actorGfx;
@@ -710,6 +747,28 @@ export class GroundAssaultScene extends Phaser.Scene {
       g.fillStyle(kit.barrel, 1); g.fillRect(x, top, w, h);
       g.fillStyle(kit.barrelTop, 1); g.fillRect(x, top, w, 6);
       g.fillStyle(kit.barrelRed, 1); g.fillRect(x, top + h * 0.3, w, 7); g.fillRect(x, top + h * 0.7, w, 7);
+    }
+  }
+
+  /** Endless goal: an open hangar with your plane waiting inside. */
+  private drawHangar(g: Phaser.GameObjects.Graphics, x: number, time: number): void {
+    if (x > W + 50 || x < -500) return;
+    const gy = this.groundY(this.bunkerX + 150), top = gy - 220;
+    g.fillStyle(C.concreteDark, 1); g.fillRect(x - 10, top + 40, 420, gy - top - 40);
+    g.fillStyle(C.concreteLight, 1);
+    g.beginPath(); g.arc(x + 200, top + 120, 215, Math.PI * 1.12, Math.PI * 1.88, false); g.closePath(); g.fillPath();
+    g.fillStyle(C.concrete, 1); g.fillRect(x, top + 50, 400, gy - top - 50);
+    // Open door and the lit bay inside.
+    const dx = x + 40, dw = 300, dt = gy - 150;
+    g.fillStyle(C.doorDark, 1); g.fillRect(dx, dt, dw, gy - dt);
+    g.fillStyle(C.lamp, 0.12); g.fillTriangle(dx + dw / 2, dt + 6, dx, gy, dx + dw, gy);
+    for (let i = 0; i < 3; i++) { g.fillStyle(C.lamp, 1); g.fillRect(dx + 40 + i * 100, dt + 4, 24, 5); }
+    drawJet(g, dx + dw / 2 + 30, gy - 62, playerJet(), { facing: -1, rot: 0, thrust: 0, time, scale: 1.7 });
+    for (let i = 0; i < 12; i++) { g.fillStyle(i % 2 ? C.hazard : C.hazardDark, 1); g.fillRect(x + i * 33, top + 52, 33, 10); }
+    if (this.state !== 'won') {
+      const ay = dt - 40 + Math.sin(time * 0.006) * 6;
+      g.fillStyle(C.hazard, 1);
+      g.fillTriangle(this.buttonX() - this.camX - 16, ay, this.buttonX() - this.camX + 16, ay, this.buttonX() - this.camX, ay + 22);
     }
   }
 
@@ -870,6 +929,7 @@ export class GroundAssaultScene extends Phaser.Scene {
     gameUi.hullLabel = 'Hull';
     gameUi.weapon = null;
     gameUi.wheel = null;
+    gameUi.interactPrompt = null;
     gameUi.contextualHint = null;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.touchControls?.destroy();

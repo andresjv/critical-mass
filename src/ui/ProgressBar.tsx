@@ -4,6 +4,7 @@ interface Props {
   progressStep: ProgressStep | null;
   launchNumber: number;
   launchSite: string;
+  endlessStage?: number;
 }
 
 type StepDef = { key: ProgressStep; label: string };
@@ -14,7 +15,7 @@ const STEPS: StepDef[] = [
   { key: 'ground',     label: 'GROUND ASSAULT' },
 ];
 
-const STEP_ORDER: ProgressStep[] = ['map', 'hangar', 'attack_run', 'silos', 'ground'];
+const STEP_ORDER: ProgressStep[] = ['map', 'hangar', 'attack_run', 'ground'];
 
 function stepColor(key: ProgressStep, current: ProgressStep): string {
   const ci = STEP_ORDER.indexOf(current);
@@ -24,7 +25,7 @@ function stepColor(key: ProgressStep, current: ProgressStep): string {
   return '#4a5c70';                // future — very dim
 }
 
-export function ProgressBar({ progressStep, launchNumber, launchSite }: Props) {
+export function ProgressBar({ progressStep, launchNumber, launchSite, endlessStage = 0 }: Props) {
   if (!progressStep) return null;
   const SANS = "'Space Grotesk', sans-serif";
 
@@ -59,8 +60,16 @@ export function ProgressBar({ progressStep, launchNumber, launchSite }: Props) {
         })}
       </div>
 
+      {endlessStage > 0 && (
+        <span style={{
+          fontFamily: SANS, fontSize: 12, color: '#ffd76a', letterSpacing: 1.5,
+          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+        }}>
+          ENDLESS  ·  STAGE {endlessStage}
+        </span>
+      )}
       {/* Sub-line: launch N of 4 — site name */}
-      {launchSite && (
+      {launchSite && !endlessStage && (
         <span style={{
           fontFamily: SANS, fontSize: 12, color: 'rgba(200,215,230,0.7)', letterSpacing: 1,
           textShadow: '0 1px 3px rgba(0,0,0,0.8)',

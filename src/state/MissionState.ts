@@ -2,7 +2,8 @@
 // Pure TypeScript: NO Phaser imports. Unit-tested in tests/MissionState.test.ts.
 
 import { Difficulty, LIMITS, TUNING } from './tuning';
-import type { LevelId } from './levels';
+import { LEVELS, type LevelId } from './levels';
+import { createRng } from './rng';
 
 export type ThemeId = 'coldfront' | 'xenoworld';
 
@@ -12,6 +13,8 @@ export interface MissionConfig {
   seed: number;
   /** World the mission is flown in (skin only). Defaults to Cold Front. */
   level?: LevelId;
+  /** Endless mode: loop hangar → attack run → ground assault through random biomes, no missile clock. */
+  endless?: boolean;
 }
 
 export class MissionState {
@@ -22,6 +25,10 @@ export class MissionState {
   level: LevelId = 'coldfront';
   /** True once a mission has been started from the menu (or a challenge link). */
   started = false;
+  /** Endless mode run (see MissionConfig.endless). */
+  endless = false;
+  /** Endless: stages cleared so far (0 on the first). */
+  endlessStage = 0;
 
   // ── Planes / men ─────────────────────────────────────────────────────────
   /** Planes currently available (also = men at Stage 5). */
@@ -64,7 +71,9 @@ export class MissionState {
     this.theme = config.theme;
     this.difficulty = config.difficulty;
     this.seed = config.seed;
-    this.level = config.level ?? 'coldfront';
+    this.endless = config.endless ?? false;
+    this.endlessStage = 0;
+    this.level = config.level ?? (this.endless ? this.endlessLevel(0, null) : 'coldfront');
     this.started = true;
 
     this.planes = TUNING[config.difficulty].startingPlanes;
@@ -74,6 +83,19 @@ export class MissionState {
     this.score = 0;
     this.impactClock = 0;
     this.hudCue = '';
+  }
+
+  /** Endless: biome for stage `n`: seeded by the mission seed, never the same one twice in a row. */
+  endlessLevel(n: number, previous: LevelId | null): LevelId {
+    const pool = LEVELS.map(l => l.id).filter(id => id !== previous);
+    return createRng(this.seed + n * 7919).pick(pool);
+  }
+
+  /** Endless: stage cleared, move on to the next random biome. Returns it. */
+  nextEndlessStage(): LevelId {
+    this.endlessStage += 1;
+    this.level = this.endlessLevel(this.endlessStage, this.level);
+    return this.level;
   }
 
   /** Mission over (game over or finished): the next scene shown is the menu. */

@@ -4,7 +4,7 @@
 
 import { gameUi, type StageIntroData } from './gameUi';
 
-export type StageKey = 'map' | 'hangar' | 'attack_run' | 'silos' | 'ground';
+export type StageKey = 'map' | 'hangar' | 'attack_run' | 'ground' | 'ground_endless';
 
 const INTRO_DATA: Record<StageKey, StageIntroData> = {
   map: {
@@ -25,17 +25,17 @@ const INTRO_DATA: Record<StageKey, StageIntroData> = {
     keyboard: ['↑ ↓ — altitude', '← → — position', 'Space — fire gun'],
     touch: ['Stick — move', 'Fire button — shoot'],
   },
-  silos: {
-    stageName: 'SILO STRIKE',
-    goal: 'Destroy the central silo to stop the launch',
-    keyboard: ['Arrows — aim reticle', 'Space — fire rocket', 'Diamond = locked on target'],
-    touch: ['Stick — aim', 'Fire — shoot', 'Diamond = locked'],
-  },
   ground: {
     stageName: 'GROUND ASSAULT',
-    goal: 'Fight to the bunker and hit the red button. You can take 5 hits',
-    keyboard: ['← → — move, ↓ — crouch', '↑ or Shift K X — jump', 'Space — shoot', 'Hold H — pick a gun (1–4 also swap)'],
-    touch: ['Stick — move / crouch', 'JUMP — jump', 'SHOOT — fire', 'Hold GUNS — pick a gun'],
+    goal: 'Fight to the bunker and press the red button (T). You can take 5 hits',
+    keyboard: ['← → — move, ↓ — crouch', '↑ or Shift K X — jump', 'Space — shoot', 'Hold H — pick a gun (1–4 also swap)', 'T — press button / board plane'],
+    touch: ['Stick — move / crouch', 'JUMP — jump', 'SHOOT — fire', 'Hold GUNS — pick a gun', 'Tap the pop-up — press / board'],
+  },
+  ground_endless: {
+    stageName: 'ENDLESS · ON FOOT',
+    goal: 'Fight through to the hangar and board your plane (T). You can take 8 hits. Every kill earns credits',
+    keyboard: ['← → — move, ↓ — crouch', '↑ or Shift K X — jump', 'Space — shoot', 'Hold H — pick a gun (1–4 also swap)', 'T — board plane'],
+    touch: ['Stick — move / crouch', 'JUMP — jump', 'SHOOT — fire', 'Hold GUNS — pick a gun', 'Tap the pop-up — board'],
   },
 };
 

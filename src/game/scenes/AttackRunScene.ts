@@ -170,6 +170,7 @@ export class AttackRunScene extends Phaser.Scene {
   private planePitch = 0;
   /** Hull hits left on this plane, invulnerable seconds after a hit, smoke timer. */
   private hull: number = ATTACK_RUN.planeHits;
+  private maxHull: number = ATTACK_RUN.planeHits;
   private invuln = 0;
   private smokeT = 0;
   /** Where the fly-in starts (screen px): the takeoff jet's last position, or off-screen left. */
@@ -235,8 +236,9 @@ export class AttackRunScene extends Phaser.Scene {
     this.stageTimer  = ATTACK_RUN.duration;
     this.thrusting   = false;
     this.planeVx = 0; this.planeVa = 0; this.planePitch = 0;
-    this.hull = ATTACK_RUN.planeHits; this.invuln = 0; this.smokeT = 0;
-    gameUi.hull = this.hull; gameUi.hullMax = ATTACK_RUN.planeHits;
+    this.maxHull = missionState.endless ? ATTACK_RUN.endlessPlaneHits : ATTACK_RUN.planeHits;
+    this.hull = this.maxHull; this.invuln = 0; this.smokeT = 0;
+    gameUi.hull = this.hull; gameUi.hullMax = this.maxHull;
     const h = takeJetHandoff();
     this.entryFrom = h ? { x: h.x, y: h.y, pitch: h.pitch } : { x: ATTACK_RUN.entryStartX, y: null, pitch: 0 };
     this.planeX = this.entryFrom.x;
@@ -276,7 +278,7 @@ export class AttackRunScene extends Phaser.Scene {
     // Progress breadcrumb.
     gameUi.progressStep   = 'attack_run';
     gameUi.launchNumber   = this.launchIndex + 1;
-    gameUi.objective      = 'Survive and reach the silos';
+    gameUi.objective      = 'Survive the run, then eject over the target';
     gameUi.contextualHint = null;
 
 
@@ -480,7 +482,7 @@ export class AttackRunScene extends Phaser.Scene {
     this.thrusting = Math.abs(mx) > 0.05 || Math.abs(my) > 0.05;
     this.invuln = Math.max(0, this.invuln - dt);
     // Damaged planes trail smoke (more of it with each hit).
-    if (this.hull < ATTACK_RUN.planeHits) {
+    if (this.hull < this.maxHull) {
       this.smokeT -= dt;
       if (this.smokeT <= 0) {
         this.smokeT = this.hull <= 1 ? 0.05 : 0.11;

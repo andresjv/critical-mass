@@ -1,7 +1,7 @@
 // howToPlay.ts — first-visit how-to-play card data and seen-tracking.
 // Plain TypeScript: NO Phaser or React imports.
 
-export type HowToPlayStage = 'attack_run' | 'silo_strike';
+export type HowToPlayStage = 'attack_run';
 
 export interface HowToPlayInfo {
   title: string;
@@ -17,17 +17,6 @@ export const HOW_TO_PLAY: Record<HowToPlayStage, HowToPlayInfo> = {
       'FIRE  Shoot forward',
       'Buildings + pylons are lethal',
       'Duck low to dodge heat-seekers',
-    ],
-  },
-  silo_strike: {
-    title: 'SILO STRIKE',
-    lines: [
-      '← →   Aim left / right',
-      '↑ ↓   Aim altitude',
-      'FIRE  Launch rocket',
-      'Reticle turns ◆ when aligned',
-      'Central silo ends the launch',
-      'Side silos → +1 plane',
     ],
   },
 };

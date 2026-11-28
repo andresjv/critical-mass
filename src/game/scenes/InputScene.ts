@@ -5,7 +5,7 @@ import Phaser from 'phaser';
 import { InputRouter } from '../../input/InputRouter';
 import { gameUi } from '../../state/gameUi';
 
-const { LEFT, RIGHT, UP, DOWN, W, A, S, D, SPACE, J, SHIFT, K, X, ESC, P, F1, H, ONE, TWO, THREE, FOUR } =
+const { LEFT, RIGHT, UP, DOWN, W, A, S, D, SPACE, J, SHIFT, K, X, ESC, P, F1, H, T, ONE, TWO, THREE, FOUR } =
   Phaser.Input.Keyboard.KeyCodes;
 
 export class InputScene extends Phaser.Scene {
@@ -26,6 +26,7 @@ export class InputScene extends Phaser.Scene {
   private keyP!:     Phaser.Input.Keyboard.Key;
   private keyF1!:    Phaser.Input.Keyboard.Key;
   private keyH!:     Phaser.Input.Keyboard.Key;
+  private keyT!:     Phaser.Input.Keyboard.Key;
   private keySlots!: Phaser.Input.Keyboard.Key[];
 
   constructor() {
@@ -51,6 +52,7 @@ export class InputScene extends Phaser.Scene {
     this.keyP     = kb.addKey(P);
     this.keyF1    = kb.addKey(F1);
     this.keyH     = kb.addKey(H);
+    this.keyT     = kb.addKey(T);
     this.keySlots = [ONE, TWO, THREE, FOUR].map(k => kb.addKey(k));
   }
 
@@ -75,10 +77,11 @@ export class InputScene extends Phaser.Scene {
       pause: Phaser.Input.Keyboard.JustDown(this.keyEsc) ||
              Phaser.Input.Keyboard.JustDown(this.keyP),
       inventory: this.keyH.isDown,
+      interact: this.keyT.isDown,
       slot: this.keySlots.findIndex(k => Phaser.Input.Keyboard.JustDown(k)) + 1,
     });
 
-    if (kbActive || this.keyH.isDown) gameUi.device = 'keyboard';
+    if (kbActive || this.keyH.isDown || this.keyT.isDown) gameUi.device = 'keyboard';
 
     // ── Gamepad ───────────────────────────────────────────────────────────
     const pads = this.input.gamepad?.gamepads ?? [];
@@ -90,6 +93,7 @@ export class InputScene extends Phaser.Scene {
       const padAction = pad.isButtonDown(1); // B / Circle
       const padPause  = pad.isButtonDown(9); // Start
       const padWheel  = pad.isButtonDown(3); // Y / Triangle (hold: weapon wheel)
+      const padUse    = pad.isButtonDown(2); // X / Square (interact)
 
       InputRouter.setGamepad({
         moveX: padMoveX,
@@ -98,6 +102,7 @@ export class InputScene extends Phaser.Scene {
         action: padAction,
         pause: padPause,
         inventory: padWheel,
+        interact: padUse,
       });
 
       if (Math.abs(padMoveX) > 0.1 || Math.abs(padMoveY) > 0.1 || padFire || padAction) {

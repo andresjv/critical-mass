@@ -390,15 +390,23 @@ Finish by running tests and opening a Vercel preview.
 ## t19 — Ground Assault (replaces the Silo Strike)
 - When the attack run timer ends the pilot **ejects** (seat rocket, then parachute) and the game
   crossfades into `GroundAssaultScene`: a 2D side-scroller on foot.
-- Goal: reach the big red button in the launch bunker at `GROUND.levelLength`. Walking into it
-  presses it (the action key is jump). The soldier takes `GROUND.playerHits` (5) hits; at 0 a life
+- Goal: reach the big red button in the launch bunker at `GROUND.levelLength`. A "Press T" pop-up
+  appears there (gamepad X; on touch the pop-up is the button). Input: `InputRouter.interact`. The soldier takes `GROUND.playerHits` (5) hits; at 0 a life
   is lost and the stage restarts. The impact clock keeps running (city lost at 0).
 - Enemies: patrolling soldiers (some on crates) and machine-gun nests near the bunker. Crates,
   sandbags and barrels block movement and bullets; stacks always have a step up.
 - Guns: 4 carried slots (`src/state/armory.ts`). **Hold H** (pad Y, touch GUNS) opens the weapon wheel
   (time slows to 0.25×), stick/arrows pick, release equips; keys 1–4 swap directly. Auto-aim within
   `GROUND.autoAimAngle`; auto-reload on empty. Stats in `GUN_STATS`.
-- Credits: earned per kill / nest / button press, saved in localStorage (`cm_armory_v1`).
+- Credits: earned only in **Endless** (per kill / nest / stage cleared), saved in localStorage (`cm_armory_v1`).
 - **Daily store**: 4 offers per player per day (player id + local date seeded), rarity-weighted
   (`STORE.weight`); chance % is shown. Level medals also unlock specific guns for free.
-- `SiloScene` is no longer reached but kept in the build for now.
+- The Silo Strike (`SiloScene`, its placeholder, `SILO` tuning, pseudo3d) has been deleted.
+
+## Endless mode
+- Started from the Endless card in Select level (`MenuRequest.endless`). `MissionState.endless`,
+  `endlessStage`, `nextEndlessStage()` pick a seeded random biome each stage (never the same twice).
+- Loop: hangar → attack run → eject → ground assault → reach the open hangar → "Press T: board your
+  plane" → next stage's hangar in a new biome. No missile clock. Runs until the planes run out.
+- More health: `ATTACK_RUN.endlessPlaneHits` (4) and `GROUND.endlessHits` (8). Enemy count grows by
+  `GROUND.endlessStageScale` per stage up to `GROUND.endlessMaxScale`.

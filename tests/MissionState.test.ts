@@ -139,3 +139,30 @@ describe('MissionState — level and menu lifecycle', () => {
     expect(s.planes).toBe(0);
   });
 });
+
+describe('MissionState — endless', () => {
+  it('starts in a seeded random biome with no missile clock', () => {
+    const a = new MissionState(), b = new MissionState();
+    a.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 42, endless: true });
+    b.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 42, endless: true });
+    expect(a.endless).toBe(true);
+    expect(a.level).toBe(b.level);
+    expect(a.impactClock).toBe(0);
+  });
+
+  it('moves to a different biome each stage, the same way for the same seed', () => {
+    const a = new MissionState(), b = new MissionState();
+    a.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 7, endless: true });
+    b.startMission({ theme: 'coldfront', difficulty: 'pilot', seed: 7, endless: true });
+    for (let i = 0; i < 10; i++) {
+      const prev = a.level;
+      expect(a.nextEndlessStage()).not.toBe(prev);
+      expect(b.nextEndlessStage()).toBe(a.level);
+    }
+    expect(a.endlessStage).toBe(10);
+  });
+
+  it('a normal mission is not endless', () => {
+    expect(startedState().endless).toBe(false);
+  });
+});

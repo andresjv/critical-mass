@@ -23,6 +23,8 @@ export interface HudState {
   weapon: typeof gameUi.weapon;
   wheel: typeof gameUi.wheel;
   creditsEarned: number;
+  endlessStage: number;
+  interactPrompt: string | null;
   hudCue: string;
   fps: number;
   speed: number;
@@ -48,9 +50,6 @@ export interface HudState {
   playerName: string;
   // Attack run
   attackRunSecsLeft: number;
-  // Silo
-  silosDestroyed: number;
-  centralSiloDown: boolean;
   // Player guidance
   progressStep: ProgressStep | null;
   launchNumber: number;
@@ -75,6 +74,8 @@ function snapshot(): HudState {
     weapon:       gameUi.weapon,
     wheel:        gameUi.wheel,
     creditsEarned: gameUi.creditsEarned,
+    endlessStage: gameUi.endlessStage,
+    interactPrompt: gameUi.interactPrompt,
     hudCue:       missionState.hudCue,
     fps:          debugInfo.fps,
     speed:        debugInfo.speed,
@@ -96,8 +97,6 @@ function snapshot(): HudState {
     challengerData: gameUi.challengerData,
     playerName:   gameUi.playerName,
     attackRunSecsLeft: gameUi.attackRunSecsLeft,
-    silosDestroyed: gameUi.silosDestroyed,
-    centralSiloDown: gameUi.centralSiloDown,
     // Player guidance
     progressStep:    gameUi.progressStep,
     launchNumber:    gameUi.launchNumber,

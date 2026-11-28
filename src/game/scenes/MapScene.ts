@@ -80,7 +80,7 @@ export class MapScene extends Phaser.Scene {
     // The launch-site map screen is no longer shown: this scene just routes each launch
     // straight to the hangar (or to the final stage once every site is down).
     if (missionState.isGameOver) { this.scene.start('GameOverScene'); return; }
-    if (this.launchIndex < LIMITS.launchSiteCount) {
+    if (this.launchIndex < LIMITS.launchSiteCount || missionState.endless) {
       if (!this.scene.isActive('HudScene')) this.scene.launch('HudScene');
       gameUi.mapActive = false;
       gameUi.launchIndex = this.launchIndex;
@@ -234,7 +234,8 @@ export class MapScene extends Phaser.Scene {
     gameUi.contextualHint = null;
     this.siteTween?.stop();
 
-    missionState.startImpactClock(TUNING[missionState.difficulty].timeToImpact);
+    // Endless runs have no missile clock.
+    if (!missionState.endless) missionState.startImpactClock(TUNING[missionState.difficulty].timeToImpact);
     this.scene.start('HangarScene', { launchIndex: this.launchIndex });
   }
 

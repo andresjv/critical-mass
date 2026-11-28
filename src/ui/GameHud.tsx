@@ -1,5 +1,5 @@
 import { HudState } from './useHudState';
-import { WeaponHud } from './WeaponHud';
+import { InteractPrompt, WeaponHud } from './WeaponHud';
 
 interface Props {
   s: HudState;
@@ -137,7 +137,7 @@ export function GameHud({ s }: Props) {
       {/* ── Objective line ───────────────────────────────────────────────── */}
       {s.objective && s.progressStep && (
         <div style={{
-          position: 'absolute', top: s.launchSite ? 132 : 114, left: 0, right: 0,
+          position: 'absolute', top: s.launchSite || s.endlessStage ? 132 : 114, left: 0, right: 0,
           textAlign: 'center', pointerEvents: 'none',
         }}>
           <span style={{
@@ -179,17 +179,8 @@ export function GameHud({ s }: Props) {
         </div>
       )}
 
-      {/* ── Silo status ──────────────────────────────────────────────────── */}
-      {s.silosDestroyed > 0 && (
-        <div style={{
-          position: 'absolute', top: 82, right: 16, ...PANEL, borderRadius: 999,
-          padding: '4px 14px', fontFamily: SANS, fontSize: 20, color: '#88ff88', pointerEvents: 'none',
-        }}>
-          {'◆'.repeat(s.silosDestroyed)}
-        </div>
-      )}
-
       <WeaponHud s={s} />
+      <InteractPrompt s={s} />
 
       {/* ── Map info panel ──────────────────────────────────────────────── */}
       {s.mapActive && s.launchSite && (

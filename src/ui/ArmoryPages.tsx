@@ -87,7 +87,7 @@ export function StorePage({ onBack }: { onBack: () => void }) {
       <div style={{ minHeight: 30, fontSize: 20, color: msg?.r === 'ok' ? '#5cf0a0' : '#ffb06a', marginBottom: 12 }}>
         {msg && (msg.r === 'ok' ? `Bought ${gunDef(msg.id).name}. Find it under Guns.`
           : msg.r === 'owned' ? `You already own ${gunDef(msg.id).name}.`
-          : msg.r === 'poor' ? `Not enough credits. Earn them in the ground assault.` : 'That gun is no longer on offer.')}
+          : msg.r === 'poor' ? `Not enough credits. Earn them in Endless mode (Select level).` : 'That gun is no longer on offer.')}
       </div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
         <MenuButton onClick={onBack} style={{ width: 240 }}>Back</MenuButton>

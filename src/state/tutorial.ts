@@ -46,7 +46,7 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
   {
     art: 'ground', title: 'Ground assault',
     lines: [
-      'At the end of each run you eject and parachute in. Fight to the bunker and reach the big red button.',
+      'At the end of each run you eject and parachute in. Fight to the bunker; at the big red button a pop-up says press T (tap it on touch).',
       '{move} to walk and crouch, {action} or up to jump, {fire} to shoot. You can take 5 hits.',
       'Hold H (Y on a pad, GUNS on touch) to pick from the 4 guns you carry.',
     ],
@@ -55,7 +55,7 @@ export const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
     art: 'loadout', title: 'Medals and parts',
     lines: [
       'Beating a level earns its medal and unlocks a new jet, gun or bomb, plus a ground gun.',
-      'Fights earn credits: spend them in the daily store (Guns & store). Your stock is new every day and rarer guns show up less often.',
+      'Endless mode (in Select level) runs random biomes back to back: reach the hangar to fly again. It earns credits for the daily store (Guns & store), new every day; rarer guns show up less often.',
       'Equip parts from Inventory on the main menu. {pause} pauses the game.',
     ],
   },

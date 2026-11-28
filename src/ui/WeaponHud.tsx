@@ -2,6 +2,7 @@
 // score), credits earned this stage, and the Hold-H weapon wheel (4 slots: up, right, down, left,
 // matching keys 1–4 and the stick direction used to pick one).
 import type { HudState } from './useHudState';
+import { InputRouter } from '../input/InputRouter';
 import { RARITY_COLOR } from '../game/theme/groundAssault';
 
 const MONO = "'JetBrains Mono', monospace";
@@ -110,6 +111,40 @@ export function WeaponHud({ s }: { s: HudState }) {
           })}
         </div>
       )}
+    </>
+  );
+}
+
+function interactKey(device: HudState['device']): string {
+  if (device === 'gamepad') return 'X';
+  return 'T';
+}
+
+const PROMPT_CSS = `@keyframes cm-prompt { 0%,100% { transform: translate(-50%, 0) } 50% { transform: translate(-50%, -6px) } }`;
+
+/** "Press T to …" pop-up near an interactable (the launch button, the hangar). On touch the
+ *  pop-up itself is the button: tapping it interacts. */
+export function InteractPrompt({ s }: { s: HudState }) {
+  if (!s.interactPrompt) return null;
+  const touch = s.device === 'touch';
+  return (
+    <>
+      <style>{PROMPT_CSS}</style>
+      <button
+        onPointerDown={e => { e.preventDefault(); e.stopPropagation(); InputRouter.tapInteract(); }}
+        style={{
+          position: 'absolute', left: '50%', top: '30%', animation: 'cm-prompt 1.1s ease-in-out infinite',
+          ...PANEL, borderRadius: 999, borderColor: 'rgba(255,215,106,0.7)', padding: '10px 22px 10px 12px',
+          display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', color: '#fff',
+          boxShadow: '0 0 24px rgba(255,200,80,0.35)', pointerEvents: touch ? 'auto' : 'none',
+          font: 'inherit',
+        }}>
+        <span style={{
+          minWidth: 40, height: 40, borderRadius: touch ? 999 : 8, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#ffd76a', color: '#1a1406', fontFamily: MONO, fontSize: touch ? 14 : 22, fontWeight: 800,
+        }}>{touch ? 'TAP' : interactKey(s.device)}</span>
+        <span style={{ fontFamily: SANS, fontSize: 22, fontWeight: 700, letterSpacing: 1 }}>{s.interactPrompt}</span>
+      </button>
     </>
   );
 }

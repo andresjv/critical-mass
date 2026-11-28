@@ -88,12 +88,6 @@ export const SCORE = {
   interceptor: 250,
   /** Heat-seeker shot from behind after it passes. */
   heatSeekerFromBehind: 500,
-  /** Side silo destroyed (also grants +1 plane). */
-  sideSilo: 2_000,
-  /** Central silo destroyed (ends the stage). */
-  centralSilo: 3_000,
-  /** Bonus for destroying all 5 silos in one run. */
-  allSilosBonus: 5_000,
   /** SAM site destroyed by bomb (more than gun: 150). */
   bombSam: 200,
   /** Points per second remaining on the impact clock. */
@@ -244,6 +238,8 @@ export const ATTACK_RUN = {
   hitInvuln: 1.6,
   /** Pushed back up after scraping the ground or an obstacle, px/s. */
   hitBounce: 380,
+  /** Endless mode: hits the plane can take. */
+  endlessPlaneHits: 4,
   /** End-of-run eject: seconds before the cut to the ground assault, seat launch speed and
    *  gravity, when the chute opens (s), chute sink speed and the jet's climb-away speed (px/s). */
   ejectSecs: 2.4,
@@ -284,34 +280,6 @@ export const ATTACK_RUN = {
   tankDriveMinSecs: 1.5,
   /** Downward acceleration of a shot-down plane, px/s². */
   fallerGravity: 520,
-} as const;
-
-// ─── Stage 4 — Silo Strike ───────────────────────────────────────────────────
-
-export const SILO = {
-  /** Reticle snaps to "locked" within this many screen-px of a window centre (4 × WORLD_SCALE). */
-  lockRadius: 13,
-  /** Rocket travel time, seconds. */
-  rocketTravelTime: 0.8,
-  /** Silo-gun fire interval (Pilot ×1.0 baseline), seconds. */
-  siloGunInterval: 1.8,
-  /** Interceptor spawn interval, seconds. */
-  interceptorInterval: 6,
-  // ── Added for T7 ──────────────────────────────────────────────────────────
-  /** Player reticle world-X movement speed (world units/s). */
-  worldXSpeed: 500,
-  /** Player reticle world-Y (altitude) movement speed (world units/s). */
-  worldYSpeed: 350,
-  /** Max world-X extent the player can reach (±range). */
-  worldXRange: 800,
-  /** Minimum player altitude in world units. */
-  worldYMin: 80,
-  /** Maximum player altitude in world units. */
-  worldYMax: 500,
-  /** Silo-gun bullet travel time, seconds. */
-  siloGunBulletTime: 1.4,
-  /** Interceptor lateral speed, px/s. */
-  interceptorSpeed: 350,
 } as const;
 
 // ─── Stage 5 — Vostgrad Assault ──────────────────────────────────────────────
@@ -465,7 +433,12 @@ export const GROUND = {
   /** Credits: per enemy soldier, per nest, for pressing the button. */
   creditsPerKill: 5,
   creditsPerNest: 15,
-  creditsButton: 50,
+  /** Endless: credits for clearing a stage (reaching the hangar). Credits are only earned in Endless. */
+  creditsStage: 40,
+  /** Endless: soldier health, and how much harder each stage gets (enemy count ×, capped). */
+  endlessHits: 8,
+  endlessStageScale: 0.12,
+  endlessMaxScale: 2.2,
   /** Score: per kill, per nest, for pressing the button. */
   scoreKill: 250,
   scoreNest: 750,

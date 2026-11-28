@@ -8,7 +8,7 @@ import type { LevelId } from './levels';
 import type { Difficulty } from './tuning';
 
 export type DeviceHint = 'keyboard' | 'touch' | 'gamepad';
-export type ProgressStep = 'map' | 'hangar' | 'attack_run' | 'silos' | 'ground';
+export type ProgressStep = 'map' | 'hangar' | 'attack_run' | 'ground';
 export type { ChallengerData, HowToPlayStage };
 
 export interface StageIntroData {
@@ -34,7 +34,7 @@ export interface TouchLabels {
 
 export type UiScreen = 'menu' | 'game' | 'gameover';
 
-export interface MenuRequest { level: LevelId; difficulty: Difficulty }
+export interface MenuRequest { level: LevelId; difficulty: Difficulty; endless?: boolean }
 
 export const gameUi = {
   /** Which top-level screen React shows: the title menu, or the in-game HUD. */
@@ -55,6 +55,10 @@ export const gameUi = {
   wheel: null as { slots: { name: string; rarity: string; ammo: number; mag: number }[]; highlight: number; equipped: number } | null,
   /** Credits earned in the current ground assault (shown in the HUD). */
   creditsEarned: 0,
+  /** Endless mode: current stage number (1-based); 0 = not an endless run. */
+  endlessStage: 0,
+  /** On-screen interact prompt ("Press T to …"), null = hidden. Tapping it on touch interacts. */
+  interactPrompt: null as string | null,
 
   /** Last active input device — drives key-hint labels in the HUD. */
   device: 'keyboard' as DeviceHint,
@@ -90,9 +94,6 @@ export const gameUi = {
   // ── Attack Run HUD ────────────────────────────────────────────────────
   attackRunSecsLeft: 0,
 
-  // ── Silo HUD ─────────────────────────────────────────────────────────
-  silosDestroyed: 0,   // 0–4 side silos hit this run
-  centralSiloDown: false,
 
   // ── Player guidance ───────────────────────────────────────────────────
 

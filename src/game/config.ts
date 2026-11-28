@@ -5,10 +5,7 @@ import { MenuScene } from './scenes/MenuScene';
 import { MapScene } from './scenes/MapScene';
 import { HangarScene } from './scenes/HangarScene';
 import { AttackRunScene } from './scenes/AttackRunScene';
-import { SiloScene } from './scenes/SiloScene';
 import { GroundAssaultScene } from './scenes/GroundAssaultScene';
-import { PlaceholderAttackRunScene } from './scenes/PlaceholderAttackRunScene';
-import { PlaceholderSiloScene } from './scenes/PlaceholderSiloScene';
 import { PlaceholderAssaultScene } from './scenes/PlaceholderAssaultScene';
 import { HudScene } from './scenes/HudScene';
 import { InputScene } from './scenes/InputScene';
@@ -53,10 +50,7 @@ export function getGameConfig(): Phaser.Types.Core.GameConfig {
       DebugScene,
       HangarScene,
       AttackRunScene,
-      SiloScene,
       GroundAssaultScene,
-      PlaceholderAttackRunScene,
-      PlaceholderSiloScene,
       PlaceholderAssaultScene,
       GameOverScene,
       // Persistent parallel scenes (launched once, never stopped by scene.start).
